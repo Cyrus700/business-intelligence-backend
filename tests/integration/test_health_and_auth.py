@@ -48,7 +48,7 @@ async def test_inactive_account_is_forbidden(client):
 
 async def test_stub_endpoints_require_auth_then_501(client, user_token):
     _, token = user_token
-    assert (await client.get("/api/v1/forecasts")).status_code == 401
-    resp = await client.get("/api/v1/forecasts", headers=auth(token))
+    assert (await client.get("/api/v1/insights")).status_code == 401
+    resp = await client.get("/api/v1/insights", headers=auth(token))
     assert resp.status_code == 501
-    assert "Phase 4" in resp.json()["detail"]
+    assert "Phase 5" in resp.json()["detail"]

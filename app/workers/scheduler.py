@@ -42,9 +42,29 @@ async def _run_scheduled_source(source_id: str) -> None:
             await db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), {"key": source_id})
 
 
+async def _weekly_retrain() -> None:
+    from app.services.ml.registry import train_all
+
+    async with get_session_factory()() as db:
+        await train_all(db)
+
+
+async def _daily_anomaly_scan() -> None:
+    from app.services.ml.anomaly import scan_all
+
+    async with get_session_factory()() as db:
+        created = await scan_all(db, lookback_days=7)
+        logger.info("daily anomaly scan: %d new", created)
+
+
 async def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     _scheduler = AsyncIOScheduler()
+    # ML lifecycle jobs (docs/05-ml-plan.md): weekly retrain, daily anomaly scan
+    _scheduler.add_job(_weekly_retrain, CronTrigger.from_crontab("0 2 * * 1"), id="ml-retrain")
+    _scheduler.add_job(
+        _daily_anomaly_scan, CronTrigger.from_crontab("30 1 * * *"), id="anomaly-scan"
+    )
     async with get_session_factory()() as db:
         sources = (
             (

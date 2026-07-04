@@ -9,9 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_current_user
 
 PLANNED = {
-    "forecasts": 4,
-    "anomalies": 4,
-    "trends": 4,
     "insights": 5,
     "alert-rules": 5,
     "notifications": 5,

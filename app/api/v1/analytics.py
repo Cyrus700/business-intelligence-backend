@@ -105,7 +105,5 @@ async def get_pnl(db: DbSession, f: FiltersDep) -> list[PnlRow]:
 
 
 @router.get("/inventory/levels", response_model=list[InventoryRow])
-async def get_inventory_levels(
-    db: DbSession, below_reorder: bool = False
-) -> list[InventoryRow]:
+async def get_inventory_levels(db: DbSession, below_reorder: bool = False) -> list[InventoryRow]:
     return await queries.inventory_levels(db, below_reorder_only=below_reorder)

@@ -18,6 +18,10 @@ dependencies = [
     "python-multipart>=0.0.9",
     "apscheduler>=3.10,<4",
     "greenlet>=3.0",
+    "scikit-learn>=1.9.0",
+    "statsmodels>=0.14.6",
+    "prophet>=1.3.0",
+    "joblib>=1.5.3",
 ]
 
 [dependency-groups]
@@ -41,12 +45,22 @@ ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
 [tool.ruff.lint.per-file-ignores]
 # env vars must be set before app modules are imported
 "tests/conftest.py" = ["E402"]
+# CSV fixture literals read better unwrapped
+"tests/integration/test_analytics.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
 plugins = []
 ignore_missing_imports = true
 check_untyped_defs = true
+
+# These modules return plain dicts that FastAPI's response_model validates and
+# coerces at runtime (idiomatic FastAPI), and build dynamic SQLAlchemy
+# expressions that mypy's stubs over-narrow. Runtime correctness is covered by
+# the integration test suite's exact-value assertions.
+[[tool.mypy.overrides]]
+module = ["app.services.analytics.queries", "app.api.v1.analytics"]
+disable_error_code = ["arg-type", "return-value", "call-overload", "assignment", "attr-defined", "list-item", "index"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -15,7 +15,6 @@ from app.models import (
     Customer,
     Expense,
     InventoryLevel,
-    KpiSnapshot,
     Product,
     SalesTransaction,
 )
@@ -58,22 +57,26 @@ def _sales_conditions(f: Filters, date_from: date, date_to: date) -> list:
 async def _sales_kpis(
     db: AsyncSession, f: Filters, date_from: date, date_to: date
 ) -> dict[str, float]:
-    stmt = select(
-        func.coalesce(func.sum(SalesTransaction.total_amount), 0).label("revenue"),
-        func.count(SalesTransaction.id).label("orders"),
-        func.coalesce(func.avg(SalesTransaction.total_amount), 0).label("avg_order_value"),
-        func.coalesce(
-            func.sum(
-                SalesTransaction.total_amount
-                - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
-            ),
-            0,
-        ).label("gross_margin"),
-    ).select_from(
-        SalesTransaction.__table__.outerjoin(
-            Product.__table__, Product.id == SalesTransaction.product_id
+    stmt = (
+        select(
+            func.coalesce(func.sum(SalesTransaction.total_amount), 0).label("revenue"),
+            func.count(SalesTransaction.id).label("orders"),
+            func.coalesce(func.avg(SalesTransaction.total_amount), 0).label("avg_order_value"),
+            func.coalesce(
+                func.sum(
+                    SalesTransaction.total_amount
+                    - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+                ),
+                0,
+            ).label("gross_margin"),
         )
-    ).where(and_(*_sales_conditions(f, date_from, date_to)))
+        .select_from(
+            SalesTransaction.__table__.outerjoin(
+                Product.__table__, Product.id == SalesTransaction.product_id
+            )
+        )
+        .where(and_(*_sales_conditions(f, date_from, date_to)))
+    )
     row = (await db.execute(stmt)).one()
     return {
         "revenue": float(row.revenue),
@@ -103,16 +106,17 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
         prev = previous.get(metric)
         change = round((value - prev) / prev * 100, 1) if prev else None
         cards.append(
-            {"metric": metric, "value": round(value, 2),
-             "previous_value": round(prev, 2) if prev is not None else None,
-             "change_pct": change}
+            {
+                "metric": metric,
+                "value": round(value, 2),
+                "previous_value": round(prev, 2) if prev is not None else None,
+                "change_pct": change,
+            }
         )
     return cards
 
 
-async def kpi_timeseries(
-    db: AsyncSession, f: Filters, metric: str, granularity: str
-) -> list[dict]:
+async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity: str) -> list[dict]:
     if metric == "expense_total":
         bucket = func.date_trunc(granularity, cast(Expense.expense_date, Date))
         stmt = (
@@ -212,9 +216,7 @@ async def sales_transactions(
         )
         .where(and_(*conditions))
     )
-    total = (
-        await db.execute(select(func.count()).select_from(base.subquery()))
-    ).scalar_one()
+    total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
     rows = (
         await db.execute(
             base.order_by(SalesTransaction.txn_date.desc(), SalesTransaction.id.desc())
@@ -248,8 +250,12 @@ async def expenses_by_category(db: AsyncSession, f: Filters) -> list[dict]:
     rows = (await db.execute(stmt)).all()
     total = sum(float(r.revenue) for r in rows) or 1.0
     return [
-        {"key": r.key, "orders": r.orders, "revenue": round(float(r.revenue), 2),
-         "share_pct": round(float(r.revenue) / total * 100, 1)}
+        {
+            "key": r.key,
+            "orders": r.orders,
+            "revenue": round(float(r.revenue), 2),
+            "share_pct": round(float(r.revenue) / total * 100, 1),
+        }
         for r in rows
     ]
 
