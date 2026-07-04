@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 # Must be set before any app import so cached Settings pick them up.
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:54329/bi_test"
+os.environ["ENV"] = "test"
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-0123456789abcdef-0123456789abcdef"
 os.environ["SUPABASE_URL"] = ""

@@ -10,3 +10,5 @@ htmlcov/
 dist/
 *.egg-info/
 openapi.json
+var/
+seeds/output/

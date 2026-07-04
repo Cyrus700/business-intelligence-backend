@@ -1,10 +1,13 @@
 from fastapi import APIRouter
 
-from app.api.v1 import audit, auth, health, stubs, users
+from app.api.v1 import audit, auth, data_sources, etl, health, stubs, uploads, users
 
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(audit.router)
+api_router.include_router(data_sources.router)
+api_router.include_router(uploads.router)
+api_router.include_router(etl.router)
 api_router.include_router(stubs.router)

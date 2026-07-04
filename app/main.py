@@ -14,7 +14,14 @@ from app.core.logging import setup_logging
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
-    yield
+    if get_settings().env not in ("test", "ci"):
+        from app.workers.scheduler import start_scheduler, stop_scheduler
+
+        await start_scheduler()
+        yield
+        stop_scheduler()
+    else:
+        yield
     await dispose_engine()
 
 
