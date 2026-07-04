@@ -9,10 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_current_user
 
 PLANNED = {
-    "kpis": 3,
-    "sales": 3,
-    "finance": 3,
-    "inventory": 3,
     "forecasts": 4,
     "anomalies": 4,
     "trends": 4,
