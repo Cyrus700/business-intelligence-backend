@@ -8,6 +8,7 @@ from app.api.v1.router import api_router
 from app.core.audit import AuditMiddleware
 from app.core.config import get_settings
 from app.core.database import dispose_engine
+from app.core.hardening import RateLimitMiddleware, SecurityHeadersMiddleware
 from app.core.logging import setup_logging
 
 
@@ -37,6 +38,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(AuditMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RateLimitMiddleware, limit_per_minute=settings.rate_limit_per_minute)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

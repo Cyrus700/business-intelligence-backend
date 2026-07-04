@@ -10,6 +10,7 @@ os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-0123456789abcdef-0123456789abcdef"
 os.environ["SUPABASE_URL"] = ""
 os.environ["SUPABASE_SERVICE_KEY"] = ""
+os.environ["RATE_LIMIT_PER_MINUTE"] = "100000"  # limiter logic is unit-tested directly
 
 import jwt
 import psycopg

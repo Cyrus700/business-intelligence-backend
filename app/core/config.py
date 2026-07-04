@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "alerts@bi-dashboard.local"
 
+    # requests per minute per caller (token, else IP); strict paths use 20/min
+    rate_limit_per_minute: int = 240
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.frontend_origins.split(",") if o.strip()]

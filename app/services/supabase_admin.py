@@ -57,4 +57,12 @@ class SupabaseAdmin:
 
 
 def get_supabase_admin() -> SupabaseAdmin:
-    return SupabaseAdmin()
+    try:
+        return SupabaseAdmin()
+    except SupabaseAdminError as exc:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Supabase admin API is not configured on this deployment",
+        ) from exc
