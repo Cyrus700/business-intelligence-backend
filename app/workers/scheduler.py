@@ -57,6 +57,42 @@ async def _daily_anomaly_scan() -> None:
         logger.info("daily anomaly scan: %d new", created)
 
 
+async def _nightly_insights_and_alerts() -> None:
+    from app.services.alerts.engine import evaluate_alerts
+    from app.services.insights.engine import generate_insights
+
+    async with get_session_factory()() as db:
+        insights = await generate_insights(db)
+        notifications = await evaluate_alerts(db)
+        logger.info("nightly: %d insights, %d notifications", insights, notifications)
+
+
+async def _monthly_report() -> None:
+    from datetime import date, timedelta
+
+    from app.models import Report
+    from app.services.reports import builder
+    from app.services.storage import FileStorage, make_key
+
+    async with get_session_factory()() as db:
+        end = date.today().replace(day=1) - timedelta(days=1)
+        start = end.replace(day=1)
+        title = f"Monthly business summary — {start:%B %Y}"
+        payload = await builder.build_pdf(db, start, end, title)
+        stored = FileStorage().save(make_key(f"monthly-{start:%Y-%m}.pdf"), payload)
+        db.add(
+            Report(
+                report_type="monthly_summary",
+                period_start=start,
+                period_end=end,
+                format="pdf",
+                s3_key=stored,
+            )
+        )
+        await db.commit()
+        logger.info("monthly report generated for %s", start.strftime("%Y-%m"))
+
+
 async def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     _scheduler = AsyncIOScheduler()
@@ -65,6 +101,12 @@ async def start_scheduler() -> AsyncIOScheduler:
     _scheduler.add_job(
         _daily_anomaly_scan, CronTrigger.from_crontab("30 1 * * *"), id="anomaly-scan"
     )
+    # decision-support jobs (Phase 5): insights+alerts after the anomaly scan,
+    # monthly summary report on the 1st
+    _scheduler.add_job(
+        _nightly_insights_and_alerts, CronTrigger.from_crontab("0 3 * * *"), id="insights-alerts"
+    )
+    _scheduler.add_job(_monthly_report, CronTrigger.from_crontab("0 4 1 * *"), id="monthly-report")
     async with get_session_factory()() as db:
         sources = (
             (

@@ -21,6 +21,13 @@ class Settings(BaseSettings):
 
     frontend_origins: str = "http://localhost:3000"
 
+    # optional SMTP for the email alert channel (in-app channel needs nothing)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "alerts@bi-dashboard.local"
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.frontend_origins.split(",") if o.strip()]
