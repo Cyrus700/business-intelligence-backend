@@ -1,0 +1,19 @@
+# Production compose for a single EC2 instance. Postgres lives in Supabase;
+# only the API container runs here. `docker compose -f deploy/docker-compose.prod.yml up -d`
+services:
+  api:
+    build: ..
+    image: bi-backend:latest
+    restart: unless-stopped
+    env_file: ../.env          # DATABASE_URL, SUPABASE_*, AWS_*, SMTP_* — never committed
+    ports:
+      - "127.0.0.1:8000:8000"  # exposed only to nginx on the same host
+    volumes:
+      - uploads:/app/var/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  uploads:
