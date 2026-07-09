@@ -51,3 +51,5 @@ tests/       unit/ + integration/ (run against dockerised Postgres)
   mirrored for Supabase RLS (Phase 6).
 - All schema changes go through Alembic. Migrations must downgrade cleanly.
 - Mutating authenticated requests are recorded in `audit_logs` by middleware.
+
+# business-intelligence-backend
