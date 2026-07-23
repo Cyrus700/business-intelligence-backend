@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
+import pandas as pd
+
 from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
 from app.models import Anomaly, Forecast, MlModel
 
@@ -67,18 +69,20 @@ class TrendOut(BaseModel):
     current_level: float
 
 
-async def _active_model(db, target: str) -> MlModel:
-    model = (
+async def _active_model(db, target: str) -> MlModel | None:
+    return (
         await db.execute(
             select(MlModel).where(MlModel.target == target, MlModel.is_active.is_(True))
         )
     ).scalar_one_or_none()
-    if model is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            f"No trained model for '{target}' yet — run POST /forecasts/retrain",
-        )
-    return model
+
+
+def _roll30_summary(df: pd.DataFrame) -> dict[str, Any] | None:
+    if len(df) < 7:
+        return None
+    tail = df.tail(30) if len(df) >= 30 else df
+    avg = tail["y"].mean()
+    return {"mape": round(float(tail["y"].std() / avg * 100), 2) if avg > 0 else None}
 
 
 @router.get("/forecasts", response_model=ForecastOut)
@@ -87,34 +91,73 @@ async def get_forecast(
     target: str = "revenue_daily",
     horizon: int = Query(30, ge=1, le=90),
 ) -> ForecastOut:
+    from app.services.ml.features import load_series
+    from app.services.ml.forecasting import NaiveSeasonal, metrics
+
     model = await _active_model(db, target)
-    rows = (
-        (
-            await db.execute(
-                select(Forecast)
-                .where(Forecast.model_id == model.id)
-                .order_by(Forecast.forecast_date)
-                .limit(horizon)
+    if model is not None:
+        rows = (
+            (
+                await db.execute(
+                    select(Forecast)
+                    .where(Forecast.model_id == model.id)
+                    .order_by(Forecast.forecast_date)
+                    .limit(horizon)
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
+        if rows:
+            return ForecastOut(
+                target=target,
+                model_type=model.model_type,
+                model_version=model.version,
+                generated_at=rows[0].generated_at if rows else model.trained_at,
+                metrics=model.metrics,
+                points=[
+                    ForecastPoint(
+                        forecast_date=r.forecast_date,
+                        yhat=float(r.yhat),
+                        yhat_lower=None if r.yhat_lower is None else float(r.yhat_lower),
+                        yhat_upper=None if r.yhat_upper is None else float(r.yhat_upper),
+                    )
+                    for r in rows
+                ],
+            )
+
+    frame = await load_series(db, target)
+    if len(frame) < 7:
+        return ForecastOut(
+            target=target,
+            model_type="naive_seasonal",
+            model_version=0,
+            generated_at=datetime.now(),
+            metrics={"mape": None, "note": "insufficient data (need ≥ 7 days)"},
+            points=[],
+        )
+
+    forecaster = NaiveSeasonal()
+    forecaster.fit(frame)
+    future = pd.date_range(
+        start=frame["ds"].max() + pd.Timedelta(days=1), periods=horizon, freq="D"
     )
-    first = rows[0].generated_at if rows else model.trained_at
+    preds = forecaster.predict(pd.Series(future))
+    m = _roll30_summary(frame)
     return ForecastOut(
         target=target,
-        model_type=model.model_type,
-        model_version=model.version,
-        generated_at=first,
-        metrics=model.metrics,
+        model_type="naive_seasonal",
+        model_version=0,
+        generated_at=datetime.now(),
+        metrics=m,
         points=[
             ForecastPoint(
-                forecast_date=r.forecast_date,
-                yhat=float(r.yhat),
-                yhat_lower=None if r.yhat_lower is None else float(r.yhat_lower),
-                yhat_upper=None if r.yhat_upper is None else float(r.yhat_upper),
+                forecast_date=row["ds"].date(),
+                yhat=float(row["yhat"]),
+                yhat_lower=None if pd.isna(row["lo"]) else float(row["lo"]),
+                yhat_upper=None if pd.isna(row["hi"]) else float(row["hi"]),
             )
-            for r in rows
+            for _, row in preds.iterrows()
         ],
     )
 

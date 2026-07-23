@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -19,6 +20,21 @@ class TokenClaims:
     user_id: UUID
     email: str | None
     role: str | None  # application role from app_metadata, NOT Supabase's postgres role
+
+
+def sign_token(user_id: UUID, email: str, role: str = "analyst") -> str:
+    """Create a signed JWT compatible with the existing verify_token flow."""
+    settings = get_settings()
+    secret = settings.supabase_jwt_secret or "dev-secret-do-not-use-in-production"
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "app_metadata": {"role": role},
+        "aud": settings.jwt_audience,
+        "exp": datetime.now(timezone.utc) + timedelta(days=90),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
 
 
 def verify_token(token: str) -> TokenClaims:

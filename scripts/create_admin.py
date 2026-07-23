@@ -1,6 +1,7 @@
 """Promote (or create) an admin user against the configured Supabase project.
 
 Usage:
+    uv run python scripts/create_admin.py                    # use ADMIN_EMAIL from .env
     uv run python scripts/create_admin.py admin@example.com  # promote existing profile
     uv run python scripts/create_admin.py admin@example.com --create --password 'S3cure!'
 
@@ -12,16 +13,20 @@ import asyncio
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.database import get_session_factory
 from app.models import Profile
 from app.services.supabase_admin import SupabaseAdmin
 
 
 async def main() -> None:
+    settings = get_settings()
     parser = argparse.ArgumentParser()
-    parser.add_argument("email")
+    parser.add_argument("email", nargs="?", default=settings.admin_email)
     parser.add_argument("--create", action="store_true", help="create the auth user first")
-    parser.add_argument("--password", help="password when using --create")
+    parser.add_argument(
+        "--password", default=settings.admin_password, help="password when using --create"
+    )
     args = parser.parse_args()
 
     admin_api = SupabaseAdmin()

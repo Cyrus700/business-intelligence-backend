@@ -83,10 +83,11 @@ async def get_sales_transactions(
     db: DbSession,
     f: FiltersDep,
     sku: str | None = None,
+    search: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> Paginated[TransactionRow]:
-    items, total = await queries.sales_transactions(db, f, page, page_size, sku)
+    items, total = await queries.sales_transactions(db, f, page, page_size, sku, search)
     return Paginated(items=items, total=total, page=page, page_size=page_size)
 
 

@@ -21,6 +21,21 @@ class Settings(BaseSettings):
 
     frontend_origins: str = "http://localhost:3000"
 
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+
+    # Seed / default admin email for bootstrap and user management
+    admin_email: str = "bhattaraiashok101@gmail.com"
+    admin_password: str = "Admin@123456"
+
+    # AI / LLM providers
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
     # optional SMTP for the email alert channel (in-app channel needs nothing)
     smtp_host: str = ""
     smtp_port: int = 587
@@ -34,6 +49,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.frontend_origins.split(",") if o.strip()]
+
+    @property
+    def frontend_url(self) -> str:
+        return self.cors_origins[0] if self.cors_origins else "http://localhost:3000"
 
 
 @lru_cache

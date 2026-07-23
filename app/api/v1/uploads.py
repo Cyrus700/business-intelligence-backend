@@ -10,7 +10,11 @@ from app.services.etl.extractors import MAX_UPLOAD_BYTES, extract_tabular
 from app.services.etl.pipeline import run_frame_pipeline
 from app.services.storage import FileStorage, make_key
 
-router = APIRouter(prefix="/uploads", tags=["data-integration"])
+router = APIRouter(
+    prefix="/uploads",
+    tags=["data-integration"],
+    dependencies=[Depends(require_role("manager"))],
+)
 
 
 @router.post("", response_model=UploadOut, status_code=status.HTTP_201_CREATED)

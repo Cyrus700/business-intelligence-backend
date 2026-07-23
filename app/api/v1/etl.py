@@ -8,7 +8,7 @@ from app.models import DataSource, EtlJob
 from app.schemas.integration import EtlJobOut
 
 router = APIRouter(
-    prefix="/etl", tags=["data-integration"], dependencies=[Depends(require_role("admin"))]
+    prefix="/etl", tags=["data-integration"], dependencies=[Depends(require_role("manager"))]
 )
 
 

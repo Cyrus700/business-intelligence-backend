@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from typing import Any
+
 from sqlalchemy import CheckConstraint, ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,10 +20,12 @@ class Profile(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     email: Mapped[str] = mapped_column(unique=True)
+    password_hash: Mapped[str | None]
     full_name: Mapped[str | None]
     role: Mapped[str] = mapped_column(default="analyst")
     department: Mapped[str | None]
     is_active: Mapped[bool] = mapped_column(default=True)
+    preferences: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
 
     __table_args__ = (CheckConstraint(f"role IN {ROLES}", name="valid_role"),)
 

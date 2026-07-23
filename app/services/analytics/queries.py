@@ -8,7 +8,7 @@ composite indexes (docs/03-database-schema.md).
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import Date, and_, case, cast, func, select
+from sqlalchemy import Date, and_, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -190,11 +190,16 @@ async def sales_by_dimension(db: AsyncSession, f: Filters, dimension: str) -> li
 
 
 async def sales_transactions(
-    db: AsyncSession, f: Filters, page: int, page_size: int, sku: str | None = None
+    db: AsyncSession, f: Filters, page: int, page_size: int, sku: str | None = None, search: str | None = None
 ) -> tuple[list[dict], int]:
     conditions = _sales_conditions(f, f.date_from, f.date_to)
     if sku:
         conditions.append(Product.sku == sku)
+    if search:
+        q = f"%{search}%"
+        conditions.append(
+            or_(Product.name.ilike(q), Customer.name.ilike(q), SalesTransaction.channel.ilike(q))
+        )
     base = (
         select(
             SalesTransaction.id,

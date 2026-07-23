@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    ai,
     analytics,
     audit,
     auth,
@@ -9,6 +10,7 @@ from app.api.v1 import (
     etl,
     health,
     ml,
+    recommendations,
     uploads,
     users,
 )
@@ -25,3 +27,5 @@ api_router.include_router(audit.router)
 api_router.include_router(data_sources.router)
 api_router.include_router(uploads.router)
 api_router.include_router(etl.router)
+api_router.include_router(recommendations.router)
+api_router.include_router(ai.router)

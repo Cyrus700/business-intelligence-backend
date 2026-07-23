@@ -1,3 +1,4 @@
+from app.models.ai import Conversation, Message
 from app.models.base import Base
 from app.models.decision import AlertRule, Insight, Notification, Report
 from app.models.identity import AuditLog, Profile
@@ -32,4 +33,6 @@ __all__ = [
     "AlertRule",
     "Notification",
     "Report",
+    "Conversation",
+    "Message",
 ]
