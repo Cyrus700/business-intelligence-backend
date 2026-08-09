@@ -86,3 +86,38 @@ def test_transform_frame_normalises_column_case():
     frame = pd.DataFrame([{k.upper(): v for k, v in _sales_row().items()}])
     result = transform_frame("sales", frame)
     assert len(result.records) == 1
+
+
+def test_transform_frame_accepts_alias_columns():
+    frame = pd.DataFrame(
+        [
+            {"Qty": 2, "Item Code": "BEV-001", "Price": 320, "Txn Date": "2026-06-15"},
+            {"Qty": 5, "Item Code": "BEV-002", "Price": 120, "Txn Date": "2026-06-16"},
+        ]
+    )
+    result = transform_frame("sales", frame)
+    assert len(result.records) == 2
+    assert result.records[0]["sku"] == "BEV-001"
+    assert result.records[0]["quantity"] == 2
+    assert result.records[0]["unit_price"] == Decimal("320.00")
+
+
+def test_transform_frame_alias_for_expenses_and_inventory():
+    expenses = transform_frame(
+        "finance", pd.DataFrame([{"Expense Date": "2026-06-01", "Expense Category": "Rent", "Value": 5000}])
+    )
+    assert len(expenses.records) == 1
+    assert expenses.records[0]["amount"] == Decimal("5000.00")
+    inventory = transform_frame(
+        "inventory", pd.DataFrame([{"Date": "2026-06-01", "Item Code": "A-1", "Stock": 42}])
+    )
+    assert len(inventory.records) == 1
+    assert inventory.records[0]["quantity_on_hand"] == 42
+
+
+def test_transform_frame_rejects_conflicting_alias_columns():
+    frame = pd.DataFrame(
+        [{"qty": 1, "quantity": 2, "date": "2026-01-01", "sku": "X", "unit_price": 5}]
+    )
+    with pytest.raises(ValueError, match="duplicate column names"):
+        transform_frame("sales", frame)

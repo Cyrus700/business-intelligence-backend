@@ -5,11 +5,10 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
-
-import pandas as pd
 
 from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
 from app.models import Anomaly, Forecast, MlModel
@@ -69,10 +68,16 @@ class TrendOut(BaseModel):
     current_level: float
 
 
-async def _active_model(db, target: str) -> MlModel | None:
+async def _active_model(
+    db, target: str, dimensions: dict[str, Any] | None = None
+) -> MlModel | None:
     return (
         await db.execute(
-            select(MlModel).where(MlModel.target == target, MlModel.is_active.is_(True))
+            select(MlModel).where(
+                MlModel.target == target,
+                MlModel.dimensions == (dimensions or {}),
+                MlModel.is_active.is_(True),
+            )
         )
     ).scalar_one_or_none()
 
@@ -90,11 +95,22 @@ async def get_forecast(
     db: DbSession,
     target: str = "revenue_daily",
     horizon: int = Query(30, ge=1, le=90),
+    region: str | None = None,
+    channel: str | None = None,
+    category: str | None = None,
 ) -> ForecastOut:
     from app.services.ml.features import load_series
-    from app.services.ml.forecasting import NaiveSeasonal, metrics
+    from app.services.ml.forecasting import NaiveSeasonal
 
-    model = await _active_model(db, target)
+    dims: dict[str, Any] = {}
+    if region:
+        dims["region"] = region
+    if channel:
+        dims["channel"] = channel
+    if category:
+        dims["category"] = category
+
+    model = await _active_model(db, target, dims)
     if model is not None:
         rows = (
             (
@@ -126,7 +142,7 @@ async def get_forecast(
                 ],
             )
 
-    frame = await load_series(db, target)
+    frame = await load_series(db, target, dims)
     if len(frame) < 7:
         return ForecastOut(
             target=target,

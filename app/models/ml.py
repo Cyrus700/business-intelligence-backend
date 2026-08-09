@@ -18,6 +18,9 @@ class MlModel(Base):
     id: Mapped[uuid.UUID] = uuid_pk()
     model_type: Mapped[str]
     target: Mapped[str]
+    # segment filter, e.g. {"region": "Kathmandu"} or {} for whole-business
+    # (mirrors kpi_snapshots.dimensions — same segment vocabulary throughout).
+    dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     version: Mapped[int] = mapped_column(default=1)
     trained_at: Mapped[datetime] = mapped_column(server_default=func.now())
     training_rows: Mapped[int | None]
@@ -31,7 +34,7 @@ class MlModel(Base):
             "model_type IN ('prophet', 'arima', 'isolation_forest', 'regression_ensemble')",
             name="valid_model_type",
         ),
-        UniqueConstraint("model_type", "target", "version", name="uq_model_version"),
+        UniqueConstraint("model_type", "target", "dimensions", "version", name="uq_model_version"),
     )
 
 
@@ -41,6 +44,7 @@ class Forecast(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     model_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ml_models.id", ondelete="CASCADE"))
     target: Mapped[str]
+    dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     forecast_date: Mapped[date]
     horizon_days: Mapped[int]
     yhat: Mapped[Decimal] = mapped_column(Metric)
@@ -49,7 +53,9 @@ class Forecast(Base):
     generated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("model_id", "target", "forecast_date", name="uq_forecast_point"),
+        UniqueConstraint(
+            "model_id", "target", "dimensions", "forecast_date", name="uq_forecast_point"
+        ),
         Index("ix_forecasts_target_date", "target", "forecast_date"),
     )
 
@@ -69,9 +75,66 @@ class Anomaly(Base):
     acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    # anomalies on the same business day across metrics are grouped into one
+    # correlated event (root-cause-aware alerting)
+    correlation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), index=True
+    )
 
     __table_args__ = (
         CheckConstraint("severity IN ('low', 'medium', 'high')", name="valid_severity"),
         CheckConstraint("status IN ('open', 'acknowledged', 'dismissed')", name="valid_status"),
         Index("ix_anomalies_status", "status"),
     )
+
+
+class AnomalyFeedback(Base):
+    """User verdict on a flagged anomaly (false positive vs confirmed).
+
+    Feeds per-target detector calibration (services/ml/calibration.py): every
+    dismissal/confirmation is persisted so the CONTAMINATION/Z_THRESHOLD tuning
+    is explainable and reversible, consistent with the audit pattern.
+    """
+
+    __tablename__ = "anomaly_feedback"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    anomaly_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("anomalies.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+    disposition: Mapped[str]  # 'false_positive' | 'confirmed'
+    note: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "disposition IN ('false_positive', 'confirmed')", name="valid_disposition"
+        ),
+        Index("ix_anomaly_feedback_anomaly_created", "anomaly_id", "created_at"),
+    )
+
+
+class ModelDrift(Base):
+    """Live-vs-holdout forecast accuracy checkpoint.
+
+    Every drift evaluation inserts a row (auditable history of why a model was
+    retrained early); ``triggered`` marks the check that caused a retrain.
+    """
+
+    __tablename__ = "model_drift"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    model_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ml_models.id", ondelete="CASCADE"), index=True
+    )
+    target: Mapped[str]
+    measured_on: Mapped[date] = mapped_column(index=True)
+    window_days: Mapped[int] = mapped_column(default=7)
+    live_mape: Mapped[Decimal | None] = mapped_column(Metric)
+    holdout_mape: Mapped[Decimal | None] = mapped_column(Metric)
+    threshold_mape: Mapped[Decimal | None] = mapped_column(Metric)
+    triggered: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())

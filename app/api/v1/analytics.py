@@ -82,12 +82,18 @@ async def sales_by_channel(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
 async def get_sales_transactions(
     db: DbSession,
     f: FiltersDep,
+    user: Annotated[object, Depends(get_current_user)],
     sku: str | None = None,
     search: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> Paginated[TransactionRow]:
     items, total = await queries.sales_transactions(db, f, page, page_size, sku, search)
+    # field-level redaction: analysts see line-level rows without the money
+    # fields (aggregates stay available via the dimension views)
+    from app.api.deps import redact_sensitive
+
+    items = [redact_sensitive(user, item) for item in items]
     return Paginated(items=items, total=total, page=page, page_size=page_size)
 
 

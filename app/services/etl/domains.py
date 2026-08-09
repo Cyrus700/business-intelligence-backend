@@ -6,6 +6,7 @@ or raises ValueError with a human-readable reason.
 """
 
 import hashlib
+from collections import Counter
 from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -17,6 +18,66 @@ from app.services.etl.base import RowError, TransformResult
 
 EXPENSE_CATEGORIES = {"rent", "salaries", "utilities", "marketing", "logistics", "other"}
 MIN_DATE = date(2000, 1, 1)
+
+# Common real-world column spellings mapped to the canonical name the warehouse expects.
+# All three domains (sales, finance, inventory) resolve through this one map.
+COLUMN_ALIASES: dict[str, list[str]] = {
+    "date": [
+        "date",
+        "txn_date",
+        "transaction_date",
+        "order_date",
+        "sale_date",
+        "expense_date",
+        "snapshot_date",
+        "entry_date",
+    ],
+    "sku": ["sku", "item_sku", "item_code", "product_code", "product_id"],
+    "quantity": ["quantity", "qty", "quantity_sold", "qty_sold", "units", "units_sold"],
+    "unit_price": ["unit_price", "unitprice", "price", "selling_price", "retail_price"],
+    "category": ["category", "category_name", "expense_category"],
+    "amount": ["amount", "expense_amount", "transaction_amount", "value"],
+    "quantity_on_hand": [
+        "quantity_on_hand",
+        "qty_on_hand",
+        "on_hand",
+        "on_hand_qty",
+        "current_stock",
+        "stock_qty",
+        "stock",
+    ],
+}
+
+_ALIAS_LOOKUP: dict[str, str] = {
+    name: canonical
+    for canonical, names in COLUMN_ALIASES.items()
+    for name in [canonical, *names]
+}
+
+
+def _normalize(name: str) -> str:
+    return str(name).strip().lower().replace(" ", "_")
+
+
+def resolve_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Map (lowercased, trimmed) column names to canonical names via COLUMN_ALIASES.
+
+    Spaces are treated as underscores, so "Unit Price" and "unit_price" are the
+    same column. Raises ValueError when two source columns resolve to the same
+    canonical name, since loading would silently drop one of them.
+    """
+    resolved = [_ALIAS_LOOKUP.get(_normalize(c), _normalize(c)) for c in frame.columns]
+    conflicts = {name for name, count in Counter(resolved).items() if count > 1}
+    if conflicts:
+        details = []
+        for name in sorted(conflicts):
+            sources = [str(c) for c, r in zip(frame.columns, resolved) if r == name]
+            details.append(f"{name} ({', '.join(sources)})")
+        raise ValueError(
+            f"duplicate column names: {'; '.join(details)} all map to the same column"
+        )
+    frame.columns = resolved
+    return frame
 
 
 def _parse_date(value: Any) -> date:
@@ -167,6 +228,7 @@ DOMAIN_SPECS: dict[str, dict[str, Any]] = {
 def transform_frame(domain: str, frame: pd.DataFrame) -> TransformResult:
     spec = DOMAIN_SPECS[domain]
     frame = frame.rename(columns={c: str(c).strip().lower() for c in frame.columns})
+    frame = resolve_columns(frame)
     missing = spec["required_columns"] - set(frame.columns)
     if missing:
         raise ValueError(f"missing required columns: {', '.join(sorted(missing))}")

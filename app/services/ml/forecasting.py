@@ -70,13 +70,26 @@ class ProphetForecaster:
             interval_width=0.9,
         )
         self._model.add_regressor("festival")
+        # daily marketing spend, if the loader attached one; falls back to an
+        # all-zero column so older callers (e.g. hand-built test frames) still work.
+        self._has_marketing = "marketing" in train.columns
+        self._marketing_avg = (
+            float(train["marketing"].tail(90).mean()) if self._has_marketing else 0.0
+        )
+        if self._has_marketing:
+            self._model.add_regressor("marketing")
+        cols = ["ds", "y", "festival"] + (["marketing"] if self._has_marketing else [])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self._model.fit(train[["ds", "y", "festival"]])
+            self._model.fit(train[cols])
 
     def predict(self, future_ds: pd.Series) -> pd.DataFrame:
         future = pd.DataFrame({"ds": future_ds})
         future["festival"] = festival_flags(future["ds"])
+        if self._has_marketing:
+            # future spend isn't known in advance; hold it at the trailing
+            # 90-day average rather than assume a campaign continues or stops.
+            future["marketing"] = self._marketing_avg
         out = self._model.predict(future)
         return pd.DataFrame(
             {

@@ -22,6 +22,7 @@ class DataSource(Base, TimestampMixin):
     target_domain: Mapped[str]
     schedule_cron: Mapped[str | None]
     status: Mapped[str] = mapped_column(default="active")
+    org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
 
     __table_args__ = (
         CheckConstraint(f"kind IN {SOURCE_KINDS}", name="valid_kind"),
@@ -49,6 +50,7 @@ class RawUpload(Base):
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
     row_count: Mapped[int | None]
     status: Mapped[str] = mapped_column(default="received")
     error_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -62,6 +64,7 @@ class EtlJob(Base):
     data_source_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("data_sources.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
     trigger: Mapped[str]
     started_at: Mapped[datetime] = mapped_column(server_default=func.now())
     finished_at: Mapped[datetime | None]

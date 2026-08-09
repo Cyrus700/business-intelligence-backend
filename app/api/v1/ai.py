@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -34,7 +34,7 @@ async def _load_or_create_conversation(
     db: DbSession, user: CurrentUser, conv_id: str | None, question: str
 ) -> tuple[uuid.UUID, list[AIMessage]]:
     """Returns (conversation id, message history incl. the new user message)."""
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     if conv_id:
         conv = await db.get(Conversation, uuid.UUID(conv_id))
         if not conv or conv.user_id != user.id:
@@ -70,7 +70,7 @@ async def ai_chat(
     cid, msgs = await _load_or_create_conversation(db, user, body.conversation_id, body.message)
     page = (body.context or {}).get("page") if body.context else None
 
-    result = await answer_question(db, user.role, body.message, msgs, page=page)
+    result = await answer_question(db, user.role, body.message, msgs, page=page, user=user)
 
     db.add(Message(conversation_id=cid, role="assistant", content=result.reply))
     await db.commit()
@@ -108,7 +108,9 @@ async def ai_chat_stream(
         yield _sse({"conversation_id": str(cid)})
         reply_parts: list[str] = []
         try:
-            async for chunk in stream_answer(db, user.role, body.message, msgs, page=page):
+            async for chunk in stream_answer(
+                db, user.role, body.message, msgs, page=page, user=user
+            ):
                 if chunk:
                     reply_parts.append(chunk)
                     yield _sse({"delta": chunk})
@@ -205,12 +207,38 @@ async def get_conversation_messages(
     ]
 
 
+class ProviderStatus(BaseModel):
+    name: str
+    model: str
+    allowed: bool
+    circuit_open: bool
+    open_until: str | None = None
+    calls: int = 0
+    failures: int = 0
+    consecutive_failures: int = 0
+    avg_latency_ms: float = 0.0
+    est_cost_usd: float = 0.0
+
+
+@router.get("/providers/status", response_model=list[ProviderStatus])
+async def ai_providers_status(
+    db: DbSession,
+    user: CurrentUser,
+) -> list[ProviderStatus]:
+    """Circuit-breaker + latency/cost snapshot per AI provider (ops visibility)."""
+    from app.services.ai.circuit import snapshot_all
+
+    return [ProviderStatus(**row) for row in snapshot_all()]
+
+
 class AnalyzeRequest(BaseModel):
     question: str
     data_context: dict | None = None
 
 
 class AnalyzeResponse(BaseModel):
+    answer: str
+    suggestions: list[str] = []
     answer: str
     suggestions: list[str] = []
 
@@ -227,6 +255,7 @@ async def ai_analyze(
         body.question,
         history=None,
         page=(body.data_context or {}).get("page") if body.data_context else None,
+        user=user,
     )
     suggestions = _generate_suggestions(body.question)
     return AnalyzeResponse(answer=result.reply, suggestions=suggestions)

@@ -1,10 +1,13 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-Role = Literal["admin", "manager", "analyst"]
+# Roles are admin-defined at runtime (see app.models.rbac), so the wire type is
+# a slug and the API validates it against the `roles` catalog rather than a
+# closed Literal.
+Role = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{1,31}$")]
 
 
 class ProfileOut(BaseModel):
@@ -15,6 +18,7 @@ class ProfileOut(BaseModel):
     full_name: str | None
     role: Role
     department: str | None
+    org_id: UUID | None = None
     is_active: bool
     created_at: datetime
 
@@ -25,12 +29,14 @@ class UserCreate(BaseModel):
     full_name: str | None = None
     role: Role = "analyst"
     department: str | None = None
+    org_id: UUID | None = None  # tenant; defaults to the creating admin's org
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
     role: Role | None = None
     department: str | None = None
+    org_id: UUID | None = None
     is_active: bool | None = None
 
 

@@ -17,6 +17,9 @@ class Conversation(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(default="New conversation")
+    # token-budget-aware rolling summary of the conversation's oldest turns
+    # (services/ai/memory.py); None when the whole history still fits the budget.
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (CheckConstraint("LENGTH(title) > 0", name="ck_conversation_title_not_empty"),)
 

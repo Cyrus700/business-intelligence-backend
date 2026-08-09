@@ -108,3 +108,28 @@ class Report(Base):
         ),
         CheckConstraint("format IN ('pdf', 'xlsx')", name="valid_format"),
     )
+
+
+class RecommendationFeedback(Base):
+    """User outcome signal for recommendations (accepted / dismissed).
+
+    Ranks future recommendations by prior acceptance (4a in the advance plan):
+    keyed by the recommendation's dedupe_key (which encodes its type + scope),
+    so feedback aggregates across re-runs.
+    """
+
+    __tablename__ = "recommendation_feedback"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    rec_key: Mapped[str] = mapped_column(index=True)  # dedupe_key of the Insight
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+    action: Mapped[str]  # 'accepted' | 'dismissed'
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("action IN ('accepted', 'dismissed')", name="valid_action"),
+        CheckConstraint("LENGTH(rec_key) > 0", name="ck_rec_key_not_empty"),
+        Index("ix_rec_feedback_key_created", "rec_key", "created_at"),
+    )

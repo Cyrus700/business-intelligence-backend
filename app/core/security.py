@@ -20,9 +20,10 @@ class TokenClaims:
     user_id: UUID
     email: str | None
     role: str | None  # application role from app_metadata, NOT Supabase's postgres role
+    token_version: int | None = None  # "ver" claim — compared to profiles.token_version
 
 
-def sign_token(user_id: UUID, email: str, role: str = "analyst") -> str:
+def sign_token(user_id: UUID, email: str, role: str = "analyst", token_version: int = 0) -> str:
     """Create a signed JWT compatible with the existing verify_token flow."""
     settings = get_settings()
     secret = settings.supabase_jwt_secret or "dev-secret-do-not-use-in-production"
@@ -33,6 +34,7 @@ def sign_token(user_id: UUID, email: str, role: str = "analyst") -> str:
         "aud": settings.jwt_audience,
         "exp": datetime.now(timezone.utc) + timedelta(days=90),
         "iat": datetime.now(timezone.utc),
+        "ver": token_version,
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
@@ -66,4 +68,5 @@ def verify_token(token: str) -> TokenClaims:
         user_id=user_id,
         email=payload.get("email"),
         role=app_metadata.get("role"),
+        token_version=payload.get("ver"),
     )

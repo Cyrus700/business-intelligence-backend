@@ -57,6 +57,15 @@ async def _daily_anomaly_scan() -> None:
         logger.info("daily anomaly scan: %d new", created)
 
 
+async def _daily_drift_check() -> None:
+    from app.services.ml.drift import check_all
+
+    async with get_session_factory()() as db:
+        results = await check_all(db)
+        triggered = sum(1 for r in results if r.triggered)
+        logger.info("daily drift check: %d model(s) checked, %d retrained", len(results), triggered)
+
+
 async def _nightly_insights_and_alerts() -> None:
     from app.services.alerts.engine import evaluate_alerts
     from app.services.insights.engine import generate_insights
@@ -100,6 +109,9 @@ async def start_scheduler() -> AsyncIOScheduler:
     _scheduler.add_job(_weekly_retrain, CronTrigger.from_crontab("0 2 * * 1"), id="ml-retrain")
     _scheduler.add_job(
         _daily_anomaly_scan, CronTrigger.from_crontab("30 1 * * *"), id="anomaly-scan"
+    )
+    _scheduler.add_job(
+        _daily_drift_check, CronTrigger.from_crontab("0 1 * * *"), id="drift-check"
     )
     # decision-support jobs (Phase 5): insights+alerts after the anomaly scan,
     # monthly summary report on the 1st

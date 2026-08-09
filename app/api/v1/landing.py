@@ -2,6 +2,9 @@
 
 from fastapi import APIRouter
 
+from app.api.deps import DbSession
+from app.services.analytics.landing_live import build_live_metrics
+
 router = APIRouter(prefix="/landing", tags=["landing"])
 
 
@@ -131,3 +134,13 @@ LANDING_DATA = {
 @router.get("")
 async def get_landing_data():
     return LANDING_DATA
+
+
+@router.get("/live")
+async def get_landing_live(db: DbSession):
+    """Real warehouse figures behind the landing page.
+
+    Public and unauthenticated, so it returns aggregates only — see the module
+    docstring in services/analytics/landing_live.py before adding fields.
+    """
+    return await build_live_metrics(db)

@@ -1,6 +1,8 @@
 """Feature preparation: warehouse → tidy daily series for the ML models."""
 
+import json
 from datetime import date
+from typing import Any
 
 import pandas as pd
 from sqlalchemy import text
@@ -21,20 +23,51 @@ FESTIVAL_WINDOWS = [
     ("2027-10-26", "2027-10-31"),
 ]
 
-SERIES_SQL = {
-    "revenue_daily": (
-        "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
-        "WHERE metric = 'revenue' AND dimensions = '{}'::jsonb ORDER BY snapshot_date"
-    ),
-    "orders_daily": (
-        "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
-        "WHERE metric = 'orders' AND dimensions = '{}'::jsonb ORDER BY snapshot_date"
-    ),
-    "expenses_daily": (
-        "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
-        "WHERE metric = 'expense_total' AND dimensions = '{}'::jsonb ORDER BY snapshot_date"
-    ),
+# target -> underlying kpi_snapshots metric name
+TARGET_METRIC = {
+    "revenue_daily": "revenue",
+    "orders_daily": "orders",
+    "expenses_daily": "expense_total",
 }
+
+_SERIES_SQL = (
+    "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
+    "WHERE metric = :metric AND dimensions = :dim::jsonb ORDER BY snapshot_date"
+)
+
+# which segment key(s) each target can be sliced by — mirrors the segment
+# columns kpi_builder.py actually populates dimensions with.
+SEGMENT_KEYS = {
+    "revenue_daily": ("region", "channel"),
+    "orders_daily": (),
+    "expenses_daily": ("category",),
+}
+
+_MARKETING_SQL = (
+    "SELECT expense_date AS ds, SUM(amount) AS spend FROM expenses "
+    "WHERE category = 'marketing' GROUP BY expense_date ORDER BY expense_date"
+)
+
+
+async def discover_segments(db: AsyncSession, target: str) -> list[dict[str, str]]:
+    """Distinct non-empty segment values already present for this target."""
+    keys = SEGMENT_KEYS.get(target, ())
+    if not keys:
+        return []
+    metric = TARGET_METRIC[target]
+    segments: list[dict[str, str]] = []
+    for key in keys:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT DISTINCT dimensions->>:key AS v FROM kpi_snapshots "
+                    "WHERE metric = :metric AND dimensions ? :key"
+                ),
+                {"key": key, "metric": metric},
+            )
+        ).all()
+        segments.extend({key: v} for v, in rows if v)
+    return segments
 
 
 def festival_flags(dates: pd.Series) -> pd.Series:
@@ -46,13 +79,36 @@ def festival_flags(dates: pd.Series) -> pd.Series:
     return flags
 
 
-async def load_series(db: AsyncSession, target: str) -> pd.DataFrame:
-    """Continuous daily frame [ds, y] with missing days as explicit zeros.
+async def _marketing_series(db: AsyncSession, dates: pd.Series) -> pd.Series:
+    """Daily marketing expense, reindexed onto `dates` (0 where none logged)."""
+    rows = (await db.execute(text(_MARKETING_SQL))).all()
+    spend = pd.DataFrame(rows, columns=["ds", "spend"])
+    if spend.empty:
+        return pd.Series(0.0, index=dates.index)
+    spend["ds"] = pd.to_datetime(spend["ds"])
+    spend["spend"] = spend["spend"].astype(float)
+    merged = pd.DataFrame({"ds": dates}).merge(spend, on="ds", how="left").fillna({"spend": 0.0})
+    return merged["spend"]
+
+
+async def load_series(
+    db: AsyncSession, target: str, dimensions: dict[str, Any] | None = None
+) -> pd.DataFrame:
+    """Continuous daily frame [ds, y, festival, marketing] with missing days as
+    explicit zeros.
 
     Zeros (not interpolation) because a day without transactions genuinely had
     zero revenue — documented modelling choice (docs/05-ml-plan.md).
+
+    `dimensions` slices to one segment (e.g. {"region": "Kathmandu"}); omit
+    (or {}) for the whole-business series.
     """
-    rows = (await db.execute(text(SERIES_SQL[target]))).all()
+    dims = dimensions or {}
+    rows = (
+        await db.execute(
+            text(_SERIES_SQL), {"metric": TARGET_METRIC[target], "dim": json.dumps(dims)}
+        )
+    ).all()
     frame = pd.DataFrame(rows, columns=["ds", "y"])
     if frame.empty:
         return frame
@@ -61,6 +117,7 @@ async def load_series(db: AsyncSession, target: str) -> pd.DataFrame:
     full = pd.DataFrame({"ds": pd.date_range(frame["ds"].min(), frame["ds"].max(), freq="D")})
     frame = full.merge(frame, on="ds", how="left").fillna({"y": 0.0})
     frame["festival"] = festival_flags(frame["ds"])
+    frame["marketing"] = await _marketing_series(db, frame["ds"])
     return frame
 
 

@@ -32,16 +32,18 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
     channels = ch.all()
     if len(channels) >= 2:
         top_channel = channels[0]
-        bottom_channels = [c for c in channels if c.revenue < top_channel.revenue * 0.3]
+        threshold = float(top_channel.revenue) * 0.3
+        bottom_channels = [c for c in channels if float(c.revenue) < threshold]
         for bc in bottom_channels[:2]:
-            gap_pct = round((1 - bc.revenue / top_channel.revenue) * 100, 1)
+            gap_pct = round((1 - float(bc.revenue) / float(top_channel.revenue)) * 100, 1)
+            top_value = _fmt(float(top_channel.revenue))
             found.append({
                 "insight_type": "recommendation",
                 "severity": "info",
                 "title": f"Boost {bc.channel} channel revenue",
                 "body": (
                     f"{bc.channel} generated {_fmt(float(bc.revenue))} in the last 30 days — "
-                    f"{gap_pct}% behind {top_channel.channel} ({_fmt(float(top_channel.revenue))}). "
+                    f"{gap_pct}% behind {top_channel.channel} ({top_value}). "
                     "Consider targeted promotions or inventory allocation to close the gap."
                 ),
                 "evidence": {
@@ -124,11 +126,11 @@ async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, 
                     "insight_type": "recommendation",
                     "severity": "warning",
                     "title": f"{e.category} is {share}% of total expenses",
-                    "body": (
-                        f"{e.category} costs totaled {_fmt(float(e.total))} in the last 30 days "
-                        f"({share}% of tracked expenses). Review for consolidation or renegotiation "
-                        "opportunities."
-                    ),
+"body": (
+                    f"{e.category} costs totaled {_fmt(float(e.total))} in the last 30 days "
+                    f"({share}% of tracked expenses). Review for consolidation or "
+                    "renegotiation opportunities."
+                ),
                     "evidence": {
                         "category": e.category,
                         "amount_30d": float(e.total),
@@ -267,7 +269,7 @@ async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str
     regions = reg.all()
     if len(regions) >= 2:
         top_region = regions[0]
-        low_regions = [r for r in regions if r.revenue < top_region.revenue * 0.25]
+        low_regions = [r for r in regions if float(r.revenue) < float(top_region.revenue) * 0.25]
         for lr in low_regions[:2]:
             gap = round((1 - lr.revenue / top_region.revenue) * 100, 1)
             found.append({
@@ -320,3 +322,71 @@ async def _latest_data_date(db: AsyncSession) -> date | None:
         )
     ).scalar_one()
     return value
+
+
+# ── role scoping + impact ranking ──────────────────────────────────────────
+
+ROLE_RANK = {"analyst": 1, "manager": 2, "admin": 3}
+
+# Margin-pricing evidence (average discount %, margin erosion) is the sensitive
+# part of recommendations; only managers and admins see those bodies verbatim.
+_SENSITIVE_KINDS = {"margin_risk", "pricing_discount"}
+
+
+def _impact_estimate(rec: dict[str, Any]) -> dict[str, Any]:
+    """Attach a rough monetary impact estimate from whatever evidence exists."""
+    ev = rec.get("evidence") or {}
+    estimate: float | None = None
+    basis: str | None = None
+
+    if "gap_pct" in ev and "revenue_30d" in ev:
+        estimate = float(ev["revenue_30d"]) * (float(ev["gap_pct"]) / 100.0)
+        basis = "30d revenue gap"
+    elif "peak_revenue" in ev and "avg_daily_revenue_90d" in ev:
+        estimate = float(ev["peak_revenue"]) - float(ev["avg_daily_revenue_90d"])
+        basis = "peak vs average daily revenue"
+    elif "amount_30d" in ev:
+        estimate = float(ev["amount_30d"])
+        basis = "30-day category spend"
+    elif "revenue_30d" in ev:
+        estimate = float(ev["revenue_30d"])
+        basis = "30-day revenue"
+
+    if estimate is None:
+        return {}
+    return {"impact_estimate": round(estimate, 2), "impact_basis": basis}
+
+
+async def scope_recommendations(
+    db: AsyncSession,
+    recs: list[dict[str, Any]],
+    user: Any,
+) -> list[dict[str, Any]]:
+    """Role-scope and impact-rank recommendations for one user.
+
+    Sensitive pricing/margin recommendations are trimmed to a short title for
+    analysts; managers and admins see full bodies. Results are sorted by
+    estimated monetary impact descending so the assistant leads with the
+    highest-value suggestion.
+    """
+    role = getattr(user, "role", "analyst")
+    access_level = ROLE_RANK.get(role, ROLE_RANK["analyst"])
+
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for rec in recs:
+        if not isinstance(rec, dict) or rec.get("insight_type") != "recommendation":
+            continue
+        kind = rec.get("dedupe_key", "").split(":")[0]
+        if kind in _SENSITIVE_KINDS and access_level < ROLE_RANK["manager"]:
+            # analyst sees the headline only, not margins/discount details
+            rec = dict(rec)
+            rec["body"] = "Details available to managers and admins."
+            keep = {k: v for k, v in rec.get("evidence", {}).items() if k in ("sku", "product")}
+            rec["evidence"] = keep
+        impact = _impact_estimate(rec)
+        rec = {**rec, **impact}
+        estimate = float(impact.get("impact_estimate") or 0)
+        scored.append((estimate, rec))
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+    return [rec for _, rec in scored]

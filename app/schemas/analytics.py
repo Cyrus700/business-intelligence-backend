@@ -48,9 +48,10 @@ class TransactionRow(BaseModel):
     channel: str | None
     region: str | None
     quantity: int
-    unit_price: float
-    discount: float
-    total_amount: float
+    unit_price: float | None = None
+    discount: float | None = None
+    total_amount: float | None = None
+    redacted: bool | None = None  # field-level redaction for analyst role
 
 
 class Paginated[T](BaseModel):

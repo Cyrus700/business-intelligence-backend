@@ -2,15 +2,25 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from typing import Any
-
-from sqlalchemy import CheckConstraint, ForeignKey, Index, func
+from sqlalchemy import ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, uuid_pk
 
+# Roles seeded on every deployment. The full catalog is admin-editable and
+# lives in the ``roles`` table (app.models.rbac) — this tuple only names the
+# ones the platform itself depends on.
 ROLES = ("admin", "manager", "analyst")
+
+
+class Organization(Base, TimestampMixin):
+    """Tenant root. Null org_id on a table row means "default org" (single-tenant)."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    name: Mapped[str] = mapped_column(unique=True)
 
 
 class Profile(Base, TimestampMixin):
@@ -26,8 +36,15 @@ class Profile(Base, TimestampMixin):
     department: Mapped[str | None]
     is_active: Mapped[bool] = mapped_column(default=True)
     preferences: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    # attribute-based access: tenant scope and token version for instant revocation
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL")
+    )
+    token_version: Mapped[int] = mapped_column(default=0)
 
-    __table_args__ = (CheckConstraint(f"role IN {ROLES}", name="valid_role"),)
+    # No CHECK on `role`: custom roles are defined at runtime in the `roles`
+    # table, so validity is enforced by the API against that catalog instead.
+    __table_args__ = (Index("ix_profiles_org_id", "org_id"),)
 
 
 class AuditLog(Base):

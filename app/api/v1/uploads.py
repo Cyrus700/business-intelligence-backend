@@ -63,12 +63,15 @@ async def upload_file(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file exceeds 50 MB")
     file_name = file.filename or "upload.csv"
 
+    from app.api.deps import user_org_id
+
     upload = RawUpload(
         data_source_id=data_source_id,
         file_name=file_name,
         uploaded_by=user.id,
         status="received",
         target_domain=domain,
+        org_id=user_org_id(user),
     )
     db.add(upload)
     await db.flush()
@@ -132,11 +135,14 @@ async def upload_file(
 @router.get("", response_model=PaginatedUploads)
 async def list_uploads(
     db: DbSession,
+    user: CurrentUser,
     status_filter: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> PaginatedUploads:
-    stmt = select(RawUpload).order_by(RawUpload.created_at.desc())
+    from app.api.deps import org_predicate
+
+    stmt = select(RawUpload).where(org_predicate(RawUpload.org_id, user.org_id))
     if status_filter:
         stmt = stmt.where(RawUpload.status == status_filter)
     total = (
@@ -155,9 +161,19 @@ async def list_uploads(
 
 @router.get("/{upload_id}", response_model=UploadOut)
 async def get_upload(
-    upload_id: UUID, db: DbSession, _: Annotated[object, Depends(require_role("analyst"))]
+    upload_id: UUID,
+    db: DbSession,
+    user: CurrentUser,
 ) -> UploadOut:
-    upload = await db.get(RawUpload, upload_id)
+    from app.api.deps import org_predicate
+
+    upload = (
+        await db.execute(
+            select(RawUpload).where(
+                RawUpload.id == upload_id, org_predicate(RawUpload.org_id, user.org_id)
+            )
+        )
+    ).scalar_one_or_none()
     if upload is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Upload not found")
     return UploadOut.model_validate(upload)
