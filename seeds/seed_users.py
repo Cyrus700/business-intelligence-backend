@@ -14,6 +14,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+import bcrypt
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select
@@ -25,8 +27,8 @@ from app.services.supabase_admin import SupabaseAdmin, SupabaseAdminError
 
 SEED_USERS = [
     {
-        "email": None,  # filled from settings
-        "password": None,
+        "email": "sairash@gmail.com",  # filled from settings
+        "password": "Admin@123456",
         "role": "admin",
         "full_name": "Admin User",
         "department": "Engineering",
@@ -55,6 +57,10 @@ SEED_USERS = [
 ]
 
 
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
 async def main() -> None:
     settings = get_settings()
 
@@ -74,9 +80,16 @@ async def main() -> None:
             ).scalar_one_or_none()
 
             if existing:
+                changed = False
                 if existing.role != user["role"]:
                     existing.role = user["role"]
-                    print(f"Updated {user['email']} → role={user['role']}")
+                    changed = True
+                if not existing.password_hash:
+                    existing.password_hash = _hash_password(user["password"])
+                    changed = True
+                if changed:
+                    await session.commit()
+                    print(f"Updated {user['email']} (role={user['role']}, password set)")
                 else:
                     print(f"Skipped {user['email']} (already exists)")
                 continue
@@ -102,6 +115,7 @@ async def main() -> None:
             profile = Profile(
                 id=user_id,
                 email=user["email"],
+                password_hash=_hash_password(user["password"]),
                 full_name=user["full_name"],
                 role=user["role"],
                 department=user["department"],

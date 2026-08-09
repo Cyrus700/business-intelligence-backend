@@ -44,6 +44,7 @@ class RawUpload(Base):
         ForeignKey("data_sources.id", ondelete="SET NULL")
     )
     file_name: Mapped[str]
+    target_domain: Mapped[str | None] = mapped_column(nullable=True)
     s3_key: Mapped[str | None]
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")

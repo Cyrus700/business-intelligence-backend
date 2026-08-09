@@ -1,12 +1,19 @@
+import asyncio
+import json
+import logging
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DbSession, get_current_user
 from app.models.ai import Conversation, Message
-from app.services.ai import AIMessage, get_ai_response
+from app.services.ai.provider import AIMessage, polish_reply, repair_mojibake
+from app.services.ai.service import answer_question, stream_answer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["ai"], dependencies=[Depends(get_current_user)])
 
@@ -20,6 +27,38 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     conversation_id: str
     reply: str
+    source: str = "llm"
+
+
+async def _load_or_create_conversation(
+    db: DbSession, user: CurrentUser, conv_id: str | None, question: str
+) -> tuple[uuid.UUID, list[AIMessage]]:
+    """Returns (conversation id, message history incl. the new user message)."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if conv_id:
+        conv = await db.get(Conversation, uuid.UUID(conv_id))
+        if not conv or conv.user_id != user.id:
+            raise HTTPException(404, "Conversation not found")
+        cid = conv.id
+        conv.updated_at = now
+    else:
+        conv = Conversation(user_id=user.id, title=question[:80], updated_at=now)
+        db.add(conv)
+        await db.flush()
+        cid = conv.id
+
+    db.add(Message(conversation_id=cid, role="user", content=question))
+    await db.flush()
+
+    from sqlalchemy import select as sa_select
+
+    history = await db.execute(
+        sa_select(Message)
+        .where(Message.conversation_id == cid)
+        .order_by(Message.created_at, Message.id)
+    )
+    msgs = [AIMessage(role=m.role, content=m.content) for m in history.scalars().all()]
+    return cid, msgs
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -28,37 +67,67 @@ async def ai_chat(
     db: DbSession,
     user: CurrentUser,
 ) -> ChatResponse:
-    conv_id = uuid.UUID(body.conversation_id) if body.conversation_id else None
+    cid, msgs = await _load_or_create_conversation(db, user, body.conversation_id, body.message)
+    page = (body.context or {}).get("page") if body.context else None
 
-    if conv_id:
-        conv = await db.get(Conversation, conv_id)
-        if not conv or conv.user_id != user.id:
-            raise HTTPException(404, "Conversation not found")
-    else:
-        conv = Conversation(user_id=user.id, title=body.message[:80])
-        db.add(conv)
-        await db.flush()
-        conv_id = conv.id
+    result = await answer_question(db, user.role, body.message, msgs, page=page)
 
-    db.add(Message(conversation_id=conv_id, role="user", content=body.message))
-    await db.flush()
-
-    from sqlalchemy import select as sa_select
-
-    history = await db.execute(
-        sa_select(Message)
-        .where(Message.conversation_id == conv_id)
-        .order_by(Message.created_at)
-    )
-    msgs = [AIMessage(role=m.role, content=m.content) for m in history.scalars().all()]
-
-    system = _build_system_prompt(user, body.context)
-    reply = await get_ai_response(msgs, system_prompt=system)
-
-    db.add(Message(conversation_id=conv_id, role="assistant", content=reply))
+    db.add(Message(conversation_id=cid, role="assistant", content=result.reply))
     await db.commit()
 
-    return ChatResponse(conversation_id=str(conv_id), reply=reply)
+    return ChatResponse(conversation_id=str(cid), reply=result.reply, source=result.source)
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@router.post("/chat/stream")
+async def ai_chat_stream(
+    body: ChatRequest,
+    db: DbSession,
+    user: CurrentUser,
+):
+    """Server-Sent-Events streaming chat. First event carries conversation_id.
+
+    The conversation and the user's message are committed BEFORE streaming
+    starts, so an interrupted or failed stream never loses them. The assistant
+    reply is persisted when the stream completes successfully.
+    """
+    cid, msgs = await _load_or_create_conversation(db, user, body.conversation_id, body.message)
+    await db.commit()
+    page = (body.context or {}).get("page") if body.context else None
+
+    async def _save_assistant(reply: str) -> None:
+        if not reply:
+            return
+        db.add(Message(conversation_id=cid, role="assistant", content=polish_reply(reply)))
+        await db.commit()
+
+    async def event_gen():
+        yield _sse({"conversation_id": str(cid)})
+        reply_parts: list[str] = []
+        try:
+            async for chunk in stream_answer(db, user.role, body.message, msgs, page=page):
+                if chunk:
+                    reply_parts.append(chunk)
+                    yield _sse({"delta": chunk})
+        except asyncio.CancelledError:
+            # Client disconnected (Stop button / tab close): keep the user
+            # message, drop the partial reply.
+            raise
+        except Exception as e:
+            logger.warning("AI stream failed: %s", e)
+            yield _sse({"error": "I hit an error while generating a reply. Please try again."})
+            return
+        await _save_assistant("".join(reply_parts))
+        yield _sse({"done": True})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class ConversationOut(BaseModel):
@@ -74,7 +143,8 @@ async def list_conversations(
     user: CurrentUser,
     limit: int = Query(50, ge=1, le=200),
 ) -> list[ConversationOut]:
-    from sqlalchemy import func as sa_func, select
+    from sqlalchemy import func as sa_func
+    from sqlalchemy import select
 
     subq = (
         select(Message.conversation_id, sa_func.count().label("cnt"))
@@ -121,11 +191,16 @@ async def get_conversation_messages(
         await db.execute(
             sa_select(Message)
             .where(Message.conversation_id == conv_id)
-            .order_by(Message.created_at)
+            .order_by(Message.created_at, Message.id)
         )
     ).scalars().all()
     return [
-        MessageOut(id=str(m.id), role=m.role, content=m.content, created_at=m.created_at.isoformat())
+        MessageOut(
+            id=str(m.id),
+            role=m.role,
+            content=repair_mojibake(m.content),
+            created_at=m.created_at.isoformat(),
+        )
         for m in rows
     ]
 
@@ -143,20 +218,18 @@ class AnalyzeResponse(BaseModel):
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def ai_analyze(
     body: AnalyzeRequest,
+    db: DbSession,
     user: CurrentUser,
 ) -> AnalyzeResponse:
-    system = (
-        "You are a data analyst AI for a business intelligence dashboard. "
-        "Answer the user's question about their business data. "
-        "Be specific, use numbers from the provided context, and suggest actionable insights. "
-        "If you don't have enough data, suggest what KPIs to look at on the dashboard. "
-        f"The user's role is: {user.role}."
+    result = await answer_question(
+        db,
+        user.role,
+        body.question,
+        history=None,
+        page=(body.data_context or {}).get("page") if body.data_context else None,
     )
-    ctx_str = f"\nContext data: {body.data_context}" if body.data_context else ""
-    msgs = [AIMessage(role="user", content=f"{body.question}{ctx_str}")]
-    answer = await get_ai_response(msgs, system_prompt=system)
     suggestions = _generate_suggestions(body.question)
-    return AnalyzeResponse(answer=answer, suggestions=suggestions)
+    return AnalyzeResponse(answer=result.reply, suggestions=suggestions)
 
 
 class InsightOut(BaseModel):
@@ -188,7 +261,10 @@ async def ai_insights(
             metric = card.get("metric", "")
             insights.append(
                 InsightOut(
-                    title=f"{metric.replace('_', ' ').title()} {'Increased' if direction == 'up' else 'Decreased'}",
+                    title=(
+                        f"{metric.replace('_', ' ').title()} "
+                        f"{'Increased' if direction == 'up' else 'Decreased'}"
+                    ),
                     body=(
                         f"{metric.replace('_', ' ').title()} is at रू {val:,.0f}, "
                         f"{'up' if direction == 'up' else 'down'} {abs(change_pct):.1f}% "
@@ -206,7 +282,10 @@ async def ai_insights(
             insights.append(
                 InsightOut(
                     title=f"{len(stock)} Products Below Reorder Level",
-                    body=f"{len(stock)} products need restocking: {', '.join(names)}{'…' if len(stock) > 5 else ''}.",
+                    body=(
+                        f"{len(stock)} products need restocking: "
+                        f"{', '.join(names)}{'…' if len(stock) > 5 else ''}."
+                    ),
                     type="inventory",
                     priority="high",
                 )
@@ -214,11 +293,15 @@ async def ai_insights(
 
     if scope in ("forecast", "all"):
         from sqlalchemy import select
-        from app.models.ml import MlModel, Forecast as ForecastModel
+
+        from app.models.ml import Forecast as ForecastModel
+        from app.models.ml import MlModel
 
         model = (
             await db.execute(
-                select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+                select(MlModel).where(
+                    MlModel.target == "revenue_daily", MlModel.is_active.is_(True)
+                )
             )
         ).scalar_one_or_none()
         if model:
@@ -247,30 +330,32 @@ async def ai_insights(
     return insights
 
 
-def _build_system_prompt(user, context: dict | None = None) -> str:
-    ctx = context or {}
-    extra = ""
-    if ctx.get("page"):
-        extra += f"\nThe user is currently on the {ctx['page']} page."
-    if ctx.get("metrics"):
-        extra += f"\nAvailable metrics: {', '.join(ctx['metrics'])}."
-    return (
-        f"You are Insightful AI, a BI assistant for a retail analytics dashboard. "
-        f"The user ({user.role}) can view KPIs, sales data, expenses, inventory, forecasts, and alerts. "
-        f"Be concise and data-driven.{extra}"
-    )
-
-
 def _generate_suggestions(question: str) -> list[str]:
     q = question.lower()
     if "revenue" in q:
-        return ["How does this compare to last month?", "What's driving revenue changes?", "Show me revenue by channel"]
+        return [
+            "How does this compare to last month?",
+            "What's driving revenue changes?",
+            "Show me revenue by channel",
+        ]
     if "expense" in q:
-        return ["What's the largest expense category?", "How do expenses trend over time?", "Compare expenses to revenue"]
+        return [
+            "What's the largest expense category?",
+            "How do expenses trend over time?",
+            "Compare expenses to revenue",
+        ]
     if "forecast" in q or "predict" in q:
-        return ["What's the confidence interval?", "How accurate were past forecasts?", "Forecast by product category"]
+        return [
+            "What's the confidence interval?",
+            "How accurate were past forecasts?",
+            "Forecast by product category",
+        ]
     if "inventory" in q or "stock" in q:
-        return ["Which products need restocking?", "Inventory turnover rate?", "Slow-moving items?"]
+        return [
+            "Which products need restocking?",
+            "Inventory turnover rate?",
+            "Slow-moving items?",
+        ]
     if "anomaly" in q:
         return ["What caused this anomaly?", "Show anomaly trends", "How to prevent anomalies?"]
     return [

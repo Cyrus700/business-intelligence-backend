@@ -1,0 +1,24 @@
+INFO:     Will watch for changes in these directories: ['D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [29276] using WatchFiles
+INFO:     Started server process [39300]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'scripts\_hash_passwords.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [39300]
+WARNING:  WatchFiles detected changes in 'scripts\_hash_passwords.py'. Reloading...
+INFO:     Started server process [24920]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [24920]
+INFO:     Started server process [37172]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

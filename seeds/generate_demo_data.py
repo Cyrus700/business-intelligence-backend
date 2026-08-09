@@ -21,7 +21,8 @@ rng = np.random.default_rng(42)
 random.seed(42)
 
 OUT = Path(__file__).parent / "output"
-START, END = date(2023, 7, 1), date(2026, 6, 30)
+START = date(2023, 7, 1)
+END = date.today()  # generate through today so every dashboard window has data
 
 PRODUCTS = [
     # sku, name, category, unit_cost, unit_price, popularity weight
@@ -118,6 +119,8 @@ ANOMALIES = [
     {"date": "2026-04-17", "metric": "revenue", "kind": "drop", "factor": 0.17},
     {"date": "2026-05-23", "metric": "revenue", "kind": "spike", "factor": 3.1},
     {"date": "2026-06-19", "metric": "revenue", "kind": "spike", "factor": 2.7},
+    {"date": "2026-07-14", "metric": "revenue", "kind": "spike", "factor": 2.9},
+    {"date": "2026-07-28", "metric": "expense_total", "kind": "spike", "factor": 3.6},
 ]
 ANOMALY_BY_DATE = {a["date"]: a for a in ANOMALIES}
 

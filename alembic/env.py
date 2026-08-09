@@ -15,7 +15,8 @@ if config.config_file_name is not None:
 
 # app settings win over alembic.ini; ALEMBIC_DATABASE_URL env var (via Settings) not needed —
 # alembic always targets whatever DATABASE_URL points at.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Escape % to %% for ConfigParser interpolation (e.g. URL-encoded passwords with %40, %23)
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

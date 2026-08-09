@@ -1,0 +1,65 @@
+{"ts": "2026-07-28T01:51:50.834+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:51:50.867+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:51:50.899+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:51:50.908+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
+{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
+{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
+{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
+{"ts": "2026-07-28T01:51:51.949+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-07-28T01:51:51.950+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
+{"ts": "2026-07-28T01:52:33.733+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12481 - \"GET /api/v1/health HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:53:38.662+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7217 - \"GET /api/v1/health HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:53:56.438+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6223 - \"GET /api/v1/analytics/summary HTTP/1.1\" 404"}
+{"ts": "2026-07-28T01:53:59.145+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4500 - \"POST /api/v1/auth/login HTTP/1.1\" 401"}
+ {"ts": "2026-07-28T01:55:10.343+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4245 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:12.650+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4247 - \"GET /api/v1/analytics/summary HTTP/1.1\" 404"}
+{"ts": "2026-07-28T01:55:14.855+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4249 - \"GET /api/v1/analytics/kpi-cards HTTP/1.1\" 404"}
+{"ts": "2026-07-28T01:55:17.066+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:11937 - \"GET /api/v1/analytics/sales-forecast HTTP/1.1\" 404"}
+{"ts": "2026-07-28T01:55:19.295+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7488 - \"GET /api/v1/analytics/anomalies HTTP/1.1\" 404"}
+{"ts": "2026-07-28T01:55:21.914+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7490 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:30.022+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1431 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:32.432+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1433 - \"GET /openapi.json HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:41.161+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5316 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:44.024+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5318 - \"GET /api/v1/kpis/summary HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:44.250+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
+ {"ts": "2026-07-28T01:55:48.767+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:48.770+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:48.770+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:48.771+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:49.616+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:49.618+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:49.618+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:49.619+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:49.620+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-07-28T01:55:49.620+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
+{"ts": "2026-07-28T01:55:49.737+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
+{"ts": "2026-07-28T01:55:51.284+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:51.285+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:51.286+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:51.287+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-07-28T01:55:52.167+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:52.169+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:52.170+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:52.171+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
+{"ts": "2026-07-28T01:55:52.171+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-07-28T01:55:52.172+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
+{"ts": "2026-07-28T01:55:52.604+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6226 - \"GET /api/v1/kpis/timeseries HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:55.124+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4442 - \"GET /api/v1/sales/by-category HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:55:57.660+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4444 - \"GET /api/v1/sales/by-channel HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:00.270+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2413 - \"GET /api/v1/sales/by-product HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:02.839+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2415 - \"GET /api/v1/sales/by-region HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:05.621+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2419 - \"GET /api/v1/sales/transactions HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:08.396+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2421 - \"GET /api/v1/finance/pnl HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:10.905+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9738 - \"GET /api/v1/finance/expenses-by-category HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:13.876+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9740 - \"GET /api/v1/inventory/levels HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:16.983+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9742 - \"GET /api/v1/forecasts HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:19.517+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9745 - \"GET /api/v1/anomalies HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:22.042+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9747 - \"GET /api/v1/insights HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:24.751+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9749 - \"GET /api/v1/trends HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:26.952+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9751 - \"GET /api/v1/health HTTP/1.1\" 200"}
+{"ts": "2026-07-28T01:56:29.425+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9753 - \"GET /api/v1/health/db HTTP/1.1\" 200"}
+{"ts": "2026-07-28T19:46:57.882+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_daily_anomaly_scan (trigger: cron[month='*', day='*', day_of_week='*', hour='1', minute='30'], next run at: 2026-07-30 01:30:00 +0545)\" was missed by 0:01:57.808871"}
+{"ts": "2026-07-29T01:38:40.334+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_nightly_insights_and_alerts (trigger: cron[month='*', day='*', day_of_week='*', hour='3', minute='0'], next run at: 2026-07-30 03:00:00 +0545)\" was missed by 4:23:40.333991"}
+{"ts": "2026-07-30T00:51:36.356+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_daily_anomaly_scan (trigger: cron[month='*', day='*', day_of_week='*', hour='1', minute='30'], next run at: 2026-07-31 01:30:00 +0545)\" was missed by 5:06:36.336399"}
+{"ts": "2026-07-30T00:51:36.388+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_nightly_insights_and_alerts (trigger: cron[month='*', day='*', day_of_week='*', hour='3', minute='0'], next run at: 2026-07-31 03:00:00 +0545)\" was missed by 3:36:36.388408"}

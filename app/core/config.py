@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: str = "dev"
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:54329/bi_dev"
+    database_url: str = ""
 
     supabase_url: str = ""
     supabase_jwt_secret: str = ""

@@ -41,11 +41,19 @@ class UploadOut(BaseModel):
 
     id: UUID
     file_name: str
+    target_domain: TargetDomain | None = None
     status: str
     row_count: int | None
     error_report: dict[str, Any] | None
     created_at: datetime
     etl_job_id: str | None = None
+
+
+class PaginatedUploads(BaseModel):
+    items: list[UploadOut]
+    total: int
+    page: int
+    page_size: int
 
 
 class EtlJobOut(BaseModel):

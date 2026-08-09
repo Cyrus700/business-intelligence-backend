@@ -9,6 +9,7 @@ from app.api.v1 import (
     decision,
     etl,
     health,
+    landing,
     ml,
     recommendations,
     uploads,
@@ -17,6 +18,7 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(landing.router)
 api_router.include_router(analytics.router)
 api_router.include_router(ml.router)
 api_router.include_router(decision.router)

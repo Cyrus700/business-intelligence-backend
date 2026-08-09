@@ -106,5 +106,17 @@
     "metric": "revenue",
     "kind": "spike",
     "factor": 2.7
+  },
+  {
+    "date": "2026-07-14",
+    "metric": "revenue",
+    "kind": "spike",
+    "factor": 2.9
+  },
+  {
+    "date": "2026-07-28",
+    "metric": "expense_total",
+    "kind": "spike",
+    "factor": 3.6
   }
 ]
