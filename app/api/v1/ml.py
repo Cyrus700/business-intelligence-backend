@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
+from app.core.clock import business_now
 from app.models import Anomaly, Forecast, MlModel
 
 router = APIRouter(tags=["ml"], dependencies=[Depends(get_current_user)])
@@ -148,7 +149,7 @@ async def get_forecast(
             target=target,
             model_type="naive_seasonal",
             model_version=0,
-            generated_at=datetime.now(),
+            generated_at=business_now().replace(tzinfo=None),
             metrics={"mape": None, "note": "insufficient data (need ≥ 7 days)"},
             points=[],
         )
@@ -164,7 +165,7 @@ async def get_forecast(
         target=target,
         model_type="naive_seasonal",
         model_version=0,
-        generated_at=datetime.now(),
+        generated_at=business_now().replace(tzinfo=None),
         metrics=m,
         points=[
             ForecastPoint(

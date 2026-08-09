@@ -36,11 +36,14 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     ("GET", "/api/v1/data-sources"): "admin",
     ("POST", "/api/v1/data-sources"): "admin",
     ("PATCH", "/api/v1/data-sources/{source_id}"): "admin",
-    ("GET", "/api/v1/etl/jobs"): "admin",
-    ("GET", "/api/v1/etl/jobs/{job_id}"): "admin",
-    ("POST", "/api/v1/etl/run/{source_id}"): "admin",
-    ("POST", "/api/v1/uploads"): "analyst",
-    ("GET", "/api/v1/uploads/{upload_id}"): "analyst",
+    # ETL execution is manager+ (etl:manage in the RBAC defaults); defining the
+    # sources themselves stays admin-only (data-sources:manage).
+    ("GET", "/api/v1/etl/jobs"): "manager",
+    ("GET", "/api/v1/etl/jobs/{job_id}"): "manager",
+    ("POST", "/api/v1/etl/run/{source_id}"): "manager",
+    ("POST", "/api/v1/uploads"): "manager",
+    ("GET", "/api/v1/uploads"): "manager",
+    ("GET", "/api/v1/uploads/{upload_id}"): "manager",
     # analytics: any role; P&L is manager+
     ("GET", "/api/v1/kpis/summary"): "analyst",
     ("GET", "/api/v1/kpis/timeseries"): "analyst",
@@ -73,6 +76,53 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     ("GET", "/api/v1/reports"): "analyst",
     ("POST", "/api/v1/reports/generate"): "manager",
     ("GET", "/api/v1/reports/{report_id}/download"): "analyst",
+    # public marketing + auth surfaces
+    ("GET", "/api/v1/landing"): None,
+    ("GET", "/api/v1/landing/live"): None,
+    ("POST", "/api/v1/auth/login"): None,
+    ("POST", "/api/v1/auth/signup"): None,
+    ("POST", "/api/v1/auth/forgot-password"): None,
+    ("POST", "/api/v1/auth/reset-password"): None,
+    ("GET", "/api/v1/auth/google/login"): None,
+    ("GET", "/api/v1/auth/google/callback"): None,
+    # self-service profile
+    ("PATCH", "/api/v1/auth/me"): "analyst",
+    ("GET", "/api/v1/auth/me/preferences"): "analyst",
+    ("PATCH", "/api/v1/auth/me/preferences"): "analyst",
+    ("GET", "/api/v1/auth/permissions"): "analyst",
+    # assistant: any authenticated role
+    ("POST", "/api/v1/ai/chat"): "analyst",
+    ("POST", "/api/v1/ai/chat/stream"): "analyst",
+    ("POST", "/api/v1/ai/analyze"): "analyst",
+    ("GET", "/api/v1/ai/conversations"): "analyst",
+    ("GET", "/api/v1/ai/conversations/{conv_id}/messages"): "analyst",
+    ("GET", "/api/v1/ai/insights"): "analyst",
+    ("GET", "/api/v1/ai/providers/status"): "analyst",
+    # recommendations
+    ("GET", "/api/v1/recommendations"): "analyst",
+    ("POST", "/api/v1/recommendations/generate"): "manager",
+    # data freshness — read-only, any authenticated role
+    ("GET", "/api/v1/data-coverage"): "analyst",
+    # admin-only reads
+    ("GET", "/api/v1/users/{user_id}"): "admin",
+    ("GET", "/api/v1/audit-logs/role-changes"): "admin",
+    # RBAC catalog: everyone reads the matrix (the UI renders it),
+    # only roles:manage (admin by default) edits it
+    ("GET", "/api/v1/rbac/matrix"): "analyst",
+    ("GET", "/api/v1/rbac/me"): "analyst",
+    ("GET", "/api/v1/rbac/roles"): "analyst",
+    ("GET", "/api/v1/rbac/permissions"): "analyst",
+    ("GET", "/api/v1/rbac/audit"): "admin",
+    ("PATCH", "/api/v1/rbac/matrix"): "admin",
+    ("PUT", "/api/v1/rbac/roles/{name}/permissions"): "admin",
+    ("POST", "/api/v1/rbac/roles"): "admin",
+    ("PATCH", "/api/v1/rbac/roles/{name}"): "admin",
+    ("DELETE", "/api/v1/rbac/roles/{name}"): "admin",
+    ("POST", "/api/v1/rbac/permissions"): "admin",
+    ("PATCH", "/api/v1/rbac/permissions/{key}"): "admin",
+    ("DELETE", "/api/v1/rbac/permissions/{key}"): "admin",
+    ("POST", "/api/v1/rbac/reset"): "admin",
+    ("POST", "/api/v1/rbac/sync-catalog"): "admin",
 }
 
 MATRIX_PATH = Path(__file__).parents[2].parent / ("docs/completions/assets/phase-6/authz-matrix.md")

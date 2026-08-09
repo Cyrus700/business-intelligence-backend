@@ -1,9 +1,9 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,9 +65,15 @@ class SalesTransaction(Base):
     etl_job_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("etl_jobs.id", ondelete="SET NULL")
     )
+    # When this row landed in the warehouse, on the business clock. Distinct
+    # from the business date above: a February sale uploaded in March has
+    # txn_date=February, ingested_at=March. Powers "uploaded today" views and
+    # lets the assistant tell "no sales that day" from "not loaded yet".
+    ingested_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
         Index("ix_sales_txn_date", "txn_date"),
+        Index("ix_sales_ingested_at", "ingested_at"),
         Index("ix_sales_txn_date_product", "txn_date", "product_id"),
         Index("ix_sales_txn_date_region", "txn_date", "region"),
         CheckConstraint("quantity > 0", name="positive_quantity"),
@@ -90,9 +96,15 @@ class Expense(Base):
     etl_job_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("etl_jobs.id", ondelete="SET NULL")
     )
+    # When this row landed in the warehouse, on the business clock. Distinct
+    # from the business date above: a February sale uploaded in March has
+    # txn_date=February, ingested_at=March. Powers "uploaded today" views and
+    # lets the assistant tell "no sales that day" from "not loaded yet".
+    ingested_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
         Index("ix_expenses_expense_date", "expense_date"),
+        Index("ix_expenses_ingested_at", "ingested_at"),
         CheckConstraint(
             "category IN ('rent', 'salaries', 'utilities', 'marketing', 'logistics', 'other')",
             name="valid_category",
@@ -113,9 +125,15 @@ class InventoryLevel(Base):
     source_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("data_sources.id", ondelete="SET NULL")
     )
+    # When this row landed in the warehouse, on the business clock. Distinct
+    # from the business date above: a February sale uploaded in March has
+    # txn_date=February, ingested_at=March. Powers "uploaded today" views and
+    # lets the assistant tell "no sales that day" from "not loaded yet".
+    ingested_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
         Index("ix_inventory_snapshot_date", "snapshot_date"),
+        Index("ix_inventory_ingested_at", "ingested_at"),
         UniqueConstraint("snapshot_date", "product_id", "warehouse", name="uq_inventory_snapshot"),
     )
 

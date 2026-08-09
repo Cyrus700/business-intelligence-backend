@@ -10,6 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select, text
 
+from app.core.clock import business_today
 from app.core.database import get_session_factory
 from app.models import DataSource
 
@@ -77,14 +78,14 @@ async def _nightly_insights_and_alerts() -> None:
 
 
 async def _monthly_report() -> None:
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     from app.models import Report
     from app.services.reports import builder
     from app.services.storage import FileStorage, make_key
 
     async with get_session_factory()() as db:
-        end = date.today().replace(day=1) - timedelta(days=1)
+        end = business_today().replace(day=1) - timedelta(days=1)
         start = end.replace(day=1)
         title = f"Monthly business summary — {start:%B %Y}"
         payload = await builder.build_pdf(db, start, end, title)

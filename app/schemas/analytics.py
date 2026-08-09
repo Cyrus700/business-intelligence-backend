@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -78,3 +78,24 @@ class InventoryRow(BaseModel):
     reorder_level: int
     below_reorder: bool
     warehouse: str | None
+
+
+class TableCoverage(BaseModel):
+    first_date: date | None
+    last_date: date | None
+    row_count: int
+    last_ingested_at: datetime | None
+
+
+class DataCoverage(BaseModel):
+    """What the warehouse holds, so clients never mistake "not loaded" for zero."""
+
+    sales: TableCoverage
+    expenses: TableCoverage
+    inventory: TableCoverage
+    first_date: date | None
+    last_date: date | None
+    last_ingested_at: datetime | None
+    today: date
+    timezone: str
+    days_behind: int | None

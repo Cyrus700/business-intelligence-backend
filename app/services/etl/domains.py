@@ -14,6 +14,7 @@ from typing import Any
 
 import pandas as pd
 
+from app.core.clock import business_today
 from app.services.etl.base import RowError, TransformResult
 
 EXPENSE_CATEGORIES = {"rent", "salaries", "utilities", "marketing", "logistics", "other"}
@@ -92,7 +93,7 @@ def _parse_date(value: Any) -> date:
             parsed = pd.to_datetime(str(value), format="mixed", dayfirst=False).date()
         except (ValueError, TypeError) as e:
             raise ValueError(f"unparseable date: {value!r}") from e
-    if parsed < MIN_DATE or parsed > date.today():
+    if parsed < MIN_DATE or parsed > business_today():
         raise ValueError(f"date out of range: {parsed.isoformat()}")
     return parsed
 

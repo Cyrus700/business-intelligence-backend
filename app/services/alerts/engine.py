@@ -16,6 +16,7 @@ from email.message import EmailMessage
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import business_now
 from app.core.config import get_settings
 from app.models import AlertRule, Anomaly, Notification, Profile
 
@@ -123,7 +124,7 @@ async def evaluate_alerts(db: AsyncSession, today: date | None = None) -> int:
     )
     created = 0
     for rule in rules:
-        cooldown_cutoff = datetime.now() - timedelta(hours=COOLDOWN_HOURS)
+        cooldown_cutoff = business_now().replace(tzinfo=None) - timedelta(hours=COOLDOWN_HOURS)
         recent = (
             await db.execute(
                 select(Notification)

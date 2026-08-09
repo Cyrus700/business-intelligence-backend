@@ -4,6 +4,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import business_today
+
 
 def _fmt(value: float) -> str:
     return f"NPR {value:,.0f}"
@@ -297,7 +299,7 @@ async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str
 async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]:
     today = await _latest_data_date(db)
     if today is None:
-        today = date.today()
+        today = business_today()
 
     all_recs: list[dict[str, Any]] = []
     for generator in (

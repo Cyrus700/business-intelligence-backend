@@ -16,11 +16,10 @@ from app.services.ai.circuit import (
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class AIMessage:
-    role: str
-    content: str
+# Every figure in an answer comes from a tool result or the live snapshot, so
+# sampling temperature only shapes wording. 0.4 made replies read like a filled
+# -in template; this keeps them varied while leaving the numbers untouched.
+RESPONSE_TEMPERATURE = 0.6
 
 
 @dataclass
@@ -28,6 +27,24 @@ class ToolCall:
     id: str
     name: str
     arguments: dict
+
+
+@dataclass
+class AIMessage:
+    """One turn in the conversation.
+
+    Tool turns need more than role+content: the OpenAI/Groq protocol requires
+    the assistant turn that requested tools to carry ``tool_calls``, and each
+    result turn to reference the call it answers via ``tool_call_id``. Sending
+    a bare ``{"role": "tool", "content": ...}`` is rejected by the API, which
+    silently collapses the whole tool loop into a plain, tool-less answer.
+    """
+
+    role: str
+    content: str
+    tool_calls: list[ToolCall] | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
 
 
 @dataclass
@@ -73,8 +90,14 @@ class BaseAIProvider(ABC):
         messages: list[AIMessage],
         tools: list[dict],
         system_prompt: str | None = None,
+        tool_choice: str = "auto",
     ) -> ToolResponse:
-        """Full assistant turn; may contain tool calls to execute by the caller."""
+        """Full assistant turn; may contain tool calls to execute by the caller.
+
+        ``tool_choice="required"`` forces at least one call — used when the
+        question names a date the snapshot cannot cover, where a model that
+        declines to call a tool can only guess.
+        """
 
     @abstractmethod
     def model_id(self) -> str:
@@ -113,11 +136,36 @@ class GroqProvider(BaseAIProvider):
         return self.model
 
     def _msgs(self, messages: list[AIMessage], system_prompt: str | None) -> list[dict]:
+        import json
+
         msgs: list[dict] = []
         if system_prompt:
             msgs.append({"role": "system", "content": system_prompt})
         for m in messages:
-            msgs.append({"role": m.role, "content": m.content})
+            if m.role == "tool":
+                # Must reference the call it answers, or the API 400s.
+                msgs.append(
+                    {
+                        "role": "tool",
+                        "content": m.content,
+                        "tool_call_id": m.tool_call_id or "",
+                        **({"name": m.name} if m.name else {}),
+                    }
+                )
+                continue
+            entry: dict[str, Any] = {"role": m.role, "content": m.content or ""}
+            if m.tool_calls:
+                entry["tool_calls"] = [
+                    {
+                        "id": c.id,
+                        "type": "function",
+                        "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
+                    }
+                    for c in m.tool_calls
+                ]
+                # assistant turns that carry tool_calls must not send content=""
+                entry["content"] = m.content or None
+            msgs.append(entry)
         return msgs
 
     async def chat(self, messages: list[AIMessage], system_prompt: str | None = None) -> str:
@@ -133,7 +181,7 @@ class GroqProvider(BaseAIProvider):
             resp = await client.chat.completions.create(
                 model=self.model,
                 messages=self._msgs(messages, system_prompt),
-                temperature=0.4,
+                temperature=RESPONSE_TEMPERATURE,
                 max_tokens=2048,
             )
             reply = resp.choices[0].message.content or ""
@@ -153,6 +201,7 @@ class GroqProvider(BaseAIProvider):
         messages: list[AIMessage],
         tools: list[dict],
         system_prompt: str | None = None,
+        tool_choice: str = "auto",
     ) -> ToolResponse:
         if not self.api_key:
             raise RuntimeError("GROQ_API_KEY not configured")
@@ -167,8 +216,8 @@ class GroqProvider(BaseAIProvider):
                 model=self.model,
                 messages=self._msgs(messages, system_prompt),
                 tools=tools or None,
-                tool_choice="auto",
-                temperature=0.4,
+                tool_choice=tool_choice if tools else None,
+                temperature=RESPONSE_TEMPERATURE,
                 max_tokens=2048,
             )
             msg = resp.choices[0].message
@@ -180,7 +229,9 @@ class GroqProvider(BaseAIProvider):
                     ToolCall(
                         id=getattr(t, "id", "") or f"call_{idx}",
                         name=(fn.name if fn else ""),
-                        arguments=(fn.arguments if fn else "{}"),
+                        # the API hands arguments back as a JSON *string*;
+                        # dispatch_tool splats them as kwargs, so parse here
+                        arguments=_json_loads(fn.arguments if fn else "{}"),
                     )
                 )
             self._record_success(
@@ -208,7 +259,7 @@ class GroqProvider(BaseAIProvider):
             stream = await client.chat.completions.create(
                 model=self.model,
                 messages=self._msgs(messages, system_prompt),
-                temperature=0.4,
+                temperature=RESPONSE_TEMPERATURE,
                 max_tokens=2048,
                 stream=True,
             )
@@ -246,13 +297,21 @@ class GeminiProvider(BaseAIProvider):
     def _contents(messages: list[AIMessage]) -> list:
         from google.genai import types
 
-        return [
-            types.Content(
-                role=GeminiProvider.ROLE_MAP.get(m.role, m.role),
-                parts=[types.Part.from_text(text=m.content)],
-            )
-            for m in messages
-        ]
+        out = []
+        for m in messages:
+            text = m.content or ""
+            if m.role == "tool":
+                # Gemini has no dedicated tool role in this call shape; fold the
+                # result into a user turn so the model still sees the data
+                # rather than dropping it.
+                text = f"Tool result ({m.name or 'tool'}):\n{text}"
+                role = "user"
+            else:
+                role = GeminiProvider.ROLE_MAP.get(m.role, m.role)
+            if not text.strip():
+                continue  # empty parts are rejected
+            out.append(types.Content(role=role, parts=[types.Part.from_text(text=text)]))
+        return out
 
     async def chat(self, messages: list[AIMessage], system_prompt: str | None = None) -> str:
         if not self.api_key:
@@ -267,7 +326,7 @@ class GeminiProvider(BaseAIProvider):
             config = types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 max_output_tokens=2048,
-                temperature=0.4,
+                temperature=RESPONSE_TEMPERATURE,
             )
             started = time.monotonic()
             resp = await asyncio.get_running_loop().run_in_executor(
@@ -295,6 +354,7 @@ class GeminiProvider(BaseAIProvider):
         messages: list[AIMessage],
         tools: list[dict],
         system_prompt: str | None = None,
+        tool_choice: str = "auto",  # noqa: ARG002 - Gemini decides on its own
     ) -> ToolResponse:
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY not configured")
@@ -308,7 +368,7 @@ class GeminiProvider(BaseAIProvider):
             config = types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 max_output_tokens=2048,
-                temperature=0.4,
+                temperature=RESPONSE_TEMPERATURE,
                 tools=[
                     {
                         "function_declarations": [
@@ -366,7 +426,7 @@ class GeminiProvider(BaseAIProvider):
             config = types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 max_output_tokens=2048,
-                temperature=0.4,
+                temperature=RESPONSE_TEMPERATURE,
             )
             started = time.monotonic()
             stream = await asyncio.get_running_loop().run_in_executor(
@@ -399,35 +459,53 @@ SYSTEM_PROMPT_DASHBOARD = (
     "You are Insightful AI, a senior business-intelligence analyst for a retail dashboard. "
     "You are measured on accuracy, brevity and actionable advice.\n\n"
     "Rules:\n"
-    "1. Answer ONLY from the LIVE BUSINESS DATA block below. Never invent, estimate, or "
-    "approximate figures. If the user asks about a metric that is not in the data block, "
-    "say clearly that it is not available in the current data and point them to the "
-    "relevant dashboard panel.\n"
-    "2. Format replies as clean Markdown and always follow this exact structure:\n"
-    "   ### A short heading that summarises the answer\n"
-    "   One or two sentences with the headline figure, then:\n"
-    "   - **Label:** value for each key metric (bold the label, put a colon after it)\n"
-    "   Use a markdown table when comparing several items. Keep the whole reply "
-    "   scannable and under ~200 words unless the user asks for depth.\n"
-    "3. State the exact figures from the data block (e.g. रू 40,76,608, +17.6%) and the "
-    "period they cover (last 30 days). Distinguish the current period from the previous "
-    "period when comparing.\n"
-    "4. Always finish with '**Suggested action:**' plus one concrete, data-grounded "
-    "action (name the top product or metric involved), unless the user asked something "
-    "trivial.\n"
+    "1. Every figure you state must come from either the LIVE BUSINESS DATA snapshot below "
+    "or a tool result in this conversation. Never invent, estimate, extrapolate or "
+    "'approximately' a number. Tool results always win over the snapshot when they differ, "
+    "because the snapshot only covers the last 30 days. If a figure is in neither, say it "
+    "is not available and name the dashboard panel that has it.\n"
+    "1b. DATES: the snapshot covers only the last 30 days. The moment a question names a "
+    "specific day, month, year, or says today/yesterday/last week, you MUST call the tools "
+    "with that date range instead of answering from the snapshot — and call "
+    "get_data_coverage so you can tell a true zero from a date that was never loaded. "
+    "Never report 0 for a date outside the loaded range; say the data is not loaded. "
+    "Always state the exact date range your numbers cover.\n"
+    "2. ANSWER THE ACTUAL QUESTION FIRST, in one sentence, before any list. Then add only "
+    "the figures that bear on it — never a standard KPI dump. Shape the reply to the "
+    "question: a single number for a single-number question; a markdown table when "
+    "comparing items or periods; a short ordered list for a 'why' or 'how' question. "
+    "Vary your wording and headings between answers; do not reuse a fixed template. "
+    "Clean Markdown, scannable, under ~200 words unless depth is requested.\n"
+    "3. State exact figures (e.g. रू 40,76,608, +17.6%) and always name the period they "
+    "cover as real dates, not vague words — '1 Jun – 30 Jun 2026', not 'recently'. "
+    "Distinguish the current period from the previous period when comparing.\n"
+    "4. End with '**Suggested action:**' and ONE specific next step that follows from the "
+    "numbers you just gave — name the product, region, category or metric involved and "
+    "why it matters. It must be different when the data is different; never generic "
+    "advice like 'monitor your dashboard'. Skip it for casual chat or a pure lookup.\n"
     "5. Currency is Nepali rupees — write amounts like रू 40,76,608 (Indian digit "
     "grouping: last three digits, then groups of two).\n"
     "6. Be direct and professional: no filler, no disclaimers, no emoji unless the user "
     "uses them.\n"
     "7. If the user only greets or chats casually (hi, hello, how are you, thanks), "
-    "reply conversationally in 1-2 sentences and do NOT dump data.\n\n"
-    "Example of the expected style:\n"
-    "### Revenue — last 30 days\n"
-    "- **Total revenue:** रू 40,76,608 (+17.6% vs previous period)\n"
-    "- **Top product:** Basmati Rice 25kg — रू 12,35,880 (30.3% of sales)\n"
-    "- **Orders:** 1,218\n\n"
-    "**Suggested action:** Protect supply of Basmati Rice 25kg, your strongest "
-    "growth driver at 30.3% of sales."
+    "reply conversationally in 1-2 sentences and do NOT dump data.\n"
+    "8. If the question is ambiguous (no period, no metric named), pick the most useful "
+    "reading, say which reading you used, and answer it — do not stall by asking a "
+    "clarifying question first.\n\n"
+    "Tone and depth adapt to the question. Two examples, deliberately different:\n\n"
+    "Q: 'What was revenue on 10 June?'\n"
+    "Revenue on 10 Jun 2026 was रू 7,040 across 2 orders — about a third of the "
+    "daily average for that week.\n\n"
+    "**Suggested action:** Wai Wai drove रू 6,080 of that day on a single wholesale "
+    "order; check whether that account reorders this week.\n\n"
+    "Q: 'Compare our channels last month.'\n"
+    "Online overtook store in Jul 2026, taking 54% of revenue.\n\n"
+    "| Channel | Revenue | Share | vs Jun |\n"
+    "|---|---|---|---|\n"
+    "| Online | रू 22,14,300 | 54.0% | +18.2% |\n"
+    "| Store | रू 18,86,100 | 46.0% | -4.1% |\n\n"
+    "**Suggested action:** Store revenue fell 4.1% while online grew — shift the "
+    "marketing spend behind the store channel to online fulfilment."
 )
 
 

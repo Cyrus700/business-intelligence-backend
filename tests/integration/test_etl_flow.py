@@ -29,8 +29,8 @@ def _upload(token: str, content: str = CSV, name: str = "sales.csv", domain: str
     }
 
 
-async def test_upload_loads_and_reports_rejects(client, user_token):
-    _, token = user_token
+async def test_upload_loads_and_reports_rejects(client, manager_token):
+    _, token = manager_token
     kwargs = _upload(token)
     resp = await client.post(kwargs.pop("url"), **kwargs)
     assert resp.status_code == 201, resp.text
@@ -47,8 +47,8 @@ async def test_upload_loads_and_reports_rejects(client, user_token):
         assert skus == {"BEV-001", "SNK-001"}
 
 
-async def test_upload_is_idempotent(client, user_token):
-    _, token = user_token
+async def test_upload_is_idempotent(client, manager_token):
+    _, token = manager_token
     for expected_loaded, expected_dupes in ((3, 0), (0, 3)):
         kwargs = _upload(token)
         resp = await client.post(kwargs.pop("url"), **kwargs)
@@ -60,8 +60,8 @@ async def test_upload_is_idempotent(client, user_token):
         assert (await db.execute(select(func.count(SalesTransaction.id)))).scalar() == 3
 
 
-async def test_upload_rebuilds_kpi_snapshots(client, user_token):
-    _, token = user_token
+async def test_upload_rebuilds_kpi_snapshots(client, manager_token):
+    _, token = manager_token
     kwargs = _upload(token)
     await client.post(kwargs.pop("url"), **kwargs)
     async with get_session_factory()() as db:
@@ -81,16 +81,16 @@ async def test_upload_rebuilds_kpi_snapshots(client, user_token):
     assert by_date == {"2026-06-10": 7040.0, "2026-06-11": 640.0}
 
 
-async def test_upload_missing_columns_fails_cleanly(client, user_token):
-    _, token = user_token
+async def test_upload_missing_columns_fails_cleanly(client, manager_token):
+    _, token = manager_token
     kwargs = _upload(token, content="date,sku\n2026-06-10,X\n")
     resp = await client.post(kwargs.pop("url"), **kwargs)
     assert resp.status_code == 422
     assert "missing required columns" in resp.json()["detail"]
 
 
-async def test_expense_upload(client, user_token):
-    _, token = user_token
+async def test_expense_upload(client, manager_token):
+    _, token = manager_token
     csv = "date,category,amount,department\n2026-06-01,rent,185000,operations\n"
     kwargs = _upload(token, content=csv, name="expenses.csv", domain="finance")
     resp = await client.post(kwargs.pop("url"), **kwargs)
@@ -98,14 +98,21 @@ async def test_expense_upload(client, user_token):
     assert resp.json()["error_report"]["loaded"] == 1
 
 
-async def test_etl_jobs_visible_to_admin_only(client, user_token, admin_token):
-    _, token = user_token
+async def test_etl_jobs_visible_to_manager_and_above(
+    client, user_token, manager_token, admin_token
+):
+    _, analyst_tok = user_token
+    _, token = manager_token
     _, admin_tok = admin_token
     kwargs = _upload(token)
     await client.post(kwargs.pop("url"), **kwargs)
 
-    resp = await client.get("/api/v1/etl/jobs", headers=auth(token))
+    # analysts hold no etl:manage grant
+    resp = await client.get("/api/v1/etl/jobs", headers=auth(analyst_tok))
     assert resp.status_code == 403
+
+    resp = await client.get("/api/v1/etl/jobs", headers=auth(token))
+    assert resp.status_code == 200
 
     resp = await client.get("/api/v1/etl/jobs", headers=auth(admin_tok))
     assert resp.status_code == 200

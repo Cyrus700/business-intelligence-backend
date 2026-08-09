@@ -43,7 +43,7 @@ async def test_admin_lists_users(client, admin_token):
     profile, token = admin_token
     resp = await client.get("/api/v1/users", headers=auth(token))
     assert resp.status_code == 200
-    emails = [u["email"] for u in resp.json()]
+    emails = [u["email"] for u in resp.json()["items"]]
     assert profile.email in emails
 
 

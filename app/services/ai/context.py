@@ -5,14 +5,16 @@ expense categories, low stock, forecast, anomalies) so both the LLM prompts
 and the local deterministic engine answer from actual data.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import BUSINESS_TZ_NAME, business_now, business_today
 from app.models.ml import Anomaly, Forecast, MlModel
 from app.services.analytics.queries import (
     Filters,
+    data_coverage,
     expenses_by_category,
     inventory_levels,
     kpi_summary,
@@ -46,9 +48,36 @@ def npr(value: float | None) -> str:
 async def build_business_context(
     db: AsyncSession, days: int = DEFAULT_WINDOW_DAYS
 ) -> str:
-    today = date.today()
-    f = Filters(date_from=today - timedelta(days=days - 1), date_to=today)
+    today = business_today()
+    window_start = today - timedelta(days=days - 1)
+    f = Filters(date_from=window_start, date_to=today)
     lines: list[str] = []
+
+    # Temporal anchor first. Without it the model has no idea what "today" is
+    # (its own notion comes from training data) and silently misreads every
+    # relative date the user gives it.
+    now = business_now()
+    lines.append(
+        f"- Today is {today:%A %d %B %Y} ({today.isoformat()}), "
+        f"current time {now:%H:%M} {BUSINESS_TZ_NAME}."
+    )
+    lines.append(f"- The figures below cover {window_start.isoformat()} → {today.isoformat()}.")
+    # Everything appended above is calendar metadata, not warehouse data — the
+    # "nothing loaded yet" check at the end measures growth past this point.
+    header_lines = len(lines)
+
+    try:
+        coverage = await data_coverage(db)
+        if coverage["first_date"]:
+            lines.append(
+                f"- Warehouse holds data from {coverage['first_date']} to "
+                f"{coverage['last_date']} ({coverage['days_behind']} day(s) behind today). "
+                "For any date outside that range the answer is 'not loaded', never zero."
+            )
+            if coverage["last_ingested_at"]:
+                lines.append(f"- Last upload: {coverage['last_ingested_at']:%Y-%m-%d %H:%M}.")
+    except Exception:
+        pass
 
     try:
         cards = {c["metric"]: c for c in await kpi_summary(db, f)}
@@ -150,8 +179,8 @@ async def build_business_context(
     except Exception:
         pass
 
-    if not lines:
-        return (
-            "No analytics data loaded yet — connect a data source to populate the dashboard."
+    if len(lines) == header_lines:
+        lines.append(
+            "- No analytics data loaded yet — connect a data source to populate the dashboard."
         )
     return "\n".join(lines)

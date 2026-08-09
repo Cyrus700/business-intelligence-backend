@@ -30,9 +30,13 @@ TARGET_METRIC = {
     "expenses_daily": "expense_total",
 }
 
+# CAST(... AS jsonb), not `:dim::jsonb`: SQLAlchemy's text() bind-parameter
+# scanner treats a colon immediately after a parameter name as part of a
+# Postgres `::` cast and leaves `:dim` unbound, which reaches the driver as
+# literal text and fails with "syntax error at or near :".
 _SERIES_SQL = (
     "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
-    "WHERE metric = :metric AND dimensions = :dim::jsonb ORDER BY snapshot_date"
+    "WHERE metric = :metric AND dimensions = CAST(:dim AS jsonb) ORDER BY snapshot_date"
 )
 
 # which segment key(s) each target can be sliced by — mirrors the segment

@@ -6,7 +6,9 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import DbSession, get_current_user, require_role
+from app.core.clock import business_today
 from app.schemas.analytics import (
+    DataCoverage,
     DimensionRow,
     InventoryRow,
     KpiSummary,
@@ -26,7 +28,7 @@ def get_filters(
     channel: str | None = None,
     category: str | None = None,
 ) -> Filters:
-    today = date.today()
+    today = business_today()
     return Filters(
         date_from=date_from or (date_to or today) - timedelta(days=29),
         date_to=date_to or today,
@@ -112,5 +114,21 @@ async def get_pnl(db: DbSession, f: FiltersDep) -> list[PnlRow]:
 
 
 @router.get("/inventory/levels", response_model=list[InventoryRow])
-async def get_inventory_levels(db: DbSession, below_reorder: bool = False) -> list[InventoryRow]:
-    return await queries.inventory_levels(db, below_reorder_only=below_reorder)
+async def get_inventory_levels(
+    db: DbSession,
+    below_reorder: bool = False,
+    as_of: Annotated[
+        date | None, Query(description="Newest snapshot on or before this date")
+    ] = None,
+) -> list[InventoryRow]:
+    return await queries.inventory_levels(db, below_reorder_only=below_reorder, as_of=as_of)
+
+
+@router.get("/data-coverage", response_model=DataCoverage)
+async def get_data_coverage(db: DbSession) -> DataCoverage:
+    """Which dates the warehouse actually holds, and when it was last loaded.
+
+    Lets the UI label a range picker honestly ("no data for today — latest is
+    X") instead of rendering an empty chart that looks like a zero.
+    """
+    return DataCoverage.model_validate(await queries.data_coverage(db))

@@ -56,11 +56,6 @@ class Policy:
         info = self.roles.get(role or "")
         return info.rank if info else 0
 
-    def can(self, role: str | None, permission: str) -> bool:
-        if not role:
-            return False
-        return permission in self.grants.get(role, frozenset())
-
     def permissions_for(self, role: str | None) -> frozenset[str]:
         if not role:
             return frozenset()

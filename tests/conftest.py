@@ -106,6 +106,13 @@ async def user_token() -> tuple[Profile, str]:
 
 
 @pytest.fixture
+async def manager_token() -> tuple[Profile, str]:
+    """Lowest role allowed to upload / run ETL (see uploads + etl routers)."""
+    profile = await create_profile("manager")
+    return profile, mint_token(profile.id, "manager")
+
+
+@pytest.fixture
 async def admin_token() -> tuple[Profile, str]:
     profile = await create_profile("admin")
     return profile, mint_token(profile.id, "admin")

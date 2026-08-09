@@ -2,13 +2,14 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DbSession, get_current_user
+from app.core.clock import business_today
 from app.models.ai import Conversation, Message
 from app.services.ai.provider import AIMessage, polish_reply, repair_mojibake
 from app.services.ai.service import answer_question, stream_answer
@@ -68,12 +69,22 @@ async def ai_chat(
     user: CurrentUser,
 ) -> ChatResponse:
     cid, msgs = await _load_or_create_conversation(db, user, body.conversation_id, body.message)
+    # Commit the user's message before generating, exactly as the streaming
+    # endpoint does. Answer generation runs many read queries; if one fails the
+    # transaction is aborted, and without this commit the rollback needed to
+    # recover would also throw away the question the user just asked.
+    await db.commit()
     page = (body.context or {}).get("page") if body.context else None
 
     result = await answer_question(db, user.role, body.message, msgs, page=page, user=user)
 
-    db.add(Message(conversation_id=cid, role="assistant", content=result.reply))
-    await db.commit()
+    try:
+        db.add(Message(conversation_id=cid, role="assistant", content=result.reply))
+        await db.commit()
+    except Exception:
+        # Never fail the request over persistence: the user still gets the answer.
+        logger.exception("failed to persist assistant reply")
+        await db.rollback()
 
     return ChatResponse(conversation_id=str(cid), reply=result.reply, source=result.source)
 
@@ -277,7 +288,7 @@ async def ai_insights(
     from app.services.analytics import queries
     from app.services.analytics.queries import Filters
 
-    today = date.today()
+    today = business_today()
     filters = Filters(date_from=today - timedelta(days=29), date_to=today)
     insights: list[InsightOut] = []
 

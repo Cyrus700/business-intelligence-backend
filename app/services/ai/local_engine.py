@@ -5,23 +5,30 @@ fallback when every provider fails. Produces the same professional, numbered
 markdown style the LLM is prompted to use, so the UX is consistent.
 """
 
+import logging
+import re
 from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import business_today
 from app.models.ml import Anomaly, Forecast, MlModel
 from app.services.ai.context import npr
+from app.services.ai.dates import ParsedPeriod, parse_period
 from app.services.ai.intents import Intent
 from app.services.analytics.queries import (
     Filters,
+    data_coverage,
     expenses_by_category,
     inventory_levels,
     kpi_summary,
     monthly_pnl,
     sales_by_dimension,
 )
+
+logger = logging.getLogger(__name__)
 
 WINDOW_DAYS = 30
 MORE_LIMIT = 5
@@ -34,11 +41,27 @@ async def _kpi_map(db: AsyncSession, f: Filters) -> dict[str, dict[str, Any]]:
 
 def _period_label(f: Filters) -> str:
     """Human label for the window actually being queried."""
-    today = date.today()
+    label = _LABELS.get((f.date_from, f.date_to))
+    if label:
+        return label
+    today = business_today()
     expected_start = today - timedelta(days=WINDOW_DAYS - 1)
     if f.date_from == expected_start and f.date_to == today:
         return f"last {WINDOW_DAYS} days"
+    if f.date_from == f.date_to:
+        return f.date_from.strftime("%-d %b %Y")
     return f"{f.date_from} → {f.date_to}"
+
+
+# Labels for windows the question named explicitly ("yesterday", "June 2026"),
+# so the reply quotes the user's own framing back instead of raw ISO bounds.
+_LABELS: dict[tuple[date, date], str] = {}
+
+
+def _remember_label(f: Filters, label: str) -> None:
+    _LABELS[(f.date_from, f.date_to)] = label
+    if len(_LABELS) > 256:  # bounded: this is a formatting cache, not state
+        _LABELS.clear()
 
 
 async def _resolve_window(db: AsyncSession, today: date | None = None) -> Filters:
@@ -47,7 +70,7 @@ async def _resolve_window(db: AsyncSession, today: date | None = None) -> Filter
     Skips back up to WINDOW_SHIFTS empty windows so the assistant answers with
     the latest real numbers instead of claiming the business has no data.
     """
-    today = today or date.today()
+    today = today or business_today()
     for shift in range(WINDOW_SHIFTS + 1):
         span = shift * WINDOW_DAYS
         f = Filters(
@@ -66,17 +89,115 @@ async def _resolve_window(db: AsyncSession, today: date | None = None) -> Filter
 
 
 async def local_answer(db: AsyncSession, question: str, intent: Intent) -> str:
-    f = await _resolve_window(db)
+    """Answer from live warehouse data without an LLM.
+
+    A period named in the question wins over the rolling default, and is never
+    silently widened — otherwise "revenue on 10 June" and "revenue on 1 Jan
+    2019" both collapse onto the same 30-day window and return byte-identical
+    replies.
+    """
+    asked = parse_period(question)
+    if asked is not None:
+        f = Filters(date_from=asked.start, date_to=asked.end)
+        _remember_label(f, asked.label)
+        outside = await _outside_coverage(db, asked)
+        if outside:
+            return outside
+    else:
+        f = await _resolve_window(db)
 
     try:
         handler = _HANDLERS.get(intent)
         if handler:
             return await handler(db, f, question)
     except Exception:
-        # Fall through to generic answer rather than surfacing a 500 to the chat UI.
-        pass
+        # Fall through to the generic answer rather than surfacing a 500 to the
+        # chat UI. The rollback matters: a failed statement aborts the whole
+        # Postgres transaction, so _generic's own queries would fail too.
+        logger.warning("local handler for %s failed", intent, exc_info=True)
+        await _rollback(db)
 
     return await _generic(db, f)
+
+
+async def _rollback(db: AsyncSession) -> None:
+    try:
+        await db.rollback()
+    except Exception:  # pragma: no cover - session already unusable
+        logger.debug("rollback failed", exc_info=True)
+
+
+async def _outside_coverage(db: AsyncSession, asked: ParsedPeriod) -> str | None:
+    """Explain a window the warehouse simply has no data for.
+
+    Reporting रू 0 for a date that was never loaded is the single most
+    misleading thing this assistant can do, so it is called out explicitly.
+    """
+    try:
+        coverage = await data_coverage(db)
+    except Exception:
+        # e.g. the ingested_at column is missing because migrations are behind.
+        logger.warning("data_coverage unavailable", exc_info=True)
+        await _rollback(db)
+        return None
+    first, last = coverage.get("first_date"), coverage.get("last_date")
+    if first is None or last is None:
+        return (
+            "There's no data in the warehouse yet, so I can't report on "
+            f"**{asked.label}**. Upload a file or connect a data source first."
+        )
+    if asked.end < first or asked.start > last:
+        return (
+            f"I have no data for **{asked.label}**. The warehouse currently covers "
+            f"**{first:%-d %b %Y} → {last:%-d %b %Y}**, so this is missing data rather "
+            "than zero sales.\n\n"
+            "**Suggested action:** upload the file covering that period from the "
+            "**Data** page, then ask me again."
+        )
+    return None
+
+
+def _revenue_action(value: float, change: float | None, top: dict | None) -> str:
+    """A next step that changes with the numbers, not a fixed sign-off."""
+    name = top["key"] if top else None
+    share = float(top["share_pct"]) if top else 0.0
+    if change is not None and change <= -15:
+        return (
+            f"Revenue fell {abs(change):.1f}%. Open **Analytics → by channel** for this "
+            f"period to find where the drop came from"
+            + (f", starting with {name}, your largest line." if name else ".")
+        )
+    if share >= 50 and name:
+        return (
+            f"{name} alone is {share:.1f}% of revenue — that is heavy concentration. "
+            "Check its stock cover in **Inventory** before it becomes a single point of failure."
+        )
+    if change is not None and change >= 15 and name:
+        return (
+            f"Growth of {change:+.1f}% is led by {name}. Confirm you have inventory "
+            "to sustain it in the **Low Stock** panel."
+        )
+    if name:
+        return f"Review {name} ({share:.1f}% of sales) in **Analytics → by product**."
+    return "Upload more sales history to make this period comparable."
+
+
+def _expense_action(value: float, change: float | None, cats: list[dict]) -> str:
+    if not cats:
+        return "No expense categories are recorded for this period — check the finance upload."
+    top = cats[0]
+    share = float(top["share_pct"])
+    if change is not None and change >= 15:
+        return (
+            f"Spend rose {change:+.1f}%, and {top['key']} is {share:.1f}% of it. "
+            "Compare against revenue in the **P&L** view before it eats the margin."
+        )
+    if share >= 50:
+        return (
+            f"{top['key']} is {share:.1f}% of all spend — a single renegotiation there "
+            "moves the bottom line more than trimming everything else."
+        )
+    return f"{top['key']} leads spend at {npr(top['revenue'])}; review it in **P&L**."
 
 
 # ── handlers ────────────────────────────────────────────────────────────
@@ -86,7 +207,7 @@ async def _revenue(db: AsyncSession, f: Filters, q: str) -> str:
     rev = cards.get("revenue", {})
     value, change = rev.get("value"), rev.get("change_pct")
     if value is None or value == 0:
-        return _no_data("revenue")
+        return _no_data("revenue", _period_label(f))
     rows = await sales_by_dimension(db, f, "product")
     top = rows[0] if rows else None
     lines = [
@@ -101,13 +222,7 @@ async def _revenue(db: AsyncSession, f: Filters, q: str) -> str:
             f"- **Top seller:** {top['key']} at {npr(top['revenue'])} "
             f"({top['share_pct']}% of sales)"
         )
-    lines += [
-        "",
-        "**Suggested action:**",
-        "- Watch the **Revenue** KPI card and **Revenue vs Expenses** chart on your dashboard",
-        f"- Check {top['key'] if top else 'top product'} performance in the "
-        "**Sales Explorer** panel",
-    ]
+    lines += ["", f"**Suggested action:** {_revenue_action(value, change, top)}"]
     return "\n".join(lines)
 
 
@@ -116,7 +231,7 @@ async def _expenses(db: AsyncSession, f: Filters, q: str) -> str:
     exp = cards.get("expense_total", {})
     value, change = exp.get("value"), exp.get("change_pct")
     if value is None or value == 0:
-        return _no_data("expenses")
+        return _no_data("expenses", _period_label(f))
     cats = await expenses_by_category(db, f)
     lines = [
         f"### Expenses — {_period_label(f)}",
@@ -130,13 +245,7 @@ async def _expenses(db: AsyncSession, f: Filters, q: str) -> str:
         lines.append("**Top cost centres:**")
         for c in cats[:MORE_LIMIT]:
             lines.append(f"- {c['key']}: {npr(c['revenue'])} ({c['share_pct']}% of total)")
-    lines += [
-        "",
-        "**Suggested action:**",
-        f"- Review the top cost centre ({cats[0]['key'] if cats else 'n/a'}) in the "
-        "**Expense Breakdown** panel",
-        "- Compare against revenue in the **P&L** view to check margin pressure",
-    ]
+    lines += ["", f"**Suggested action:** {_expense_action(value, change, cats)}"]
     return "\n".join(lines)
 
 
@@ -146,7 +255,7 @@ async def _profit(db: AsyncSession, f: Filters, q: str) -> str:
     exp = cards.get("expense_total", {}).get("value")
     margin = cards.get("gross_margin", {}).get("value")
     if rev is None or exp is None or margin is None or (rev == 0 and exp == 0):
-        return _no_data("profitability")
+        return _no_data("profitability", _period_label(f))
     net = float(margin) - float(exp)
     margin_pct = (float(margin) / rev * 100) if rev else 0
     health = (
@@ -350,6 +459,12 @@ async def _regions(db: AsyncSession, f: Filters, q: str) -> str:
 
 
 async def _compare(db: AsyncSession, f: Filters, q: str) -> str:
+    # "compare 10 June and 12 June" names two specific periods — answer about
+    # those, not about whatever two months happen to be latest.
+    named = _named_periods(q)
+    if named:
+        return await _compare_periods(db, named)
+
     pnl = await monthly_pnl(db, f)
     if not pnl:
         return _no_data("comparative monthly data")
@@ -367,6 +482,66 @@ async def _compare(db: AsyncSession, f: Filters, q: str) -> str:
         lines.append(f"  - vs previous month: {d_rev:+.1f}%")
         lines.append(f"- **Expenses:** {npr(latest['expenses'])} ({d_exp:+.1f}% vs previous)")
     lines.append(f"- **Net profit:** {npr(latest['net'])}")
+    return "\n".join(lines)
+
+
+def _named_periods(question: str) -> list[ParsedPeriod] | None:
+    """Two periods explicitly named in a comparison question, in order.
+
+    Splits on the comparison connective first so each side is parsed on its own
+    — parse_period() over the whole string would collapse "10 June vs 12 June"
+    into a single 10→12 span and lose the comparison.
+    """
+    parts = re.split(r"\b(?:vs\.?|versus|against|compared to|and)\b", question, maxsplit=1)
+    if len(parts) != 2:
+        return None
+    left, right = (parse_period(part) for part in parts)
+    if left is None or right is None or (left.start, left.end) == (right.start, right.end):
+        return None
+    return [left, right]
+
+
+async def _compare_periods(db: AsyncSession, periods: list[ParsedPeriod]) -> str:
+    rows = []
+    for period in periods:
+        f = Filters(date_from=period.start, date_to=period.end)
+        cards = await _kpi_map(db, f)
+        rows.append(
+            {
+                "label": period.label,
+                "revenue": float(cards.get("revenue", {}).get("value") or 0),
+                "orders": float(cards.get("orders", {}).get("value") or 0),
+            }
+        )
+
+    first, second = rows[0], rows[1]
+    base = first["revenue"] or None
+    delta = ((second["revenue"] - first["revenue"]) / base * 100) if base else None
+    lines = [
+        f"### {first['label']} vs {second['label']}",
+        "",
+        "| Period | Revenue | Orders |",
+        "|---|---|---|",
+        f"| {first['label']} | {npr(first['revenue'])} | {first['orders']:,.0f} |",
+        f"| {second['label']} | {npr(second['revenue'])} | {second['orders']:,.0f} |",
+        "",
+    ]
+    if delta is None:
+        lines.append(
+            f"{first['label']} had no revenue, so there is no percentage to compare against."
+        )
+    else:
+        direction = "up" if delta >= 0 else "down"
+        lines.append(
+            f"Revenue was {direction} **{abs(delta):.1f}%** in {second['label']} "
+            f"({npr(second['revenue'] - first['revenue'])} difference)."
+        )
+        better = second if second["revenue"] >= first["revenue"] else first
+        lines += [
+            "",
+            f"**Suggested action:** {better['label']} was the stronger period — "
+            "open **Analytics → by channel** for it to see which channel drove the gap.",
+        ]
     return "\n".join(lines)
 
 
@@ -425,11 +600,12 @@ async def _generic(db: AsyncSession, f: Filters) -> str:
             "interactive. Ask me about any of them and I'll pull the actual numbers."
         )
 
+    period = _period_label(f)
     lines = [
-        "Here's a quick snapshot of your business:",
+        f"Here's where the business stands for **{period}**:",
         "",
-        f"- **Revenue (30d):** {npr(rev) if rev is not None else '—'}",
-        f"- **Expenses (30d):** {npr(exp) if exp is not None else '—'}",
+        f"- **Revenue:** {npr(rev) if rev is not None else '—'}",
+        f"- **Expenses:** {npr(exp) if exp is not None else '—'}",
     ]
     try:
         low = await inventory_levels(db, below_reorder_only=True)
@@ -462,7 +638,14 @@ async def _generic(db: AsyncSession, f: Filters) -> str:
     return "\n".join(lines)
 
 
-def _no_data(what: str) -> str:
+def _no_data(what: str, period: str | None = None) -> str:
+    if period:
+        return (
+            f"There was no {what} recorded for **{period}** — that period is inside the "
+            "loaded data, so this is a genuine zero rather than missing data.\n\n"
+            "**Suggested action:** widen the period, or check the **Data** page to confirm "
+            "the upload for those days landed."
+        )
     return (
         f"No {what} data is available yet. Connect a data source or check the "
         "**Data Sources / ETL** section so I can answer with real numbers."

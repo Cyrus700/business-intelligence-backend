@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from sqlalchemy import Date, and_, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import BUSINESS_TZ_NAME, business_today
 from app.models import (
     Customer,
     Expense,
@@ -118,7 +119,13 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
 
 async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity: str) -> list[dict]:
     if metric == "expense_total":
-        bucket = func.date_trunc(granularity, cast(Expense.expense_date, Date))
+        # date_trunc() on a DATE returns TIMESTAMPTZ, which the driver hands back as a
+        # UTC-converted aware datetime. Calling .date() on that silently shifts every
+        # bucket one day earlier for any database timezone ahead of UTC (Asia/Kathmandu
+        # is +05:45), so a 10 June sale is reported on 9 June. Casting the truncated
+        # value back to DATE in SQL keeps the bucket on the business day and hands
+        # Python a plain date with no timezone attached.
+        bucket = cast(func.date_trunc(granularity, cast(Expense.expense_date, Date)), Date)
         stmt = (
             select(bucket.label("period"), func.sum(Expense.amount).label("value"))
             .where(Expense.expense_date.between(f.date_from, f.date_to))
@@ -131,7 +138,9 @@ async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity:
             "orders": func.count(SalesTransaction.id),
             "avg_order_value": func.avg(SalesTransaction.total_amount),
         }[metric]
-        bucket = func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date))
+        bucket = cast(
+            func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date
+        )
         stmt = (
             select(bucket.label("period"), value_expr.label("value"))
             .where(and_(*_sales_conditions(f, f.date_from, f.date_to)))
@@ -139,7 +148,7 @@ async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity:
             .order_by(bucket)
         )
     rows = (await db.execute(stmt)).all()
-    return [{"period": r.period.date(), "value": round(float(r.value), 2)} for r in rows]
+    return [{"period": r.period, "value": round(float(r.value), 2)} for r in rows]
 
 
 async def sales_by_dimension(db: AsyncSession, f: Filters, dimension: str) -> list[dict]:
@@ -266,7 +275,9 @@ async def expenses_by_category(db: AsyncSession, f: Filters) -> list[dict]:
 
 
 async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
-    sales_month = func.date_trunc("month", cast(SalesTransaction.txn_date, Date))
+    # See the note in kpi_timeseries: the outer cast keeps months on the
+    # business calendar instead of drifting a day under UTC conversion.
+    sales_month = cast(func.date_trunc("month", cast(SalesTransaction.txn_date, Date)), Date)
     revenue_q = (
         select(
             sales_month.label("month"),
@@ -285,7 +296,7 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
         .group_by(sales_month)
         .subquery()
     )
-    expense_month = func.date_trunc("month", cast(Expense.expense_date, Date))
+    expense_month = cast(func.date_trunc("month", cast(Expense.expense_date, Date)), Date)
     expense_q = (
         select(expense_month.label("month"), func.sum(Expense.amount).label("expenses"))
         .where(Expense.expense_date.between(f.date_from, f.date_to))
@@ -307,7 +318,7 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
     rows = (await db.execute(stmt)).all()
     return [
         {
-            "month": r.month.date(),
+            "month": r.month,
             "revenue": round(float(r.revenue), 2),
             "expenses": round(float(r.expenses), 2),
             "gross_margin": round(float(r.gross_margin), 2),
@@ -317,15 +328,92 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
     ]
 
 
-async def inventory_levels(db: AsyncSession, below_reorder_only: bool = False) -> list[dict]:
-    latest = (
-        select(
-            InventoryLevel.product_id,
-            func.max(InventoryLevel.snapshot_date).label("latest_date"),
+async def data_coverage(db: AsyncSession) -> dict:
+    """What the warehouse actually holds, per fact table.
+
+    Grounds every "what about <date>?" answer: without it the assistant cannot
+    tell "that day had zero sales" apart from "that day is outside the data we
+    loaded", and will confidently report 0 for both. Also surfaces the newest
+    ingestion timestamp so the UI can show data freshness.
+    """
+    sales = (
+        await db.execute(
+            select(
+                func.min(SalesTransaction.txn_date),
+                func.max(SalesTransaction.txn_date),
+                func.count(SalesTransaction.id),
+                func.max(SalesTransaction.ingested_at),
+            )
         )
-        .group_by(InventoryLevel.product_id)
-        .subquery()
+    ).one()
+    expenses = (
+        await db.execute(
+            select(
+                func.min(Expense.expense_date),
+                func.max(Expense.expense_date),
+                func.count(Expense.id),
+                func.max(Expense.ingested_at),
+            )
+        )
+    ).one()
+    inventory = (
+        await db.execute(
+            select(
+                func.min(InventoryLevel.snapshot_date),
+                func.max(InventoryLevel.snapshot_date),
+                func.count(InventoryLevel.id),
+                func.max(InventoryLevel.ingested_at),
+            )
+        )
+    ).one()
+
+    def block(row) -> dict:
+        return {
+            "first_date": row[0],
+            "last_date": row[1],
+            "row_count": int(row[2] or 0),
+            "last_ingested_at": row[3],
+        }
+
+    blocks = {
+        "sales": block(sales),
+        "expenses": block(expenses),
+        "inventory": block(inventory),
+    }
+    firsts = [b["first_date"] for b in blocks.values() if b["first_date"]]
+    lasts = [b["last_date"] for b in blocks.values() if b["last_date"]]
+    ingests = [b["last_ingested_at"] for b in blocks.values() if b["last_ingested_at"]]
+    today = business_today()
+    last_overall = max(lasts) if lasts else None
+    return {
+        **blocks,
+        "first_date": min(firsts) if firsts else None,
+        "last_date": last_overall,
+        "last_ingested_at": max(ingests) if ingests else None,
+        "today": today,
+        "timezone": BUSINESS_TZ_NAME,
+        # How far behind "today" the newest business day is — 0 means the
+        # warehouse has data for today, so a "Today" filter is meaningful.
+        "days_behind": (today - last_overall).days if last_overall else None,
+    }
+
+
+async def inventory_levels(
+    db: AsyncSession, below_reorder_only: bool = False, as_of: date | None = None
+) -> list[dict]:
+    """Stock position per product.
+
+    Inventory is a snapshot series, not a period aggregate, so a date range does
+    not apply: the answer is "the newest snapshot on or before ``as_of``".
+    ``as_of=None`` means the newest snapshot overall.
+    """
+    latest_q = select(
+        InventoryLevel.product_id,
+        func.max(InventoryLevel.snapshot_date).label("latest_date"),
     )
+    if as_of is not None:
+        latest_q = latest_q.where(InventoryLevel.snapshot_date <= as_of)
+    latest = latest_q.group_by(InventoryLevel.product_id).subquery()
     stmt = (
         select(
             Product.sku,

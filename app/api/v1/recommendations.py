@@ -1,9 +1,9 @@
-from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
+from app.api.deps import DbSession, get_current_user, require_role
+from app.core.clock import business_today
 
 router = APIRouter(
     prefix="/recommendations",
@@ -43,17 +43,18 @@ async def list_recommendations(
 async def generate_recommendations(
     db: DbSession,
 ) -> dict[str, int]:
-    from app.services.ml.recommendations import generate_all_recommendations
-    from app.models.decision import Insight
     from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.models.decision import Insight
+    from app.services.ml.recommendations import generate_all_recommendations
 
     recs = await generate_all_recommendations(db)
     created = 0
     for r in recs:
         payload = {
             **r,
-            "period_start": date.today(),
-            "period_end": date.today(),
+            "period_start": business_today(),
+            "period_end": business_today(),
         }
         stmt = (
             pg_insert(Insight)

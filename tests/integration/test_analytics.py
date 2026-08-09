@@ -28,8 +28,8 @@ RANGE = {"from": "2026-06-01", "to": "2026-06-30"}
 
 
 @pytest.fixture
-async def seeded(client, user_token):
-    _, token = user_token
+async def seeded(client, manager_token):
+    _, token = manager_token
     for content, name, domain in (
         (CSV, "sales.csv", "sales"),
         (EXPENSES_CSV, "expenses.csv", "finance"),
@@ -97,8 +97,11 @@ async def test_drilldown_transactions_by_sku(client, seeded):
     assert body["items"][0]["txn_date"] == "2026-06-11"  # newest first
 
 
-async def test_pnl_requires_manager(client, seeded, admin_token):
-    resp = await client.get("/api/v1/finance/pnl", headers=auth(seeded), params=RANGE)
+async def test_pnl_requires_manager(client, seeded, user_token, admin_token):
+    # `seeded` uploads as a manager (uploads are manager+), so the denial case
+    # needs its own analyst token rather than the seeding one.
+    _, analyst_tok = user_token
+    resp = await client.get("/api/v1/finance/pnl", headers=auth(analyst_tok), params=RANGE)
     assert resp.status_code == 403
 
     _, admin_tok = admin_token

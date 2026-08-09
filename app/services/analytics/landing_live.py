@@ -6,13 +6,14 @@ returned, because ``GET /landing/live`` is unauthenticated. Keep it that way:
 if a field would identify a customer or a single order, it does not belong here.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import business_now, business_today
 from app.models import (
     Anomaly,
     Customer,
@@ -165,7 +166,7 @@ async def _forecast_series(db: AsyncSession, latest: date | None) -> list[dict[s
     ``days`` count exposes months the horizon only partly covers.
     """
     month = cast(func.date_trunc("month", Forecast.forecast_date), Date).label("month")
-    floor = latest or date.today()
+    floor = latest or business_today()
     stmt = (
         select(
             month,
@@ -353,7 +354,7 @@ async def build_live_metrics(db: AsyncSession) -> dict[str, Any]:
     latest = date.fromisoformat(coverage["to"]) if coverage["to"] else None
 
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": business_now().isoformat(),
         "coverage": coverage,
         "totals": await _totals(db),
         "kpis": await _headline_kpis(db, latest),

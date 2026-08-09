@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import business_now
 from app.models import Customer, Expense, InventoryLevel, Product, SalesTransaction
 from app.services.etl.base import LoadResult
 
@@ -79,6 +80,9 @@ async def load_sales(
         return LoadResult()
     products = await _ensure_products(db, records)
     customers = await _ensure_customers(db, records)
+    # One stamp for the whole run: every row from an upload shares its
+    # ingestion instant, so "uploaded today" groups cleanly.
+    ingested_at = business_now().replace(tzinfo=None)
     rows = [
         {
             "txn_date": r["txn_date"],
@@ -93,6 +97,7 @@ async def load_sales(
             "row_hash": r["row_hash"],
             "source_id": source_id,
             "etl_job_id": etl_job_id,
+            "ingested_at": ingested_at,
         }
         for r in records
     ]
@@ -116,6 +121,7 @@ async def load_expenses(
 ) -> LoadResult:
     if not records:
         return LoadResult()
+    ingested_at = business_now().replace(tzinfo=None)
     rows = [
         {
             **{
@@ -124,6 +130,7 @@ async def load_expenses(
             "row_hash": r["row_hash"],
             "source_id": source_id,
             "etl_job_id": etl_job_id,
+            "ingested_at": ingested_at,
         }
         for r in records
     ]
@@ -148,6 +155,7 @@ async def load_inventory(
     if not records:
         return LoadResult()
     products = await _ensure_products(db, records)
+    ingested_at = business_now().replace(tzinfo=None)
     rows = [
         {
             "snapshot_date": r["snapshot_date"],
@@ -156,6 +164,7 @@ async def load_inventory(
             "reorder_level": r["reorder_level"],
             "warehouse": r["warehouse"],
             "source_id": source_id,
+            "ingested_at": ingested_at,
         }
         for r in records
     ]
@@ -167,6 +176,8 @@ async def load_inventory(
             set_={
                 "quantity_on_hand": insert_stmt.excluded.quantity_on_hand,
                 "reorder_level": insert_stmt.excluded.reorder_level,
+                # a re-uploaded snapshot is a fresh ingestion
+                "ingested_at": insert_stmt.excluded.ingested_at,
             },
         ).returning(InventoryLevel.id)
         loaded += len((await db.execute(stmt)).scalars().all())
