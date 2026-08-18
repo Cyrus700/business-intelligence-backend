@@ -296,6 +296,187 @@ async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str
     return found
 
 
+async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+    """Suggestions derived from *why* the numbers moved, not just what they are.
+
+    The other generators fire on levels and gaps ("this channel is behind that
+    one"). These fire on movement and structure: the single product responsible
+    for a decline, an account that stopped buying outright, a month heading for
+    a miss, and revenue resting on too few names. Each one names the cause, so
+    the suggested action has somewhere specific to land.
+    """
+    from app.services.analytics.queries import Filters, kpi_summary
+    from app.services.ml.diagnostics import (
+        analyse_concentration,
+        explain_change,
+        price_volume_bridge,
+    )
+    from app.services.ml.projections import month_bounds, project_current_period
+
+    found: list[dict[str, Any]] = []
+    window_days = 30
+    current = (today - timedelta(days=window_days - 1), today)
+    previous = (
+        current[0] - timedelta(days=window_days),
+        current[0] - timedelta(days=1),
+    )
+
+    # ── the product behind a decline ──────────────────────────────────────
+    breakdown = await explain_change(db, "product", current, previous, top_n=3)
+    if breakdown.total_delta < 0 and breakdown.drags:
+        worst = breakdown.drags[0]
+        share = abs(worst.contribution_pct)
+        found.append({
+            "insight_type": "recommendation",
+            "severity": "warning" if share >= 40 else "info",
+            "title": f"{worst.key} is the biggest drag on revenue",
+            "body": (
+                f"Revenue fell {_fmt(abs(breakdown.total_delta))} over the last "
+                f"{window_days} days, and {worst.key} accounts for "
+                f"{_fmt(abs(worst.delta))} of that — {share:.0f}% of the total movement "
+                f"({_fmt(worst.previous)} → {_fmt(worst.current)}). Fixing this one line "
+                "recovers more than any broad campaign."
+            ),
+            "evidence": {
+                "product": worst.key,
+                "revenue_current": worst.current,
+                "revenue_previous": worst.previous,
+                "revenue_delta": worst.delta,
+                "contribution_pct": worst.contribution_pct,
+                "period_days": window_days,
+            },
+            "dedupe_key": f"drag_product:{worst.key}:{today.isoformat()}",
+        })
+
+    # A member that went to exactly zero is a lost account, not soft demand —
+    # a completely different conversation, so it gets its own suggestion.
+    for lost in breakdown.lost_members[:2]:
+        found.append({
+            "insight_type": "recommendation",
+            "severity": "warning",
+            "title": f"{lost} stopped selling entirely",
+            "body": (
+                f"{lost} sold in the previous {window_days} days and has sold nothing "
+                "since. A clean drop to zero usually means a lost account or a stockout "
+                "rather than falling demand — worth a call before it is treated as a "
+                "trend."
+            ),
+            "evidence": {"product": lost, "period_days": window_days},
+            "dedupe_key": f"lost_product:{lost}:{today.isoformat()}",
+        })
+
+    # ── volume problem or value problem ───────────────────────────────────
+    cards = {
+        c["metric"]: c
+        for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1]))
+    }
+    rev, orders = cards.get("revenue"), cards.get("orders")
+    if rev and orders and rev.get("previous_value") and orders.get("previous_value"):
+        bridge = price_volume_bridge(
+            orders_current=float(orders["value"] or 0),
+            orders_previous=float(orders["previous_value"] or 0),
+            revenue_current=float(rev["value"] or 0),
+            revenue_previous=float(rev["previous_value"] or 0),
+        )
+        if bridge.revenue_delta < 0 and bridge.verdict != "no material change":
+            if abs(bridge.volume_effect) > abs(bridge.value_effect):
+                cause, action = (
+                    "fewer orders",
+                    "acquisition and reactivation move this; discounting will not",
+                )
+            else:
+                cause, action = (
+                    "smaller orders",
+                    "bundling and minimum-order incentives move this; more traffic will not",
+                )
+            found.append({
+                "insight_type": "recommendation",
+                "severity": "info",
+                "title": f"Revenue decline is a {cause} problem",
+                "body": (
+                    f"Revenue is down {_fmt(abs(bridge.revenue_delta))} over "
+                    f"{window_days} days. Order volume accounts for "
+                    f"{_fmt(bridge.volume_effect)} and order value for "
+                    f"{_fmt(bridge.value_effect)}, so this is {cause} — {action}."
+                ),
+                "evidence": {
+                    "revenue_delta": bridge.revenue_delta,
+                    "volume_effect": bridge.volume_effect,
+                    "value_effect": bridge.value_effect,
+                    "orders_current": bridge.orders_current,
+                    "orders_previous": bridge.orders_previous,
+                    "aov_current": bridge.aov_current,
+                    "aov_previous": bridge.aov_previous,
+                },
+                "dedupe_key": f"revenue_bridge:{bridge.verdict}:{today.isoformat()}",
+            })
+
+    # ── the month is heading for a miss ───────────────────────────────────
+    projection = await project_current_period(db, metric="revenue", period="month")
+    month_start, _ = month_bounds(today)
+    if projection.days_elapsed >= 5 and projection.days_remaining >= 3:
+        prev_month_end = month_start - timedelta(days=1)
+        prev_cards = {
+            c["metric"]: c
+            for c in await kpi_summary(
+                db,
+                Filters(date_from=prev_month_end.replace(day=1), date_to=prev_month_end),
+            )
+        }
+        last_month = float((prev_cards.get("revenue") or {}).get("value") or 0.0)
+        if last_month and projection.projected_total < last_month * 0.95:
+            shortfall = last_month - projection.projected_total
+            found.append({
+                "insight_type": "recommendation",
+                "severity": "warning",
+                "title": f"{projection.period_label} is tracking below last month",
+                "body": (
+                    f"At the current run rate of {_fmt(projection.daily_run_rate)}/day, "
+                    f"{projection.period_label} lands near "
+                    f"{_fmt(projection.projected_total)} against "
+                    f"{_fmt(last_month)} last month — a shortfall of "
+                    f"{_fmt(shortfall)} with {projection.days_remaining} day(s) left to "
+                    f"act. Closing it needs about "
+                    f"{_fmt(shortfall / projection.days_remaining)} extra per day."
+                ),
+                "evidence": {
+                    "projected_total": projection.projected_total,
+                    "lower_bound": projection.lower_bound,
+                    "upper_bound": projection.upper_bound,
+                    "last_month_revenue": last_month,
+                    "shortfall": shortfall,
+                    "days_remaining": projection.days_remaining,
+                    "method": projection.method,
+                },
+                "dedupe_key": f"period_shortfall:{projection.period_label}:{today.isoformat()}",
+            })
+
+    # ── too much resting on too few ───────────────────────────────────────
+    conc = await analyse_concentration(db, "product", *current)
+    if conc.members >= 3 and conc.risk.startswith("high"):
+        found.append({
+            "insight_type": "recommendation",
+            "severity": "info",
+            "title": "Revenue is concentrated in very few products",
+            "body": (
+                f"{conc.leaders[0]} alone is {conc.top1_share_pct}% of revenue and the "
+                f"top three are {conc.top3_share_pct}% across {conc.members} products "
+                f"(HHI {conc.hhi}). Losing one of them would move the headline number on "
+                "its own — worth knowing before it happens rather than after."
+            ),
+            "evidence": {
+                "top1_share_pct": conc.top1_share_pct,
+                "top3_share_pct": conc.top3_share_pct,
+                "hhi": conc.hhi,
+                "members": conc.members,
+                "leaders": conc.leaders,
+            },
+            "dedupe_key": f"concentration:product:{today.isoformat()}",
+        })
+
+    return found
+
+
 async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]:
     today = await _latest_data_date(db)
     if today is None:
@@ -307,6 +488,7 @@ async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]
         cost_recommendations,
         pricing_recommendations,
         region_recommendations,
+        diagnostic_recommendations,
     ):
         try:
             all_recs.extend(await generator(db, today))

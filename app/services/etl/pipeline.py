@@ -18,6 +18,7 @@ from app.services.etl.base import PipelineResult
 from app.services.etl.domains import transform_frame
 from app.services.etl.extractors import extract_postgres, extract_rest_api
 from app.services.etl.loader import LOADERS
+from app.services.etl.refresh import refresh_derived
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,22 @@ async def run_frame_pipeline(
 
     job.finished_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
+
+    # The rows are committed and the job is recorded, so from here nothing may
+    # fail the ingest. Bringing anomalies, insights and the assistant's index
+    # forward now is what makes an upload visible everywhere at once instead of
+    # only in the KPI cards.
+    if result.records:
+        date_field = _DATE_FIELDS[domain]
+        dates = [r[date_field] for r in result.records]
+        refresh = await refresh_derived(db, min(dates), max(dates))
+        job.log = {**(job.log or {}), "post_load_refresh": refresh.as_log()}
+        try:
+            await db.commit()
+        except Exception:
+            logger.warning("could not record post-load refresh on job %s", job.id)
+            await db.rollback()
+
     return PipelineResult(
         job_id=str(job.id),
         status=job.status,
