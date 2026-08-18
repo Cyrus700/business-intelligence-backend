@@ -51,11 +51,24 @@ async def seed_anomaly() -> Anomaly:
         return anomaly
 
 
-async def test_forecast_404_when_untrained(client, user_token):
+async def test_forecast_degrades_instead_of_404_when_untrained(client, user_token):
+    """No trained model is not an error — the endpoint falls back to a baseline.
+
+    It used to 404 and tell the caller to retrain, which left the dashboard with
+    an empty forecast panel on every fresh install. Now it answers with the
+    naive seasonal baseline, and says so via model_version 0 so nothing mistakes
+    it for the trained model's output.
+    """
     _, token = user_token
     resp = await client.get("/api/v1/forecasts", headers=auth(token))
-    assert resp.status_code == 404
-    assert "retrain" in resp.json()["detail"]
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["model_type"] == "naive_seasonal"
+    assert body["model_version"] == 0
+    # With no rows loaded there is nothing to extrapolate from, and the reason
+    # is stated rather than returned as a silent empty list.
+    assert body["points"] == []
+    assert "insufficient data" in body["metrics"]["note"]
 
 
 async def test_forecast_returns_points_and_metrics(client, user_token):
