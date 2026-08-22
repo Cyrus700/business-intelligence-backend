@@ -17,9 +17,10 @@ import logging
 from dataclasses import dataclass
 from datetime import date
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.clock import business_today
+from app.core.clock import business_now
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ MAX_RESCAN_DAYS = 120
 class RefreshResult:
     anomalies_found: int = 0
     insights_created: int = 0
+    alerts_evaluated: int = 0
+    recommendations_created: int = 0
     retriever_reset: bool = False
     #: Populated with the stage name when a stage failed; the ingest itself is
     #: never failed by a refresh problem, so this is how it stays visible.
@@ -41,6 +44,8 @@ class RefreshResult:
         return {
             "anomalies_found": self.anomalies_found,
             "insights_created": self.insights_created,
+            "alerts_evaluated": self.alerts_evaluated,
+            "recommendations_created": self.recommendations_created,
             "retriever_reset": self.retriever_reset,
             "errors": self.errors or [],
         }
@@ -49,12 +54,13 @@ class RefreshResult:
 def _lookback_days(start: date, end: date) -> int:
     """How far back the rescan has to reach to cover the loaded window."""
     earliest = min(start, end)
-    span = (business_today() - earliest).days + 1
+    span = (business_now().date() - earliest).days + 1
     return max(1, min(span, MAX_RESCAN_DAYS))
 
 
 async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshResult:
-    """Bring anomalies, insights and the AI index forward over [start, end].
+    """Bring anomalies, alerts, insights, recommendations and the AI index
+    forward over [start, end].
 
     Every stage is independently guarded. A load that put rows in the warehouse
     has already succeeded; failing it here would roll back real data because a
@@ -76,6 +82,16 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
         await _rollback(db)
 
     try:
+        from app.services.alerts.engine import evaluate_alerts
+
+        result.alerts_evaluated = await evaluate_alerts(db)
+        await db.commit()
+    except Exception:
+        logger.exception("post-load alert evaluation failed")
+        errors.append("alerts")
+        await _rollback(db)
+
+    try:
         from app.services.insights.engine import generate_insights
 
         result.insights_created = await generate_insights(db)
@@ -83,6 +99,40 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
     except Exception:
         logger.exception("post-load insight generation failed")
         errors.append("insights")
+        await _rollback(db)
+
+    try:
+        from app.services.ml.recommendations import persist_recommendations
+
+        recs = await persist_recommendations(db)
+        result.recommendations_created = recs.get("new", 0)
+        await db.commit()
+    except Exception:
+        logger.exception("post-load recommendation generation failed")
+        errors.append("recommendations")
+        await _rollback(db)
+
+    # Record watermark so the frontend can show "last refreshed"
+    try:
+        await db.execute(
+            text(
+                """
+                INSERT INTO data_watermarks (id, last_refresh_at, last_source, last_trigger, affected_range_start, affected_range_end)
+                VALUES (1, :now, 'etl', 'auto', :start, :end)
+                ON CONFLICT (id) DO UPDATE SET
+                    last_refresh_at = EXCLUDED.last_refresh_at,
+                    last_source = EXCLUDED.last_source,
+                    last_trigger = EXCLUDED.last_trigger,
+                    affected_range_start = EXCLUDED.affected_range_start,
+                    affected_range_end = EXCLUDED.affected_range_end
+                """
+            ),
+            {"now": business_now(), "start": start, "end": end},
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("could not record data watermark")
+        errors.append("watermark")
         await _rollback(db)
 
     # Cheap and last: the assistant's retrieval index is an in-memory snapshot

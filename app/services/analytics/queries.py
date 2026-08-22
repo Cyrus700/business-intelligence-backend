@@ -16,9 +16,11 @@ from app.models import (
     Customer,
     Expense,
     InventoryLevel,
+    KpiDefinition,
     Product,
     SalesTransaction,
 )
+from app.services.analytics.cache import cached_query
 
 KPI_METRICS = ["revenue", "orders", "avg_order_value", "gross_margin", "expense_total"]
 
@@ -30,10 +32,15 @@ class Filters:
     region: str | None = None
     channel: str | None = None
     category: str | None = None
+    regions: tuple[str, ...] = ()
+    channels: tuple[str, ...] = ()
+    categories: tuple[str, ...] = ()
 
     @property
     def has_dimensions(self) -> bool:
-        return any((self.region, self.channel, self.category))
+        return any(
+            (self.region, self.channel, self.category, self.regions, self.channels, self.categories)
+        )
 
     def previous_period(self) -> tuple[date, date]:
         span = (self.date_to - self.date_from).days + 1
@@ -42,11 +49,21 @@ class Filters:
 
 def _sales_conditions(f: Filters, date_from: date, date_to: date) -> list:
     conditions = [SalesTransaction.txn_date.between(date_from, date_to)]
-    if f.region:
+    if f.regions:
+        conditions.append(SalesTransaction.region.in_(f.regions))
+    elif f.region:
         conditions.append(SalesTransaction.region == f.region)
-    if f.channel:
+    if f.channels:
+        conditions.append(SalesTransaction.channel.in_(f.channels))
+    elif f.channel:
         conditions.append(SalesTransaction.channel == f.channel)
-    if f.category:
+    if f.categories:
+        conditions.append(
+            SalesTransaction.product_id.in_(
+                select(Product.id).where(Product.category.in_(f.categories))
+            )
+        )
+    elif f.category:
         conditions.append(
             SalesTransaction.product_id.in_(
                 select(Product.id).where(Product.category == f.category)
@@ -55,6 +72,7 @@ def _sales_conditions(f: Filters, date_from: date, date_to: date) -> list:
     return conditions
 
 
+@cached_query(ttl_seconds=30)
 async def _sales_kpis(
     db: AsyncSession, f: Filters, date_from: date, date_to: date
 ) -> dict[str, float]:
@@ -87,6 +105,7 @@ async def _sales_kpis(
     }
 
 
+@cached_query(ttl_seconds=30)
 async def _expense_kpi(db: AsyncSession, date_from: date, date_to: date) -> float:
     stmt = select(func.coalesce(func.sum(Expense.amount), 0)).where(
         Expense.expense_date.between(date_from, date_to)
@@ -102,18 +121,53 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
         current["expense_total"] = await _expense_kpi(db, f.date_from, f.date_to)
         previous["expense_total"] = await _expense_kpi(db, prev_from, prev_to)
 
+    # Metadata-driven parameters (Phase 5): labels, units, targets and
+    # thresholds come from kpi_definitions, editable by admins.
+    definitions = {
+        d.metric: d
+        for d in (
+            await db.execute(select(KpiDefinition).where(KpiDefinition.is_active.is_(True)))
+        ).scalars()
+    }
+
     cards = []
     for metric, value in current.items():
         prev = previous.get(metric)
         change = round((value - prev) / prev * 100, 1) if prev else None
-        cards.append(
-            {
-                "metric": metric,
-                "value": round(value, 2),
-                "previous_value": round(prev, 2) if prev is not None else None,
-                "change_pct": change,
-            }
-        )
+        definition = definitions.get(metric)
+        card = {
+            "metric": metric,
+            "value": round(value, 2),
+            "previous_value": round(prev, 2) if prev is not None else None,
+            "change_pct": change,
+        }
+        if definition is not None:
+            target = float(definition.target_value) if definition.target_value is not None else None
+            threshold = (
+                float(definition.threshold_low) if definition.threshold_low is not None else None
+            )
+            card["label"] = definition.label
+            card["unit"] = definition.unit
+            card["target_value"] = target
+            status = None
+            if target is not None:
+                gap = value / target if target else None
+                if definition.higher_is_better:
+                    status = (
+                        "off_target"
+                        if gap and gap < 0.8
+                        else ("near_target" if gap and gap < 1.0 else "on_track")
+                    )
+                else:
+                    status = "on_track" if value <= max(target, threshold or 0) else "near_target"
+                card["achievement_pct"] = round(gap * 100, 1) if gap is not None else None
+            elif threshold is not None:
+                if definition.higher_is_better:
+                    status = "off_target" if value < threshold else "on_track"
+                else:
+                    status = "on_track" if value <= threshold else "off_target"
+            card["status"] = status
+        cards.append(card)
     return cards
 
 
@@ -328,6 +382,7 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
     ]
 
 
+@cached_query(ttl_seconds=60)
 async def data_coverage(db: AsyncSession) -> dict:
     """What the warehouse actually holds, per fact table.
 

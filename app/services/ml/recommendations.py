@@ -39,24 +39,26 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
         for bc in bottom_channels[:2]:
             gap_pct = round((1 - float(bc.revenue) / float(top_channel.revenue)) * 100, 1)
             top_value = _fmt(float(top_channel.revenue))
-            found.append({
-                "insight_type": "recommendation",
-                "severity": "info",
-                "title": f"Boost {bc.channel} channel revenue",
-                "body": (
-                    f"{bc.channel} generated {_fmt(float(bc.revenue))} in the last 30 days — "
-                    f"{gap_pct}% behind {top_channel.channel} ({top_value}). "
-                    "Consider targeted promotions or inventory allocation to close the gap."
-                ),
-                "evidence": {
-                    "channel": bc.channel,
-                    "revenue_30d": float(bc.revenue),
-                    "top_channel": top_channel.channel,
-                    "top_revenue_30d": float(top_channel.revenue),
-                    "gap_pct": gap_pct,
-                },
-                "dedupe_key": f"channel_boost:{bc.channel}:{today.isoformat()}",
-            })
+            found.append(
+                {
+                    "insight_type": "recommendation",
+                    "severity": "info",
+                    "title": f"Boost {bc.channel} channel revenue",
+                    "body": (
+                        f"{bc.channel} generated {_fmt(float(bc.revenue))} in the last 30 days — "
+                        f"{gap_pct}% behind {top_channel.channel} ({top_value}). "
+                        "Consider targeted promotions or inventory allocation to close the gap."
+                    ),
+                    "evidence": {
+                        "channel": bc.channel,
+                        "revenue_30d": float(bc.revenue),
+                        "top_channel": top_channel.channel,
+                        "top_revenue_30d": float(top_channel.revenue),
+                        "gap_pct": gap_pct,
+                    },
+                    "dedupe_key": f"channel_boost:{bc.channel}:{today.isoformat()}",
+                }
+            )
 
     peak = await db.execute(
         text("""
@@ -80,25 +82,27 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
             """),
             {"s": ninety, "e": today},
         )
-        avg_val = avg.scalar_one() or 0
+        avg_val = float(avg.scalar_one() or 0)
         if avg_val > 0 and float(peak_row.revenue) > avg_val * 2.5:
-            found.append({
-                "insight_type": "recommendation",
-                "severity": "info",
-                "title": f"Replicate peak day performance: {peak_row.day:%b %d}",
-                "body": (
-                    f"{peak_row.day:%b %d} generated {_fmt(float(peak_row.revenue))} — "
-                    f"{round(float(peak_row.revenue) / avg_val, 1)}x the daily average. "
-                    "Review what drove that day (promotions, marketing, events) and replicate."
-                ),
-                "evidence": {
-                    "peak_date": peak_row.day.isoformat(),
-                    "peak_revenue": float(peak_row.revenue),
-                    "avg_daily_revenue_90d": round(float(avg_val), 2),
-                    "multiplier": round(float(peak_row.revenue) / avg_val, 1),
-                },
-                "dedupe_key": f"peak_day:{today.isoformat()}",
-            })
+            found.append(
+                {
+                    "insight_type": "recommendation",
+                    "severity": "info",
+                    "title": f"Replicate peak day performance: {peak_row.day:%b %d}",
+                    "body": (
+                        f"{peak_row.day:%b %d} generated {_fmt(float(peak_row.revenue))} — "
+                        f"{round(float(peak_row.revenue) / avg_val, 1)}x the daily average. "
+                        "Review what drove that day (promotions, marketing, events) and replicate."
+                    ),
+                    "evidence": {
+                        "peak_date": peak_row.day.isoformat(),
+                        "peak_revenue": float(peak_row.revenue),
+                        "avg_daily_revenue_90d": round(float(avg_val), 2),
+                        "multiplier": round(float(peak_row.revenue) / avg_val, 1),
+                    },
+                    "dedupe_key": f"peak_day:{today.isoformat()}",
+                }
+            )
 
     return found
 
@@ -124,22 +128,24 @@ async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, 
         for e in expenses:
             share = round(float(e.total) / total_exp * 100, 1) if total_exp > 0 else 0
             if share > 30:
-                found.append({
-                    "insight_type": "recommendation",
-                    "severity": "warning",
-                    "title": f"{e.category} is {share}% of total expenses",
-"body": (
-                    f"{e.category} costs totaled {_fmt(float(e.total))} in the last 30 days "
-                    f"({share}% of tracked expenses). Review for consolidation or "
-                    "renegotiation opportunities."
-                ),
-                    "evidence": {
-                        "category": e.category,
-                        "amount_30d": float(e.total),
-                        "share_pct": share,
-                    },
-                    "dedupe_key": f"cost_share:{e.category}:{today.isoformat()}",
-                })
+                found.append(
+                    {
+                        "insight_type": "recommendation",
+                        "severity": "warning",
+                        "title": f"{e.category} is {share}% of total expenses",
+                        "body": (
+                            f"{e.category} costs totaled {_fmt(float(e.total))} in the last 30 days "
+                            f"({share}% of tracked expenses). Review for consolidation or "
+                            "renegotiation opportunities."
+                        ),
+                        "evidence": {
+                            "category": e.category,
+                            "amount_30d": float(e.total),
+                            "share_pct": share,
+                        },
+                        "dedupe_key": f"cost_share:{e.category}:{today.isoformat()}",
+                    }
+                )
 
     exp_trend = await db.execute(
         text("""
@@ -157,21 +163,23 @@ async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, 
         if prev > 0:
             change = round((latest - prev) / prev * 100, 1)
             if change > 10:
-                found.append({
-                    "insight_type": "recommendation",
-                    "severity": "warning",
-                    "title": f"Expenses rose {change}% month-over-month",
-                    "body": (
-                        f"Monthly expenses increased from {_fmt(prev)} to {_fmt(latest)} "
-                        f"({change}% MoM). Investigate the categories driving the increase."
-                    ),
-                    "evidence": {
-                        "previous_month_total": prev,
-                        "current_month_total": latest,
-                        "change_pct": change,
-                    },
-                    "dedupe_key": f"cost_mom:{today.isoformat()}",
-                })
+                found.append(
+                    {
+                        "insight_type": "recommendation",
+                        "severity": "warning",
+                        "title": f"Expenses rose {change}% month-over-month",
+                        "body": (
+                            f"Monthly expenses increased from {_fmt(prev)} to {_fmt(latest)} "
+                            f"({change}% MoM). Investigate the categories driving the increase."
+                        ),
+                        "evidence": {
+                            "previous_month_total": prev,
+                            "current_month_total": latest,
+                            "change_pct": change,
+                        },
+                        "dedupe_key": f"cost_mom:{today.isoformat()}",
+                    }
+                )
 
     return found
 
@@ -198,24 +206,26 @@ async def pricing_recommendations(db: AsyncSession, today: date) -> list[dict[st
     )
     for row in deep_discount.all():
         rev_impact = round(float(row.revenue) / float(row.txns), 2)
-        found.append({
-            "insight_type": "recommendation",
-            "severity": "info",
-            "title": f"High discounts on {row.name}",
-            "body": (
-                f"{row.name} ({row.sku}) averaged {float(row.avg_discount):.0f}% discount "
-                f"across {row.txns} transactions (avg revenue/unit: {_fmt(rev_impact)}). "
-                "Consider a tiered discount structure to protect margins."
-            ),
-            "evidence": {
-                "sku": row.sku,
-                "product": row.name,
-                "avg_discount_pct": round(float(row.avg_discount), 1),
-                "transactions": row.txns,
-                "avg_unit_revenue": rev_impact,
-            },
-            "dedupe_key": f"pricing_discount:{row.sku}:{today.isoformat()}",
-        })
+        found.append(
+            {
+                "insight_type": "recommendation",
+                "severity": "info",
+                "title": f"High discounts on {row.name}",
+                "body": (
+                    f"{row.name} ({row.sku}) averaged {float(row.avg_discount):.0f}% discount "
+                    f"across {row.txns} transactions (avg revenue/unit: {_fmt(rev_impact)}). "
+                    "Consider a tiered discount structure to protect margins."
+                ),
+                "evidence": {
+                    "sku": row.sku,
+                    "product": row.name,
+                    "avg_discount_pct": round(float(row.avg_discount), 1),
+                    "transactions": row.txns,
+                    "avg_unit_revenue": rev_impact,
+                },
+                "dedupe_key": f"pricing_discount:{row.sku}:{today.isoformat()}",
+            }
+        )
 
     margin_risk = await db.execute(
         text("""
@@ -233,22 +243,24 @@ async def pricing_recommendations(db: AsyncSession, today: date) -> list[dict[st
         {"s": thirty, "e": today},
     )
     for row in margin_risk.all():
-        found.append({
-            "insight_type": "recommendation",
-            "severity": "warning",
-            "title": f"Margin erosion risk: {row.name}",
-            "body": (
-                f"{row.name} ({row.sku}) has an average discount of "
-                f"{float(row.avg_discount):.0f}% across recent transactions. "
-                "Sustained deep discounting may indicate a pricing strategy issue."
-            ),
-            "evidence": {
-                "sku": row.sku,
-                "product": row.name,
-                "avg_discount_pct": round(float(row.avg_discount), 1),
-            },
-            "dedupe_key": f"margin_risk:{row.sku}:{today.isoformat()}",
-        })
+        found.append(
+            {
+                "insight_type": "recommendation",
+                "severity": "warning",
+                "title": f"Margin erosion risk: {row.name}",
+                "body": (
+                    f"{row.name} ({row.sku}) has an average discount of "
+                    f"{float(row.avg_discount):.0f}% across recent transactions. "
+                    "Sustained deep discounting may indicate a pricing strategy issue."
+                ),
+                "evidence": {
+                    "sku": row.sku,
+                    "product": row.name,
+                    "avg_discount_pct": round(float(row.avg_discount), 1),
+                },
+                "dedupe_key": f"margin_risk:{row.sku}:{today.isoformat()}",
+            }
+        )
 
     return found
 
@@ -273,25 +285,27 @@ async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str
         top_region = regions[0]
         low_regions = [r for r in regions if float(r.revenue) < float(top_region.revenue) * 0.25]
         for lr in low_regions[:2]:
-            gap = round((1 - lr.revenue / top_region.revenue) * 100, 1)
-            found.append({
-                "insight_type": "recommendation",
-                "severity": "info",
-                "title": f"Underperforming region: {lr.region}",
-                "body": (
-                    f"{lr.region} generated {_fmt(float(lr.revenue))} in 30 days — "
-                    f"{gap}% behind {top_region.region} ({_fmt(float(top_region.revenue))}). "
-                    "Consider regional marketing or distribution improvements."
-                ),
-                "evidence": {
-                    "region": lr.region,
-                    "revenue_30d": float(lr.revenue),
-                    "orders_30d": lr.orders,
-                    "top_region": top_region.region,
-                    "gap_pct": gap,
-                },
-                "dedupe_key": f"region_gap:{lr.region}:{today.isoformat()}",
-            })
+            gap = round((1 - float(lr.revenue) / float(top_region.revenue)) * 100, 1)
+            found.append(
+                {
+                    "insight_type": "recommendation",
+                    "severity": "info",
+                    "title": f"Underperforming region: {lr.region}",
+                    "body": (
+                        f"{lr.region} generated {_fmt(float(lr.revenue))} in 30 days — "
+                        f"{gap}% behind {top_region.region} ({_fmt(float(top_region.revenue))}). "
+                        "Consider regional marketing or distribution improvements."
+                    ),
+                    "evidence": {
+                        "region": lr.region,
+                        "revenue_30d": float(lr.revenue),
+                        "orders_30d": int(lr.orders),
+                        "top_region": top_region.region,
+                        "gap_pct": gap,
+                    },
+                    "dedupe_key": f"region_gap:{lr.region}:{today.isoformat()}",
+                }
+            )
 
     return found
 
@@ -326,44 +340,48 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
     if breakdown.total_delta < 0 and breakdown.drags:
         worst = breakdown.drags[0]
         share = abs(worst.contribution_pct)
-        found.append({
-            "insight_type": "recommendation",
-            "severity": "warning" if share >= 40 else "info",
-            "title": f"{worst.key} is the biggest drag on revenue",
-            "body": (
-                f"Revenue fell {_fmt(abs(breakdown.total_delta))} over the last "
-                f"{window_days} days, and {worst.key} accounts for "
-                f"{_fmt(abs(worst.delta))} of that — {share:.0f}% of the total movement "
-                f"({_fmt(worst.previous)} → {_fmt(worst.current)}). Fixing this one line "
-                "recovers more than any broad campaign."
-            ),
-            "evidence": {
-                "product": worst.key,
-                "revenue_current": worst.current,
-                "revenue_previous": worst.previous,
-                "revenue_delta": worst.delta,
-                "contribution_pct": worst.contribution_pct,
-                "period_days": window_days,
-            },
-            "dedupe_key": f"drag_product:{worst.key}:{today.isoformat()}",
-        })
+        found.append(
+            {
+                "insight_type": "recommendation",
+                "severity": "warning" if share >= 40 else "info",
+                "title": f"{worst.key} is the biggest drag on revenue",
+                "body": (
+                    f"Revenue fell {_fmt(abs(breakdown.total_delta))} over the last "
+                    f"{window_days} days, and {worst.key} accounts for "
+                    f"{_fmt(abs(worst.delta))} of that — {share:.0f}% of the total movement "
+                    f"({_fmt(worst.previous)} → {_fmt(worst.current)}). Fixing this one line "
+                    "recovers more than any broad campaign."
+                ),
+                "evidence": {
+                    "product": worst.key,
+                    "revenue_current": worst.current,
+                    "revenue_previous": worst.previous,
+                    "revenue_delta": worst.delta,
+                    "contribution_pct": worst.contribution_pct,
+                    "period_days": window_days,
+                },
+                "dedupe_key": f"drag_product:{worst.key}:{today.isoformat()}",
+            }
+        )
 
     # A member that went to exactly zero is a lost account, not soft demand —
     # a completely different conversation, so it gets its own suggestion.
     for lost in breakdown.lost_members[:2]:
-        found.append({
-            "insight_type": "recommendation",
-            "severity": "warning",
-            "title": f"{lost} stopped selling entirely",
-            "body": (
-                f"{lost} sold in the previous {window_days} days and has sold nothing "
-                "since. A clean drop to zero usually means a lost account or a stockout "
-                "rather than falling demand — worth a call before it is treated as a "
-                "trend."
-            ),
-            "evidence": {"product": lost, "period_days": window_days},
-            "dedupe_key": f"lost_product:{lost}:{today.isoformat()}",
-        })
+        found.append(
+            {
+                "insight_type": "recommendation",
+                "severity": "warning",
+                "title": f"{lost} stopped selling entirely",
+                "body": (
+                    f"{lost} sold in the previous {window_days} days and has sold nothing "
+                    "since. A clean drop to zero usually means a lost account or a stockout "
+                    "rather than falling demand — worth a call before it is treated as a "
+                    "trend."
+                ),
+                "evidence": {"product": lost, "period_days": window_days},
+                "dedupe_key": f"lost_product:{lost}:{today.isoformat()}",
+            }
+        )
 
     # ── volume problem or value problem ───────────────────────────────────
     cards = {
@@ -389,27 +407,29 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
                     "smaller orders",
                     "bundling and minimum-order incentives move this; more traffic will not",
                 )
-            found.append({
-                "insight_type": "recommendation",
-                "severity": "info",
-                "title": f"Revenue decline is a {cause} problem",
-                "body": (
-                    f"Revenue is down {_fmt(abs(bridge.revenue_delta))} over "
-                    f"{window_days} days. Order volume accounts for "
-                    f"{_fmt(bridge.volume_effect)} and order value for "
-                    f"{_fmt(bridge.value_effect)}, so this is {cause} — {action}."
-                ),
-                "evidence": {
-                    "revenue_delta": bridge.revenue_delta,
-                    "volume_effect": bridge.volume_effect,
-                    "value_effect": bridge.value_effect,
-                    "orders_current": bridge.orders_current,
-                    "orders_previous": bridge.orders_previous,
-                    "aov_current": bridge.aov_current,
-                    "aov_previous": bridge.aov_previous,
-                },
-                "dedupe_key": f"revenue_bridge:{bridge.verdict}:{today.isoformat()}",
-            })
+            found.append(
+                {
+                    "insight_type": "recommendation",
+                    "severity": "info",
+                    "title": f"Revenue decline is a {cause} problem",
+                    "body": (
+                        f"Revenue is down {_fmt(abs(bridge.revenue_delta))} over "
+                        f"{window_days} days. Order volume accounts for "
+                        f"{_fmt(bridge.volume_effect)} and order value for "
+                        f"{_fmt(bridge.value_effect)}, so this is {cause} — {action}."
+                    ),
+                    "evidence": {
+                        "revenue_delta": bridge.revenue_delta,
+                        "volume_effect": bridge.volume_effect,
+                        "value_effect": bridge.value_effect,
+                        "orders_current": bridge.orders_current,
+                        "orders_previous": bridge.orders_previous,
+                        "aov_current": bridge.aov_current,
+                        "aov_previous": bridge.aov_previous,
+                    },
+                    "dedupe_key": f"revenue_bridge:{bridge.verdict}:{today.isoformat()}",
+                }
+            )
 
     # ── the month is heading for a miss ───────────────────────────────────
     projection = await project_current_period(db, metric="revenue", period="month")
@@ -426,55 +446,126 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
         last_month = float((prev_cards.get("revenue") or {}).get("value") or 0.0)
         if last_month and projection.projected_total < last_month * 0.95:
             shortfall = last_month - projection.projected_total
-            found.append({
-                "insight_type": "recommendation",
-                "severity": "warning",
-                "title": f"{projection.period_label} is tracking below last month",
-                "body": (
-                    f"At the current run rate of {_fmt(projection.daily_run_rate)}/day, "
-                    f"{projection.period_label} lands near "
-                    f"{_fmt(projection.projected_total)} against "
-                    f"{_fmt(last_month)} last month — a shortfall of "
-                    f"{_fmt(shortfall)} with {projection.days_remaining} day(s) left to "
-                    f"act. Closing it needs about "
-                    f"{_fmt(shortfall / projection.days_remaining)} extra per day."
-                ),
-                "evidence": {
-                    "projected_total": projection.projected_total,
-                    "lower_bound": projection.lower_bound,
-                    "upper_bound": projection.upper_bound,
-                    "last_month_revenue": last_month,
-                    "shortfall": shortfall,
-                    "days_remaining": projection.days_remaining,
-                    "method": projection.method,
-                },
-                "dedupe_key": f"period_shortfall:{projection.period_label}:{today.isoformat()}",
-            })
+            found.append(
+                {
+                    "insight_type": "recommendation",
+                    "severity": "warning",
+                    "title": f"{projection.period_label} is tracking below last month",
+                    "body": (
+                        f"At the current run rate of {_fmt(projection.daily_run_rate)}/day, "
+                        f"{projection.period_label} lands near "
+                        f"{_fmt(projection.projected_total)} against "
+                        f"{_fmt(last_month)} last month — a shortfall of "
+                        f"{_fmt(shortfall)} with {projection.days_remaining} day(s) left to "
+                        f"act. Closing it needs about "
+                        f"{_fmt(shortfall / projection.days_remaining)} extra per day."
+                    ),
+                    "evidence": {
+                        "projected_total": projection.projected_total,
+                        "lower_bound": projection.lower_bound,
+                        "upper_bound": projection.upper_bound,
+                        "last_month_revenue": last_month,
+                        "shortfall": shortfall,
+                        "days_remaining": projection.days_remaining,
+                        "method": projection.method,
+                    },
+                    "dedupe_key": f"period_shortfall:{projection.period_label}:{today.isoformat()}",
+                }
+            )
 
     # ── too much resting on too few ───────────────────────────────────────
     conc = await analyse_concentration(db, "product", *current)
     if conc.members >= 3 and conc.risk.startswith("high"):
-        found.append({
-            "insight_type": "recommendation",
-            "severity": "info",
-            "title": "Revenue is concentrated in very few products",
-            "body": (
-                f"{conc.leaders[0]} alone is {conc.top1_share_pct}% of revenue and the "
-                f"top three are {conc.top3_share_pct}% across {conc.members} products "
-                f"(HHI {conc.hhi}). Losing one of them would move the headline number on "
-                "its own — worth knowing before it happens rather than after."
-            ),
-            "evidence": {
-                "top1_share_pct": conc.top1_share_pct,
-                "top3_share_pct": conc.top3_share_pct,
-                "hhi": conc.hhi,
-                "members": conc.members,
-                "leaders": conc.leaders,
-            },
-            "dedupe_key": f"concentration:product:{today.isoformat()}",
-        })
+        top1 = round(conc.top1_share_pct, 1)
+        top3 = round(conc.top3_share_pct, 1)
+        hhi = round(conc.hhi, 3)
+        found.append(
+            {
+                "insight_type": "recommendation",
+                "severity": "info",
+                "title": "Revenue is concentrated in very few products",
+                "body": (
+                    f"{conc.leaders[0]} alone is {top1}% of revenue and the "
+                    f"top three are {top3}% across {conc.members} products "
+                    f"(HHI {hhi}). Losing one of them would move the headline number on "
+                    "its own — worth knowing before it happens rather than after."
+                ),
+                "evidence": {
+                    "top1_share_pct": top1,
+                    "top3_share_pct": top3,
+                    "hhi": hhi,
+                    "members": conc.members,
+                    "leaders": conc.leaders,
+                },
+                "dedupe_key": f"concentration:product:{today.isoformat()}",
+            }
+        )
 
     return found
+
+
+async def persist_recommendations(db: AsyncSession) -> dict[str, int]:
+    """Generate recommendations and store new ones as ``insights`` rows.
+
+    Shared by the manual "Generate now" endpoint and the nightly scheduler job
+    so both paths do exactly the same work — dedupe via ``dedupe_key`` means
+    running this twice on the same day is a no-op the second time. New
+    warning-severity recommendations also drop an in-app notification for
+    admins/managers, the same way alert rules do, so a scheduled run is
+    visible without anyone having to revisit this page.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.models import Insight, Notification, Profile
+
+    today = business_today()
+    recs = await generate_all_recommendations(db)
+    created = 0
+    new_warnings: list[dict[str, Any]] = []
+    for r in recs:
+        # impact_basis is an explanation aid, not a stored column
+        payload = {k: v for k, v in r.items() if k != "impact_basis"}
+        payload.update(period_start=today, period_end=today)
+        stmt = (
+            pg_insert(Insight)
+            .values(**payload)
+            .on_conflict_do_nothing(index_elements=["dedupe_key"])
+            .returning(Insight.id)
+        )
+        result = await db.execute(stmt)
+        if result.first() is not None:
+            created += 1
+            if r.get("severity") == "warning":
+                new_warnings.append(r)
+
+    if new_warnings:
+        recipients = (
+            (
+                await db.execute(
+                    select(Profile).where(
+                        Profile.role.in_(["admin", "manager"]), Profile.is_active.is_(True)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        title = (
+            f"{len(new_warnings)} new recommendation(s) need attention"
+            if len(new_warnings) > 1
+            else new_warnings[0]["title"]
+        )
+        body = (
+            new_warnings[0]["body"]
+            if len(new_warnings) == 1
+            else "; ".join(w["title"] for w in new_warnings)
+        )
+        for user in recipients:
+            db.add(Notification(user_id=user.id, title=title, body=body))
+
+    await db.commit()
+    return {"generated": len(recs), "new": created}
 
 
 async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]:
@@ -494,9 +585,44 @@ async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]
             all_recs.extend(await generator(db, today))
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception("recommendation %s failed", generator.__name__)
 
-    return all_recs
+    # Phase 8: every recommendation leaves with WHY (evidence) / EXPECTED
+    # IMPACT / PRIORITY / CONFIDENCE / ACTION attached, so neither the live
+    # list nor the persisted insights ever present a bare "do this".
+    enriched: list[dict[str, Any]] = []
+    for rec in all_recs:
+        impact = _impact_estimate(rec)
+        rec = {**rec, **impact}
+        rec["priority"] = _priority_for(rec)
+        rec["action"] = _default_action_for(rec)
+        enriched.append(rec)
+    return enriched
+
+
+def _priority_for(rec: dict[str, Any]) -> str:
+    """Priority = impact × severity (components shown in evidence/priority_basis)."""
+    estimate = float(rec.get("impact_estimate") or 0)
+    severity = rec.get("severity", "info")
+    if severity == "critical" or estimate >= 200_000:
+        return "high"
+    if severity == "warning" or estimate >= 50_000:
+        return "medium"
+    return "low"
+
+
+def _default_action_for(rec: dict[str, Any]) -> str:
+    title = str(rec.get("title", "")).lower()
+    if any(w in title for w in ("stock", "reorder", "inventory", "stockout")):
+        return "Place a reorder / review the reorder level for the affected SKUs"
+    if any(w in title for w in ("discount", "price", "margin", "pricing")):
+        return "Review unit pricing / discount levels for the affected products"
+    if any(w in title for w in ("expense", "cost", "spend", "overhead")):
+        return "Investigate the cost line; negotiate or cut where evidence allows"
+    if any(w in title for w in ("region", "district", "Biratnagar", "Pokhara")):
+        return "Investigate the region's performance gap and plan a local push"
+    return "Review the reported variance and its underlying drivers"
 
 
 async def _latest_data_date(db: AsyncSession) -> date | None:

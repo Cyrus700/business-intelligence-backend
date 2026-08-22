@@ -12,16 +12,17 @@ observed and the method scores (R5 explainability).
 """
 
 import logging
+from datetime import date, timedelta
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from statsmodels.tsa.seasonal import STL
 
-from app.models import Anomaly
+from app.models import Anomaly, Expense, Product, SalesTransaction
 from app.services.ml.features import load_series
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,112 @@ def detect_frame(frame: pd.DataFrame, season: str = "weekly") -> pd.DataFrame:
     return flagged
 
 
+EXPLANATION_BASELINE_DAYS = 28
+
+
+async def explain_contributors(db: AsyncSession, metric: str, day: date) -> dict[str, Any] | None:
+    """Primary/secondary contributors for a flagged day vs a trailing baseline.
+
+    For every dimension member, the flagged day's value is compared with the
+    mean of the preceding baseline window; the deviation's share of the total
+    absolute deviation ranks the contributors (R7 explanation).
+    """
+    baseline_from = day - timedelta(days=EXPLANATION_BASELINE_DAYS)
+    if metric == "revenue":
+        dimensions = (
+            ("region", SalesTransaction.region),
+            ("channel", SalesTransaction.channel),
+            ("product", Product.name),
+        )
+        source = SalesTransaction.__table__.outerjoin(
+            Product.__table__, Product.id == SalesTransaction.product_id
+        )
+        date_col, value_col = SalesTransaction.txn_date, SalesTransaction.total_amount
+    elif metric == "expense_total":
+        dimensions = (("category", Expense.category),)
+        source = Expense.__table__
+        date_col, value_col = Expense.expense_date, Expense.amount
+    else:
+        return None
+
+    rows = {}
+    for dim_name, col in dimensions:
+        baseline_agg = (
+            await db.execute(
+                select(col.label("key"), func.sum(value_col).label("total"))
+                .select_from(source)
+                .where(date_col.between(baseline_from, day - timedelta(days=1)))
+                .group_by(col)
+            )
+        ).all()
+        baseline_mean = {r.key: (float(r.total) or 0.0) / EXPLANATION_BASELINE_DAYS for r in baseline_agg}
+        day_agg = (
+            await db.execute(
+                select(col.label("key"), func.sum(value_col).label("total"))
+                .select_from(source)
+                .where(date_col == day)
+                .group_by(col)
+            )
+        ).all()
+        actual = {r.key: float(r.total) or 0.0 for r in day_agg}
+        if dim_name == "product":
+            actual = {k: v for k, v in actual.items() if k is not None}
+        rows[dim_name] = (baseline_mean, actual)
+
+    contributors: list[dict[str, Any]] = []
+    total_abs_dev = 0.0
+    for dim_name, (baseline_mean, actual) in rows.items():
+        for key, value in actual.items():
+            base = baseline_mean.get(key, 0.0)
+            deviation = value - base
+            if value == 0 and base == 0:
+                continue
+            contributors.append(
+                {
+                    "dimension": dim_name,
+                    "key": key,
+                    "actual": round(value, 2),
+                    "baseline_mean": round(base, 2),
+                    "deviation": round(deviation, 2),
+                }
+            )
+            total_abs_dev += abs(deviation)
+    if not contributors or total_abs_dev == 0:
+        return None
+
+    for c in contributors:
+        c["share_pct"] = round(abs(c["deviation"]) / total_abs_dev * 100, 1)
+    contributors.sort(key=lambda c: abs(c["deviation"]), reverse=True)
+    top = contributors[:6]
+    primary = top[0] if top else None
+
+    return {
+        "baseline_days": EXPLANATION_BASELINE_DAYS,
+        "baseline_mode": "mean of the preceding 28 days",
+        "day": day.isoformat(),
+        "direction": "above" if primary and primary["deviation"] >= 0 else "below",
+        "primary": (
+            {
+                "dimension": primary["dimension"],
+                "key": primary["key"],
+                "share_pct": primary["share_pct"],
+            }
+            if primary
+            else None
+        ),
+        "secondary": (
+            {
+                "dimension": top[1]["dimension"],
+                "key": top[1]["key"],
+                "share_pct": top[1]["share_pct"],
+            }
+            if len(top) > 1
+            else None
+        ),
+        "contributors": top,
+    }
+
+
 async def scan_target(db: AsyncSession, target: str, lookback_days: int | None = None) -> int:
     """Detect anomalies for a target and persist new ones (deduped by metric+date)."""
     config = TARGET_CONFIG[target]
@@ -118,7 +225,8 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
     }
     created = 0
     for _, row in flagged.iterrows():
-        day = row["ds"].date().isoformat()
+        dat = row["ds"].date()
+        day = dat.isoformat()
         if (metric, day) in existing:
             continue
         direction = "above" if (row["pct_dev"] or 0) >= 0 else "below"
@@ -133,6 +241,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
                 "isolation_forest": round(float(row["if_score"]), 4),
             },
         }
+        explanation = await explain_contributors(db, metric, dat)
         db.add(
             Anomaly(
                 metric=metric,
@@ -143,6 +252,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
                 deviation_score=round(float(abs(row["z"])), 2),
                 severity=row["severity"],
                 context=context,
+                explanation=explanation,
             )
         )
         created += 1

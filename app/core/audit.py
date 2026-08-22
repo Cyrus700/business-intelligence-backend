@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.database import get_session_factory
+from app.core.request_context import current_request_id
 from app.models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
                             user_id=user.id,
                             action=f"{request.method} {request.url.path}",
                             entity=request.url.path.strip("/").split("/")[-1] or None,
-                            detail={"status_code": response.status_code},
+                            detail={
+                                "status_code": response.status_code,
+                                "request_id": current_request_id(),
+                            },
                             ip_address=request.client.host if request.client else None,
                         )
                     )

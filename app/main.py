@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.database import dispose_engine
 from app.core.hardening import RateLimitMiddleware, SecurityHeadersMiddleware
 from app.core.logging import setup_logging
+from app.core.request_context import RequestContextMiddleware
 
 
 @asynccontextmanager
@@ -37,6 +38,8 @@ def create_app() -> FastAPI:
         ),
         lifespan=lifespan,
     )
+    # RequestContext must be the outermost middleware: its request_id contextvar
+    # must stay live while every inner middleware (audit, rate limit) runs.
     app.add_middleware(AuditMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RateLimitMiddleware, limit_per_minute=settings.rate_limit_per_minute)
@@ -47,6 +50,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestContextMiddleware)
     app.include_router(api_router, prefix="/api/v1")
     return app
 

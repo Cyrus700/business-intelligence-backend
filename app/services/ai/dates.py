@@ -90,9 +90,10 @@ def parse_period(question: str, today: date | None = None) -> ParsedPeriod | Non
             return None
 
     # ── relative days ─────────────────────────────────────────────────
-    if re.search(r"\btoday\b|\bso far today\b", q):
+    # Matches "today", "today's", "todays" (a common typo/contraction drop).
+    if re.search(r"\btoday'?s?\b", q):
         return ParsedPeriod(today, today, "today")
-    if re.search(r"\byesterday\b", q):
+    if re.search(r"\byesterday'?s?\b", q):
         y = today - timedelta(days=1)
         return ParsedPeriod(y, y, "yesterday")
     if re.search(r"\bday before yesterday\b", q):

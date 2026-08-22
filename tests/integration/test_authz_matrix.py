@@ -26,6 +26,8 @@ ROLE_RANK = {"analyst": 1, "manager": 2, "admin": 3}
 MIN_ROLE: dict[tuple[str, str], str | None] = {
     ("GET", "/api/v1/health"): None,
     ("GET", "/api/v1/health/db"): None,
+    ("GET", "/api/v1/health/business"): "analyst",
+    ("GET", "/api/v1/health/system"): "admin",
     ("GET", "/api/v1/auth/me"): "analyst",
     # user management: admin only
     ("GET", "/api/v1/users"): "admin",
@@ -47,6 +49,8 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     # analytics: any role; P&L is manager+
     ("GET", "/api/v1/kpis/summary"): "analyst",
     ("GET", "/api/v1/kpis/timeseries"): "analyst",
+    ("GET", "/api/v1/kpis/definitions"): "analyst",
+    ("PATCH", "/api/v1/kpis/definitions/{metric}"): "admin",
     ("GET", "/api/v1/sales/transactions"): "analyst",
     ("GET", "/api/v1/sales/by-product"): "analyst",
     ("GET", "/api/v1/sales/by-category"): "analyst",
@@ -59,9 +63,16 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     ("GET", "/api/v1/forecasts"): "analyst",
     ("GET", "/api/v1/forecasts/accuracy"): "analyst",
     ("POST", "/api/v1/forecasts/retrain"): "admin",
+    ("GET", "/api/v1/models"): "analyst",
+    ("POST", "/api/v1/models/{model_id}/retire"): "admin",
+    ("GET", "/api/v1/backtest"): "analyst",
     ("GET", "/api/v1/anomalies"): "analyst",
     ("PATCH", "/api/v1/anomalies/{anomaly_id}"): "manager",
     ("GET", "/api/v1/trends"): "analyst",
+    # diagnostic analytics — read for all authenticated roles
+    ("GET", "/api/v1/diagnostics/change"): "analyst",
+    ("GET", "/api/v1/cache/stats"): "analyst",
+    ("POST", "/api/v1/cache/clear"): "admin",
     # decision support
     ("GET", "/api/v1/insights"): "analyst",
     ("POST", "/api/v1/insights/generate"): "admin",
@@ -76,6 +87,18 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     ("GET", "/api/v1/reports"): "analyst",
     ("POST", "/api/v1/reports/generate"): "manager",
     ("GET", "/api/v1/reports/{report_id}/download"): "analyst",
+    # report schedules: self-service, manager+
+    ("GET", "/api/v1/report-schedules"): "manager",
+    ("POST", "/api/v1/report-schedules"): "manager",
+    ("PATCH", "/api/v1/report-schedules/{schedule_id}"): "manager",
+    ("DELETE", "/api/v1/report-schedules/{schedule_id}"): "manager",
+    # data quality: read for all authenticated, audit run manager+,
+    # issue triage available to analysts (quality:resolve default)
+    ("GET", "/api/v1/data-quality/overview"): "analyst",
+    ("GET", "/api/v1/data-quality/issues"): "analyst",
+    ("POST", "/api/v1/data-quality/run"): "manager",
+    ("PATCH", "/api/v1/data-quality/issues/{issue_id}"): "analyst",
+    ("GET", "/api/v1/data-quality/quality/history"): "analyst",
     # public marketing + auth surfaces
     ("GET", "/api/v1/landing"): None,
     ("GET", "/api/v1/landing/live"): None,
@@ -89,20 +112,34 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     ("PATCH", "/api/v1/auth/me"): "analyst",
     ("GET", "/api/v1/auth/me/preferences"): "analyst",
     ("PATCH", "/api/v1/auth/me/preferences"): "analyst",
-    ("GET", "/api/v1/auth/permissions"): "analyst",
     # assistant: any authenticated role
     ("POST", "/api/v1/ai/chat"): "analyst",
     ("POST", "/api/v1/ai/chat/stream"): "analyst",
     ("POST", "/api/v1/ai/analyze"): "analyst",
     ("GET", "/api/v1/ai/conversations"): "analyst",
     ("GET", "/api/v1/ai/conversations/{conv_id}/messages"): "analyst",
-    ("GET", "/api/v1/ai/insights"): "analyst",
+    ("GET", "/api/v1/ai/ai/insights"): "analyst",
     ("GET", "/api/v1/ai/providers/status"): "analyst",
+    ("GET", "/api/v1/ai/usage"): "admin",
+    ("GET", "/api/v1/ai/briefing"): "manager",
+    ("GET", "/api/v1/auth/me/permissions"): "analyst",
     # recommendations
     ("GET", "/api/v1/recommendations"): "analyst",
     ("POST", "/api/v1/recommendations/generate"): "manager",
+    ("GET", "/api/v1/recommendations/history"): "analyst",
+    ("POST", "/api/v1/recommendations/{insight_id}/decide"): "manager",
     # data freshness — read-only, any authenticated role
     ("GET", "/api/v1/data-coverage"): "analyst",
+    ("GET", "/api/v1/watermark"): "analyst",
+    ("GET", "/api/v1/data-quality/quality/history"): "analyst",
+    # admin endpoints
+    ("GET", "/api/v1/admin/scheduler/status"): "admin",
+    ("POST", "/api/v1/admin/scheduler/trigger/{job_id}"): "admin",
+    ("POST", "/api/v1/admin/scheduler/pause/{job_id}"): "admin",
+    ("POST", "/api/v1/admin/scheduler/resume/{job_id}"): "admin",
+    ("GET", "/api/v1/admin/storage"): "admin",
+    ("GET", "/api/v1/admin/security"): "admin",
+    ("GET", "/api/v1/admin/stats"): "admin",
     # admin-only reads
     ("GET", "/api/v1/users/{user_id}"): "admin",
     ("GET", "/api/v1/audit-logs/role-changes"): "admin",
@@ -110,6 +147,7 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     # only roles:manage (admin by default) edits it
     ("GET", "/api/v1/rbac/matrix"): "analyst",
     ("GET", "/api/v1/rbac/me"): "analyst",
+    ("GET", "/api/v1/rbac/rbac/me"): "analyst",
     ("GET", "/api/v1/rbac/roles"): "analyst",
     ("GET", "/api/v1/rbac/permissions"): "analyst",
     ("GET", "/api/v1/rbac/audit"): "admin",

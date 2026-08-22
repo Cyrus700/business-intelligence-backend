@@ -9,7 +9,7 @@ and its batch predictions land in the forecasts table.
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 import pandas as pd
@@ -177,4 +177,61 @@ def make_forecaster(name: str) -> Forecaster:
         "naive_seasonal": NaiveSeasonal,
     }
     forecaster: Forecaster = classes[name]()
+    return forecaster
+
+
+def rolling_backtest(
+    frame: pd.DataFrame,
+    horizon: int = 7,
+    min_train: int = 28,
+    steps: int = 3,
+) -> dict[str, Any]:
+    """Rolling-origin (walk-forward) backtest across the candidate models.
+
+    Each step trains on a growing window and predicts the next ``horizon``
+    days; MAPE is accumulated per step so the evaluation is honest about how
+    each model degrades with distance from the training window — the same
+    way the production pipeline would have behaved.
+    """
+    results: dict[str, dict[str, Any]] = {}
+    series = frame.set_index("ds")["y"]
+    n = len(series)
+    step_size = max((n - min_train - horizon) // steps, 1)
+    for model_name in ("naive_seasonal", "prophet", "arima"):
+        per_step: list[dict[str, Any]] = []
+        mape_values: list[float] = []
+        failures = 0
+        for step in range(steps):
+            train_end = min_train + step * step_size
+            if train_end + horizon > n:
+                break
+            train = series.iloc[:train_end]
+            test = series.iloc[train_end : train_end + horizon]
+            try:
+                forecaster = make_forecaster(model_name)
+                train_frame = pd.DataFrame({"ds": train.index, "y": train.values})
+                forecaster.fit(train_frame)
+                preds = forecaster.predict(pd.Series(test.index))
+                m = metrics(test.to_numpy(), preds["yhat"].to_numpy())
+                mape_values.append(float(m["mape"]))
+                per_step.append(
+                    {
+                        "step": step + 1,
+                        "train_end": str(train.index[-1].date()),
+                        "mape": float(m["mape"]),
+                        "mae": float(m["mae"]),
+                    }
+                )
+            except Exception:
+                failures += 1
+                logger.exception("backtest %s step %d failed", model_name, step)
+        if per_step:
+            results[model_name] = {
+                "mape_avg": round(sum(mape_values) / len(mape_values), 2),
+                "mape_worst": round(max(mape_values), 2),
+                "steps": per_step,
+                "steps_ok": len(per_step),
+                "failures": failures,
+            }
+    return {"horizon": horizon, "steps": steps, "models": results}
     return forecaster

@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
 
 from app.api.deps import DbSession, get_current_user, require_role
 from app.core.clock import business_today
@@ -11,6 +12,8 @@ from app.schemas.analytics import (
     DataCoverage,
     DimensionRow,
     InventoryRow,
+    KpiDefinitionOut,
+    KpiDefinitionUpdate,
     KpiSummary,
     Paginated,
     PnlRow,
@@ -18,6 +21,7 @@ from app.schemas.analytics import (
     TransactionRow,
 )
 from app.services.analytics import queries
+from app.services.analytics.diagnostics import diagnose_change
 from app.services.analytics.queries import Filters
 
 
@@ -27,6 +31,9 @@ def get_filters(
     region: str | None = None,
     channel: str | None = None,
     category: str | None = None,
+    regions: Annotated[str | None, Query()] = None,
+    channels: Annotated[str | None, Query()] = None,
+    categories: Annotated[str | None, Query()] = None,
 ) -> Filters:
     today = business_today()
     return Filters(
@@ -35,6 +42,9 @@ def get_filters(
         region=region,
         channel=channel,
         category=category,
+        regions=tuple(r for r in (regions or "").split(",") if r),
+        channels=tuple(c for c in (channels or "").split(",") if c),
+        categories=tuple(c for c in (categories or "").split(",") if c),
     )
 
 
@@ -54,10 +64,49 @@ async def get_kpi_timeseries(
     db: DbSession,
     f: FiltersDep,
     metric: Literal["revenue", "orders", "avg_order_value", "expense_total"] = "revenue",
-    granularity: Literal["day", "week", "month"] = "day",
+    granularity: Literal["day", "week", "month", "quarter", "year"] = "day",
 ) -> Timeseries:
     points = await queries.kpi_timeseries(db, f, metric, granularity)
     return Timeseries(metric=metric, granularity=granularity, points=points)
+
+
+@router.get("/kpis/definitions", response_model=list[KpiDefinitionOut])
+async def list_kpi_definitions(
+    db: DbSession,
+    f: FiltersDep,
+) -> list[KpiDefinitionOut]:
+    """Metadata-driven KPI registry: formula, unit, target, thresholds, visibility."""
+    from sqlalchemy import select
+
+    from app.models import KpiDefinition
+
+    rows = (await db.execute(select(KpiDefinition).order_by(KpiDefinition.metric))).scalars().all()
+    return [KpiDefinitionOut.model_validate(r) for r in rows]
+
+
+@router.patch(
+    "/kpis/definitions/{metric}",
+    response_model=KpiDefinitionOut,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def update_kpi_definition(
+    metric: str, body: KpiDefinitionUpdate, db: DbSession
+) -> KpiDefinitionOut:
+    from fastapi import HTTPException
+    from sqlalchemy import select
+
+    from app.models import KpiDefinition
+
+    definition = (
+        await db.execute(select(KpiDefinition).where(KpiDefinition.metric == metric))
+    ).scalar_one_or_none()
+    if definition is None:
+        raise HTTPException(404, f"No KPI definition for '{metric}'")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(definition, field, value)
+    await db.commit()
+    await db.refresh(definition)
+    return KpiDefinitionOut.model_validate(definition)
 
 
 @router.get("/sales/by-product", response_model=list[DimensionRow])
@@ -132,3 +181,66 @@ async def get_data_coverage(db: DbSession) -> DataCoverage:
     X") instead of rendering an empty chart that looks like a zero.
     """
     return DataCoverage.model_validate(await queries.data_coverage(db))
+
+
+@router.get("/watermark")
+async def get_watermark(db: DbSession) -> dict:
+    """Last ETL refresh watermark for the UI to show 'last updated' timestamp."""
+    row = await db.execute(text("SELECT * FROM data_watermarks WHERE id = 1"))
+    wm = row.first()
+    if not wm:
+        return {"last_refresh_at": None, "last_source": None, "last_trigger": None, "affected_range": None}
+    return {
+        "last_refresh_at": wm.last_refresh_at.isoformat() if wm.last_refresh_at else None,
+        "last_source": wm.last_source,
+        "last_trigger": wm.last_trigger,
+        "affected_range": (
+            {"start": wm.affected_range_start.isoformat(), "end": wm.affected_range_end.isoformat()}
+            if wm.affected_range_start and wm.affected_range_end
+            else None
+        ),
+        "details": wm.details,
+    }
+
+
+@router.get("/diagnostics/change")
+async def diagnose_change_endpoint(
+    db: DbSession,
+    f: FiltersDep,
+    metric: Literal[
+        "revenue", "orders", "avg_order_value", "gross_margin", "expense_total"
+    ] = "revenue",
+    dimensions: str = "region,channel,product",
+) -> dict:
+    """Diagnostic analytics: decompose a metric's period-over-period change.
+
+    The comparison period is the equal-length window immediately before
+    ``date_from``. Each dimension member's absolute delta is expressed as a
+    share of the total change (contribution decomposition).
+    """
+    dims = tuple(d.strip() for d in dimensions.split(",") if d.strip())
+    return await diagnose_change(
+        db,
+        metric=metric,
+        date_from=f.date_from,
+        date_to=f.date_to,
+        dimensions=dims,
+        region=f.region,
+        channel=f.channel,
+        category=f.category,
+    )
+
+
+@router.get("/cache/stats")
+async def cache_stats() -> dict:
+    """Query cache hit/miss statistics."""
+    from app.services.analytics.cache import get_cache_stats
+    return await get_cache_stats()
+
+
+@router.post("/cache/clear", dependencies=[Depends(require_role("admin"))])
+async def cache_clear() -> dict:
+    """Clear all cached queries."""
+    from app.services.analytics.cache import clear_query_cache
+    await clear_query_cache()
+    return {"status": "cleared"}

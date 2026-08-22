@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.request_context import current_request_id
 from app.models import DataSource, EtlJob
 from app.services.analytics.kpi_builder import rebuild_kpi_snapshots
 from app.services.etl.base import PipelineResult
@@ -34,7 +35,12 @@ async def run_frame_pipeline(
     source_id: uuid.UUID | None = None,
 ) -> PipelineResult:
     """Run the transform+load stages on an already-extracted DataFrame."""
-    job = EtlJob(data_source_id=source_id, trigger=trigger, rows_in=len(frame))
+    job = EtlJob(
+        data_source_id=source_id,
+        trigger=trigger,
+        rows_in=len(frame),
+        log={"correlation_id": current_request_id()},
+    )
     db.add(job)
     await db.flush()
 

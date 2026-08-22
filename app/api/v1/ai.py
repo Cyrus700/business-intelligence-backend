@@ -3,12 +3,13 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, DbSession, get_current_user
+from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
 from app.core.clock import business_today
 from app.models.ai import Conversation, Message
 from app.services.ai.provider import AIMessage, polish_reply, repair_mojibake
@@ -249,9 +250,11 @@ class AnalyzeRequest(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     answer: str
-    suggestions: list[str] = []
-    answer: str
-    suggestions: list[str] = []
+    suggestions: list[str]
+    sources: list[str] = []
+    period: str | None = None
+    metrics_used: list[str] = []
+    disclaimer: str = "AI-generated analysis — verify before making decisions."
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -260,6 +263,12 @@ async def ai_analyze(
     db: DbSession,
     user: CurrentUser,
 ) -> AnalyzeResponse:
+    from app.core.clock import business_today
+    from app.services.ai.service import answer_question
+
+    today = business_today()
+    period_str = f"{today - timedelta(days=30)} to {today}"
+
     result = await answer_question(
         db,
         user.role,
@@ -269,7 +278,29 @@ async def ai_analyze(
         user=user,
     )
     suggestions = _generate_suggestions(body.question)
-    return AnalyzeResponse(answer=result.reply, suggestions=suggestions)
+
+    # Collect sources used by the tool loop
+    sources = list(dict.fromkeys(result.tool_calls)) if result.tool_calls else []
+    metrics = []
+    if "revenue" in body.question.lower():
+        metrics.append("revenue")
+    if "expense" in body.question.lower() or "cost" in body.question.lower():
+        metrics.append("expenses")
+    if "forecast" in body.question.lower():
+        metrics.append("forecasts")
+    if "anomal" in body.question.lower():
+        metrics.append("anomalies")
+    if "inventory" in body.question.lower() or "stock" in body.question.lower():
+        metrics.append("inventory_levels")
+
+    return AnalyzeResponse(
+        answer=result.reply,
+        suggestions=suggestions,
+        sources=sources,
+        period=period_str,
+        metrics_used=metrics,
+        disclaimer="AI-generated analysis — verify before making decisions.",
+    )
 
 
 class InsightOut(BaseModel):
@@ -279,7 +310,7 @@ class InsightOut(BaseModel):
     priority: str
 
 
-@router.get("/insights", response_model=list[InsightOut])
+@router.get("/ai/insights", response_model=list[InsightOut])
 async def ai_insights(
     db: DbSession,
     user: CurrentUser,
@@ -404,3 +435,116 @@ def _generate_suggestions(question: str) -> list[str]:
         "Show me inventory alerts",
         "What does the 30-day forecast look like?",
     ]
+
+
+# ── Executive Briefing (Phase 9) ────────────────────────────────────
+
+class ExecutiveBriefing(BaseModel):
+    generated_at: str
+    period: str
+    performance: str
+    changes: list[str]
+    risks: list[str]
+    opportunities: list[str]
+    forecast: str
+    recommendations: list[str]
+    sources: list[str]
+    disclaimer: str
+
+
+@router.get(
+    "/briefing",
+    response_model=ExecutiveBriefing,
+    dependencies=[Depends(require_role("manager"))],
+)
+async def executive_briefing(
+    db: DbSession,
+    user: CurrentUser,
+) -> ExecutiveBriefing:
+    """AI-generated executive briefing — performance, changes, risks, opportunities, forecast, recommendations."""
+    from app.core.clock import business_today
+    from app.services.ai.service import answer_question
+    from app.services.analytics import queries
+    from app.services.analytics.queries import Filters
+
+    today = business_today()
+    period_str = f"{today - timedelta(days=30)} to {today}"
+
+    # Gather structured data for the briefing
+    filters = Filters(date_from=today - timedelta(days=29), date_to=today)
+    kpis = await queries.kpi_summary(db, filters)
+    kpi_lines = [f"{c['metric'].replace('_', ' ').title()}: {c.get('value', 0):,.0f}" for c in kpis[:5]]
+
+    # Ask AI for the briefing
+    briefing_prompt = f"""Generate a concise executive briefing for the period {period_str}.
+
+Key metrics: {', '.join(kpi_lines)}
+
+Structure the response with these exact sections:
+1. PERFORMANCE — one paragraph summary
+2. CHANGES — 3-4 bullet points of key changes
+3. RISKS — 3-4 bullet points of concerns
+4. OPPORTUNITIES — 3-4 bullet points of positive signals
+5. FORECAST — one paragraph with projection
+6. RECOMMENDATIONS — 3-4 actionable next steps
+
+Keep each section brief. Use NPR for currency. Be direct and data-driven."""
+
+    result = await answer_question(
+        db,
+        user.role,
+        briefing_prompt,
+        history=None,
+        user=user,
+    )
+
+    sources = list(dict.fromkeys(result.tool_calls)) if result.tool_calls else []
+
+    # Parse sections from reply (simple heuristic)
+    sections: dict[str, Any] = {
+        "PERFORMANCE": "",
+        "CHANGES": [],
+        "RISKS": [],
+        "OPPORTUNITIES": [],
+        "FORECAST": "",
+        "RECOMMENDATIONS": [],
+    }
+    current = None
+    for line in result.reply.split("\n"):
+        line = line.strip()
+        if line.upper().startswith("PERFORMANCE"):
+            current = "PERFORMANCE"
+            line = line.split(":", 1)[-1].strip()
+        elif line.upper().startswith("CHANGES"):
+            current = "CHANGES"
+            continue
+        elif line.upper().startswith("RISKS"):
+            current = "RISKS"
+            continue
+        elif line.upper().startswith("OPPORTUNITIES"):
+            current = "OPPORTUNITIES"
+            continue
+        elif line.upper().startswith("FORECAST"):
+            current = "FORECAST"
+            line = line.split(":", 1)[-1].strip()
+        elif line.upper().startswith("RECOMMENDATIONS"):
+            current = "RECOMMENDATIONS"
+            continue
+        elif current:
+            if line.startswith("-") or line.startswith("•"):
+                sections[current].append(line.lstrip("-• ").strip())
+            elif current in ("PERFORMANCE", "FORECAST"):
+                sections[current] += (" " + line) if sections[current] else line
+
+    return ExecutiveBriefing(
+        generated_at=business_today().isoformat() + "T00:00:00+05:45",
+        period=period_str,
+        performance=sections["PERFORMANCE"] or "Performance data unavailable.",
+        changes=sections["CHANGES"] or ["No significant changes detected."],
+        risks=sections["RISKS"] or ["No immediate risks identified."],
+        opportunities=sections["OPPORTUNITIES"] or ["Review data for opportunities."],
+        forecast=sections["FORECAST"] or "Forecast unavailable.",
+        recommendations=sections["RECOMMENDATIONS"] or ["No specific recommendations at this time."],
+        sources=sources,
+        disclaimer="AI-generated executive briefing — verify all figures before decisions.",
+    )

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,6 +28,8 @@ class MlModel(Base):
     params: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     artifact_s3_key: Mapped[str | None]
     is_active: Mapped[bool] = mapped_column(default=False)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(
@@ -57,6 +59,7 @@ class Forecast(Base):
             "model_id", "target", "dimensions", "forecast_date", name="uq_forecast_point"
         ),
         Index("ix_forecasts_target_date", "target", "forecast_date"),
+        Index("ix_forecasts_model_id", "model_id"),
     )
 
 
@@ -71,8 +74,13 @@ class Anomaly(Base):
     deviation_score: Mapped[Decimal | None] = mapped_column(Metric)
     severity: Mapped[str] = mapped_column(default="medium")
     context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    explanation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(default="open")
     acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
     # anomalies on the same business day across metrics are grouped into one
@@ -83,7 +91,10 @@ class Anomaly(Base):
 
     __table_args__ = (
         CheckConstraint("severity IN ('low', 'medium', 'high')", name="valid_severity"),
-        CheckConstraint("status IN ('open', 'acknowledged', 'dismissed')", name="valid_status"),
+        CheckConstraint(
+            "status IN ('open', 'acknowledged', 'dismissed', 'resolved')",
+            name="valid_status",
+        ),
         Index("ix_anomalies_status", "status"),
     )
 

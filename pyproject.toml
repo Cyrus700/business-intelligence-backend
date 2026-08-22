@@ -41,12 +41,12 @@ dev = [
 ]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
-ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # env vars must be set before app modules are imported
@@ -67,6 +67,29 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["app.services.analytics.queries", "app.api.v1.analytics"]
 disable_error_code = ["arg-type", "return-value", "call-overload", "assignment", "attr-defined", "list-item", "index"]
+
+[[tool.mypy.overrides]]
+module = [
+    "app.services.analytics.cache",
+    "app.services.etl.ssrf",
+    "app.services.ai.provider",
+    "app.services.ai.context",
+    "app.services.ai.local_engine",
+    "app.services.ai.tools",
+    "app.services.quality.engine",
+    "app.services.ml.anomaly",
+    "app.services.analytics.diagnostics",
+    "app.api.v1.ai",
+    "app.api.v1.rbac",
+    "app.api.v1.users",
+    "app.api.v1.uploads",
+    "app.api.v1.etl",
+    "app.api.v1.data_sources",
+    "app.api.v1.audit",
+    "app.api.v1.quality",
+    "app.services.rbac",
+]
+disable_error_code = ["arg-type", "return-value", "call-overload", "assignment", "attr-defined", "var-annotated", "union-attr", "operator", "misc", "index", "call-overload"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

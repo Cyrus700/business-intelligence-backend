@@ -145,6 +145,17 @@ DEFAULT_PERMISSIONS: list[PermissionSeed] = [
             ("uploads:create", "Upload data", "Upload CSV and Excel data files"),
             ("etl:manage", "Manage ETL", "Run and monitor ETL pipelines"),
             ("data-sources:manage", "Manage data sources", "Add and configure data sources"),
+            ("quality:view", "View data quality", "See data quality score, history and issues"),
+            (
+                "quality:run",
+                "Run quality audits",
+                "Trigger a manual data-quality audit run",
+            ),
+            (
+                "quality:resolve",
+                "Resolve quality issues",
+                "Acknowledge or resolve data-quality issues",
+            ),
         ],
     ),
     *_perms(
@@ -177,6 +188,8 @@ DEFAULT_GRANTS: dict[str, list[str]] = {
         "notifications:read",
         "reports:view",
         "reports:download",
+        "quality:view",
+        "quality:resolve",
     ],
     "manager": [
         "dashboard:view",
@@ -200,6 +213,9 @@ DEFAULT_GRANTS: dict[str, list[str]] = {
         "reports:generate",
         "uploads:create",
         "etl:manage",
+        "quality:view",
+        "quality:run",
+        "quality:resolve",
     ],
     "admin": [p["key"] for p in DEFAULT_PERMISSIONS],
 }

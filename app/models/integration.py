@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, func
+from sqlalchemy import CheckConstraint, ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -77,4 +77,5 @@ class EtlJob(Base):
     __table_args__ = (
         CheckConstraint("trigger IN ('manual', 'schedule', 'upload')", name="valid_trigger"),
         CheckConstraint("status IN ('running', 'succeeded', 'failed')", name="valid_status"),
+        Index("ix_etl_jobs_status_started", "status", "started_at"),
     )

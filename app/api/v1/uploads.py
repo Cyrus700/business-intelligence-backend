@@ -7,7 +7,11 @@ from sqlalchemy import func, select
 from app.api.deps import CurrentUser, DbSession, require_role
 from app.models import RawUpload
 from app.schemas.integration import PaginatedUploads, TargetDomain, UploadOut
-from app.services.etl.extractors import MAX_UPLOAD_BYTES, extract_tabular
+from app.services.etl.extractors import (
+    MAX_UPLOAD_BYTES,
+    extract_tabular,
+    sanitize_upload_filename,
+)
 from app.services.etl.pipeline import run_frame_pipeline
 from app.services.storage import FileStorage, make_key
 
@@ -61,7 +65,7 @@ async def upload_file(
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file exceeds 50 MB")
-    file_name = file.filename or "upload.csv"
+    file_name = sanitize_upload_filename(file.filename or "upload.csv")
 
     from app.api.deps import user_org_id
 
@@ -84,7 +88,7 @@ async def upload_file(
         upload.status = "failed"
         upload.error_report = {"error": str(e)}
         await db.commit()
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
     upload.status = "validated"
     upload.row_count = len(extract.frame)
@@ -106,7 +110,7 @@ async def upload_file(
             extra={"error": str(e)},
         )
         await db.commit()
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
     upload.status = "loaded"
     upload.error_report = _report(

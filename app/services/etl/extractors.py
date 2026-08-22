@@ -6,6 +6,7 @@ REST APIs, and relational databases.
 
 import csv
 import io
+import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -80,6 +81,17 @@ def _detect_duplicate_header(data: bytes, encoding: str) -> None:
         raise ValueError(f"duplicate column names: {', '.join(duplicates)}")
 
 
+def sanitize_upload_filename(file_name: str) -> str:
+    """Keep only a safe basename with a whitelisted extension."""
+    base = os.path.basename(file_name.replace("\\", "/")).strip()
+    if not base or base in (".", "..") or base.startswith("."):
+        raise ValueError("invalid file name")
+    lower = base.lower()
+    if not lower.endswith((".csv", ".xlsx", ".xls")):
+        raise ValueError("unsupported file type (use .csv, .xlsx or .xls)")
+    return base
+
+
 def extract_tabular(data: bytes, file_name: str) -> TabularExtract:
     """Parse + validate an uploaded CSV/Excel file.
 
@@ -93,6 +105,20 @@ def extract_tabular(data: bytes, file_name: str) -> TabularExtract:
         raise ValueError("file is empty (0 bytes)")
     name = file_name.lower()
     warnings: list[str] = []
+
+    if name.endswith(".xlsx"):
+        if not data.startswith(b"PK\x03\x04"):
+            raise ValueError(
+                "file looks like an .xlsx but its content is not a ZIP/OOXML workbook"
+            )
+    elif name.endswith(".xls"):
+        if not data.startswith(b"\xd0\xcf\x11\xe0"):
+            raise ValueError("file looks like an .xls but its content is not an OLE2 workbook")
+    elif name.endswith(".csv"):
+        # A CSV must not be a ZIP (xlsx misnamed), an OLE2 document or a web
+        # page — anything else is a disguised file we refuse to parse.
+        if data.startswith((b"PK\x03\x04", b"\xd0\xcf\x11\xe0")) or b"<html" in data[:4096].lower():
+            raise ValueError("file looks like a .csv but its content is not a CSV")
 
     if name.endswith((".xlsx", ".xls")):
         try:
@@ -148,6 +174,9 @@ async def extract_rest_api(
     url = config.get("url")
     if not url:
         raise ValueError("rest_api source config needs a 'url'")
+    from app.services.etl.ssrf import validate_public_http_url
+
+    validate_public_http_url(url)
     own_client = client is None
     client = client or httpx.AsyncClient(timeout=30)
     try:

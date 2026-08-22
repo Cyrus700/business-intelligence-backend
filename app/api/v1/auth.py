@@ -1,9 +1,9 @@
 from uuid import NAMESPACE_URL, uuid5
 
 import bcrypt
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
@@ -194,18 +194,46 @@ class ForgotPasswordBody(BaseModel):
 
 
 @router.post("/login", response_model=AuthOut)
-async def login(body: LoginBody, db: DbSession) -> AuthOut:
+async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
+    from app.core.request_context import current_request_id
+    from app.models import AuditLog
+
+    def audit(action: str, user_id=None) -> None:
+        db.add(
+            AuditLog(
+                user_id=user_id,
+                action=action,
+                entity="auth",
+                detail={
+                    "email": body.email,
+                    "ip_address": request.client.host if request.client else None,
+                    "request_id": current_request_id(),
+                },
+            )
+        )
+
     result = await db.execute(select(Profile).where(Profile.email == body.email))
     profile = result.scalar_one_or_none()
     if profile is None:
+        await db.flush()
+        audit("auth.login_failed")
+        await db.commit()
         raise HTTPException(401, "No account found with this email")
     if not profile.is_active:
+        await db.flush()
+        audit("auth.login_failed", profile.id)
+        await db.commit()
         raise HTTPException(403, "Account is disabled")
     if not profile.password_hash:
         raise HTTPException(401, "This account uses Google sign-in. Please sign in with Google.")
     if not bcrypt.checkpw(body.password.encode(), profile.password_hash.encode()):
+        await db.flush()
+        audit("auth.login_failed", profile.id)
+        await db.commit()
         raise HTTPException(401, "Incorrect password")
 
+    audit("auth.login", profile.id)
+    await db.commit()
     token = sign_token(profile.id, profile.email, profile.role)
     return AuthOut(token=token, user=ProfileOut.model_validate(profile))
 
@@ -372,8 +400,8 @@ class PermissionsOut(BaseModel):
     permissions: list[str]
 
 
-@router.get("/permissions", response_model=PermissionsOut)
-async def permissions(user: CurrentUser) -> PermissionsOut:
+@router.get("/me/permissions", response_model=PermissionsOut)
+async def my_permissions(user: CurrentUser) -> PermissionsOut:
     return PermissionsOut(
         role=user.role,
         permissions=PERMISSIONS_MATRIX.get(user.role, PERMISSIONS_MATRIX["analyst"]),

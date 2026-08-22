@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    admin,
     ai,
     analytics,
     audit,
@@ -11,6 +12,7 @@ from app.api.v1 import (
     health,
     landing,
     ml,
+    quality,
     rbac,
     recommendations,
     uploads,
@@ -24,6 +26,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(ml.router)
 api_router.include_router(decision.router)
 api_router.include_router(decision.manager_router)
+api_router.include_router(decision.schedule_router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(rbac.router)
@@ -33,3 +36,5 @@ api_router.include_router(uploads.router)
 api_router.include_router(etl.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(ai.router)
+api_router.include_router(quality.router)
+api_router.include_router(admin.router)

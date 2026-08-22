@@ -154,7 +154,8 @@ async def get_matrix(db: DbSession, user: CurrentUser) -> MatrixOut:
 
 
 @router.get("/me", response_model=MyAccessOut)
-async def my_access(db: DbSession, user: CurrentUser) -> MyAccessOut:
+@router.get("/rbac/me", response_model=MyAccessOut)
+async def my_rbac_access(db: DbSession, user: CurrentUser) -> MyAccessOut:
     """Effective permissions of the caller — drives client-side UI gating."""
     await _bootstrap_if_empty(db)
     policy = await rbac.get_policy(db)
@@ -293,7 +294,7 @@ async def replace_role_permissions(
     unknown = sorted(set(body.permissions) - valid)
     if unknown:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unknown permissions: {', '.join(unknown)}"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown permissions: {', '.join(unknown)}"
         )
 
     target = set(body.permissions)
@@ -366,7 +367,7 @@ async def create_role(
         unknown = sorted(set(keys) - perms.keys())
         if unknown:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"Unknown permissions: {', '.join(unknown)}",
             )
         for key in keys:

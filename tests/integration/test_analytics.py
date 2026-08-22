@@ -97,6 +97,44 @@ async def test_drilldown_transactions_by_sku(client, seeded):
     assert body["items"][0]["txn_date"] == "2026-06-11"  # newest first
 
 
+async def test_multi_dimension_filters(client, seeded):
+    # Comma-separated multi-select regions/channels restrict aggregates.
+    resp = await client.get(
+        "/api/v1/sales/by-product",
+        headers=auth(seeded),
+        params={**RANGE, "regions": "Bagmati,Koshi"},
+    )
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert {r["key"] for r in rows} == {"Everest Tea", "Wai Wai"}
+
+    resp = await client.get(
+        "/api/v1/sales/by-product",
+        headers=auth(seeded),
+        params={**RANGE, "channels": "online"},
+    )
+    rows = resp.json()
+    assert {r["key"] for r in rows} == {"Everest Tea"}
+    assert rows[0]["revenue"] == 640.0
+
+    resp = await client.get(
+        "/api/v1/sales/by-product",
+        headers=auth(seeded),
+        params={**RANGE, "categories": "Snacks"},
+    )
+    rows = resp.json()
+    assert {r["key"] for r in rows} == {"Wai Wai"}
+
+    resp = await client.get(
+        "/api/v1/sales/by-product",
+        headers=auth(seeded),
+        params={**RANGE, "regions": "Bagmati", "channels": "store"},
+    )
+    rows = resp.json()
+    assert [r["key"] for r in rows] == ["Everest Tea"]
+    assert rows[0]["revenue"] == 960.0
+
+
 async def test_pnl_requires_manager(client, seeded, user_token, admin_token):
     # `seeded` uploads as a manager (uploads are manager+), so the denial case
     # needs its own analyst token rather than the seeding one.

@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
@@ -32,8 +32,8 @@ def sign_token(user_id: UUID, email: str, role: str = "analyst", token_version: 
         "email": email,
         "app_metadata": {"role": role},
         "aud": settings.jwt_audience,
-        "exp": datetime.now(timezone.utc) + timedelta(days=90),
-        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(UTC) + timedelta(days=90),
+        "iat": datetime.now(UTC),
         "ver": token_version,
     }
     return jwt.encode(payload, secret, algorithm="HS256")

@@ -3,7 +3,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import load_only
 
 from app.api.deps import CurrentUser, DbSession, require_role
 from app.models import AuditLog, Profile
@@ -31,7 +30,7 @@ async def _validate_role(db: DbSession, role: str) -> None:
     if info is None:
         known = ", ".join(sorted(policy.roles))
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Unknown role '{role}'. Defined roles: {known}",
         )
     if not info.is_active:

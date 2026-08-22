@@ -204,13 +204,33 @@ async def _tool_session(
     question = next(
         (m.content for m in reversed(loop_messages) if m.role == "user"), ""
     )
-    force_tools = parse_period(question) is not None
+    parsed_period = parse_period(question)
+    force_tools = parsed_period is not None
+
+    # parse_period() resolves "today"/"yesterday"/"10 June" etc. deterministically
+    # against the business clock. Left to its own judgement the model sometimes
+    # reuses a date range from earlier in the conversation (or invents one)
+    # instead of recomputing it for the new question — pin the exact window down
+    # so every tool call this turn is forced onto the dates the user actually asked
+    # about, not whatever the LLM's own date arithmetic lands on.
+    turn_system_prompt = system_prompt
+    if parsed_period is not None:
+        turn_system_prompt = (
+            f"{system_prompt}\n\nThe current question refers to the period "
+            f"'{parsed_period.label}': {parsed_period.start.isoformat()} to "
+            f"{parsed_period.end.isoformat()} (inclusive). Every tool call you make "
+            f"to answer it MUST use exactly this date range (date_from="
+            f"{parsed_period.start.isoformat()}, date_to={parsed_period.end.isoformat()}, "
+            f"or date={parsed_period.start.isoformat()} if it is a single day) — do not "
+            f"reuse a date range from earlier in this conversation and do not compute "
+            f"your own."
+        )
 
     for attempt in range(MAX_TOOL_TURNS):
         resp: ToolResponse = await provider.chat_with_tools(
             loop_messages,
             tool_declarations(),
-            system_prompt=system_prompt,
+            system_prompt=turn_system_prompt,
             tool_choice="required" if (force_tools and attempt == 0) else "auto",
         )
         if not resp.has_tool_calls:
@@ -246,7 +266,7 @@ async def _tool_session(
                 ),
             ),
         ],
-        system_prompt=system_prompt,
+        system_prompt=turn_system_prompt,
     )
     return polish_reply(repair_mojibake(final or "")), turns, evidence
 

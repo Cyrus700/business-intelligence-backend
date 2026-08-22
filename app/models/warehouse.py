@@ -3,8 +3,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import (
+    ARRAY,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, uuid_pk
@@ -149,5 +159,36 @@ class KpiSnapshot(Base):
 
     __table_args__ = (
         Index("ix_kpi_snapshots_date_metric", "snapshot_date", "metric"),
+        Index("ix_kpi_snapshots_metric_dims", "metric", "dimensions"),
         UniqueConstraint("snapshot_date", "metric", "dimensions", name="uq_kpi_point"),
+    )
+
+
+class KpiDefinition(Base):
+    """Metadata-driven KPI registry (Phase 5): formula, target, thresholds,
+    owner and visibility live here, not in code — the dashboard reads targets
+    and status from these rows and admins can adjust them without a deploy."""
+
+    __tablename__ = "kpi_definitions"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    metric: Mapped[str] = mapped_column(String(64), unique=True)
+    label: Mapped[str] = mapped_column(String(120))
+    formula: Mapped[str] = mapped_column(String(255))
+    unit: Mapped[str] = mapped_column(String(16), default="")
+    higher_is_better: Mapped[bool] = mapped_column(default=True)
+    target_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    threshold_low: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+    visibility: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("char_length(metric) > 0", name="ck_kpi_metric_not_empty"),
+        Index("ix_kpi_definitions_metric", "metric"),
     )

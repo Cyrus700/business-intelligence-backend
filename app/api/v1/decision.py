@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
-from app.models import AlertRule, Insight, Notification, Report
+from app.core.clock import business_today
+from app.models import AlertRule, Insight, Notification, Report, ReportSchedule
+from app.services.reports.schedule import compute_next_run
 from app.services.storage import FileStorage, make_key
 
 router = APIRouter(tags=["decision-support"], dependencies=[Depends(get_current_user)])
@@ -129,7 +131,7 @@ async def list_rules(db: DbSession) -> list[AlertRuleOut]:
 async def create_rule(body: AlertRuleIn, db: DbSession, user: CurrentUser) -> AlertRuleOut:
     if body.condition != "anomaly_detected" and body.threshold is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "threshold is required for this condition"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "threshold is required for this condition"
         )
     rule = AlertRule(**body.model_dump(), created_by=user.id)
     db.add(rule)
@@ -250,7 +252,7 @@ async def generate_report(body: ReportRequest, db: DbSession, user: CurrentUser)
     from app.services.reports import builder
 
     if body.period_end < body.period_start:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "period_end before period_start")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "period_end before period_start")
     title = f"Business summary {body.period_start:%d %b %Y} – {body.period_end:%d %b %Y}"
     if body.format == "pdf":
         payload = await builder.build_pdf(db, body.period_start, body.period_end, title)
@@ -295,3 +297,116 @@ async def download_report(report_id: UUID, db: DbSession) -> Response:
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---- report schedules ----
+
+
+class ReportScheduleIn(BaseModel):
+    frequency: Literal["weekly", "monthly"]
+    format: Literal["pdf", "xlsx"] = "pdf"
+    day_of_week: int | None = None  # 0=Mon..6=Sun, required for weekly
+    day_of_month: int | None = None  # 1..28, required for monthly
+
+    def validate_day(self) -> None:
+        if self.frequency == "weekly" and self.day_of_week is None:
+            raise HTTPException(422, "day_of_week is required for a weekly schedule")
+        if self.frequency == "monthly" and self.day_of_month is None:
+            raise HTTPException(422, "day_of_month is required for a monthly schedule")
+        if self.day_of_week is not None and not (0 <= self.day_of_week <= 6):
+            raise HTTPException(422, "day_of_week must be 0-6")
+        if self.day_of_month is not None and not (1 <= self.day_of_month <= 28):
+            raise HTTPException(422, "day_of_month must be 1-28")
+
+
+class ReportScheduleUpdate(BaseModel):
+    format: Literal["pdf", "xlsx"] | None = None
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    is_active: bool | None = None
+
+
+class ReportScheduleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    frequency: str
+    format: str
+    day_of_week: int | None
+    day_of_month: int | None
+    is_active: bool
+    next_run_at: date
+    last_run_at: datetime | None
+    last_report_id: UUID | None
+    created_at: datetime
+
+
+schedule_router = APIRouter(
+    prefix="/report-schedules",
+    tags=["decision-support"],
+    dependencies=[Depends(require_role("manager"))],
+)
+
+
+@schedule_router.get("", response_model=list[ReportScheduleOut])
+async def list_schedules(db: DbSession, user: CurrentUser) -> list[ReportScheduleOut]:
+    rows = (
+        (
+            await db.execute(
+                select(ReportSchedule)
+                .where(ReportSchedule.created_by == user.id)
+                .order_by(ReportSchedule.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [ReportScheduleOut.model_validate(r) for r in rows]
+
+
+@schedule_router.post("", response_model=ReportScheduleOut, status_code=status.HTTP_201_CREATED)
+async def create_schedule(
+    body: ReportScheduleIn, db: DbSession, user: CurrentUser
+) -> ReportScheduleOut:
+    body.validate_day()
+    today = business_today()
+    schedule = ReportSchedule(
+        frequency=body.frequency,
+        format=body.format,
+        day_of_week=body.day_of_week,
+        day_of_month=body.day_of_month,
+        next_run_at=compute_next_run(body.frequency, body.day_of_week, body.day_of_month, today),
+        created_by=user.id,
+    )
+    db.add(schedule)
+    await db.commit()
+    await db.refresh(schedule)
+    return ReportScheduleOut.model_validate(schedule)
+
+
+@schedule_router.patch("/{schedule_id}", response_model=ReportScheduleOut)
+async def update_schedule(
+    schedule_id: UUID, body: ReportScheduleUpdate, db: DbSession, user: CurrentUser
+) -> ReportScheduleOut:
+    schedule = await db.get(ReportSchedule, schedule_id)
+    if schedule is None or schedule.created_by != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule not found")
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(schedule, field, value)
+    if "day_of_week" in changes or "day_of_month" in changes:
+        schedule.next_run_at = compute_next_run(
+            schedule.frequency, schedule.day_of_week, schedule.day_of_month, business_today()
+        )
+    await db.commit()
+    await db.refresh(schedule)
+    return ReportScheduleOut.model_validate(schedule)
+
+
+@schedule_router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_schedule(schedule_id: UUID, db: DbSession, user: CurrentUser) -> None:
+    schedule = await db.get(ReportSchedule, schedule_id)
+    if schedule is None or schedule.created_by != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule not found")
+    await db.delete(schedule)
+    await db.commit()

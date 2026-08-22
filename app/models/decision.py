@@ -29,6 +29,11 @@ class Insight(Base):
     period_end: Mapped[date | None]
     generated_at: Mapped[datetime] = mapped_column(server_default=func.now())
     is_pinned: Mapped[bool] = mapped_column(default=False)
+    # Decision workflow (Phase 8): why -> impact -> priority -> decision.
+    priority: Mapped[str] = mapped_column(default="medium")
+    status: Mapped[str] = mapped_column(default="open")
+    action: Mapped[str | None] = mapped_column(String(255))
+    impact_estimate: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     # dedupe key so re-runs don't duplicate insights (Phase 5)
     dedupe_key: Mapped[str | None] = mapped_column(unique=True)
 
@@ -38,7 +43,13 @@ class Insight(Base):
             name="valid_type",
         ),
         CheckConstraint("severity IN ('info', 'warning', 'critical')", name="valid_severity"),
+        CheckConstraint(
+            "status IN ('open', 'accepted', 'dismissed', 'postponed', 'actioned')",
+            name="ck_insight_status",
+        ),
+        CheckConstraint("priority IN ('low', 'medium', 'high')", name="valid_priority"),
         Index("ix_insights_generated_at", "generated_at"),
+        Index("ix_insights_type_generated", "insight_type", "generated_at"),
     )
 
 
@@ -110,6 +121,45 @@ class Report(Base):
     )
 
 
+class ReportSchedule(Base, TimestampMixin):
+    """A user's standing subscription to a recurring generated report.
+
+    ``next_run_at`` is the sole scheduling source of truth — the daily worker
+    (app.workers.scheduler._run_due_report_schedules) queries for rows due and
+    advances it after each run, rather than re-deriving "is this due today"
+    from cron math on every tick.
+    """
+
+    __tablename__ = "report_schedules"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    frequency: Mapped[str]
+    format: Mapped[str] = mapped_column(default="pdf")
+    day_of_week: Mapped[int | None]  # 0=Monday .. 6=Sunday, for weekly
+    day_of_month: Mapped[int | None]  # 1..28, for monthly
+    is_active: Mapped[bool] = mapped_column(default=True)
+    next_run_at: Mapped[date]
+    last_run_at: Mapped[datetime | None]
+    last_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("reports.id", ondelete="SET NULL")
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE")
+    )
+
+    __table_args__ = (
+        CheckConstraint("frequency IN ('weekly', 'monthly')", name="valid_frequency"),
+        CheckConstraint("format IN ('pdf', 'xlsx')", name="valid_schedule_format"),
+        CheckConstraint(
+            "day_of_week IS NULL OR (day_of_week BETWEEN 0 AND 6)", name="valid_day_of_week"
+        ),
+        CheckConstraint(
+            "day_of_month IS NULL OR (day_of_month BETWEEN 1 AND 28)", name="valid_day_of_month"
+        ),
+        Index("ix_report_schedules_due", "is_active", "next_run_at"),
+    )
+
+
 class RecommendationFeedback(Base):
     """User outcome signal for recommendations (accepted / dismissed).
 
@@ -125,11 +175,14 @@ class RecommendationFeedback(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
-    action: Mapped[str]  # 'accepted' | 'dismissed'
+    action: Mapped[str]  # 'accepted' | 'dismissed' | 'postponed' | 'actioned'
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint("action IN ('accepted', 'dismissed')", name="valid_action"),
+        CheckConstraint(
+            "action IN ('accepted', 'dismissed', 'postponed', 'actioned')",
+            name="valid_action",
+        ),
         CheckConstraint("LENGTH(rec_key) > 0", name="ck_rec_key_not_empty"),
         Index("ix_rec_feedback_key_created", "rec_key", "created_at"),
     )

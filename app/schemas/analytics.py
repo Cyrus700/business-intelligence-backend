@@ -3,20 +3,47 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-Granularity = Literal["day", "week", "month"]
+Granularity = Literal["day", "week", "month", "quarter", "year"]
 
 
 class KpiCard(BaseModel):
     metric: str
+    label: str | None = None
+    unit: str | None = None
     value: float
     previous_value: float | None
     change_pct: float | None  # vs comparable previous period; None when no baseline
+    target_value: float | None = None
+    achievement_pct: float | None = None  # value/target when a target is defined
+    status: str | None = None  # on_track | near_target | off_target (higher_is_better aware)
 
 
 class KpiSummary(BaseModel):
     period_start: date
     period_end: date
     cards: list[KpiCard]
+
+
+class KpiDefinitionOut(BaseModel):
+    metric: str
+    label: str
+    formula: str
+    unit: str
+    higher_is_better: bool
+    target_value: float | None
+    threshold_low: float | None
+    visibility: list[str]
+    is_active: bool
+
+
+class KpiDefinitionUpdate(BaseModel):
+    label: str | None = None
+    target_value: float | None = None
+    threshold_low: float | None = None
+    higher_is_better: bool | None = None
+    unit: str | None = None
+    visibility: list[str] | None = None
+    is_active: bool | None = None
 
 
 class TimeseriesPoint(BaseModel):

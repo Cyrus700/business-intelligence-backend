@@ -54,10 +54,13 @@ class AnomalyOut(BaseModel):
     severity: str
     status: str
     context: dict[str, Any] | None
+    explanation: dict[str, Any] | None
+    resolved_at: datetime | None
+    resolved_by: UUID | None
 
 
 class AnomalyUpdate(BaseModel):
-    status: Literal["acknowledged", "dismissed", "open"]
+    status: Literal["acknowledged", "dismissed", "open", "resolved"]
 
 
 class TrendOut(BaseModel):
@@ -67,6 +70,46 @@ class TrendOut(BaseModel):
     weekly_change_pct: float
     strength_r: float
     current_level: float
+
+
+class ModelOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    model_type: str
+    target: str
+    dimensions: dict[str, Any]
+    version: int
+    trained_at: datetime
+    training_rows: int | None
+    metrics: dict[str, Any] | None
+    params: dict[str, Any] | None
+    is_active: bool
+    activated_at: datetime | None
+    retired_at: datetime | None
+    dataset_start: date | None = None
+    dataset_end: date | None = None
+
+
+class BacktestStep(BaseModel):
+    step: int
+    train_end: date
+    mape: float
+    mae: float
+
+
+class BacktestModel(BaseModel):
+    mape_avg: float
+    mape_worst: float
+    steps: list[BacktestStep]
+    steps_ok: int
+    failures: int
+
+
+class BacktestOut(BaseModel):
+    horizon: int
+    steps: int
+    models: dict[str, BacktestModel]
 
 
 async def _active_model(
@@ -195,6 +238,116 @@ async def forecast_accuracy(db: DbSession) -> list[AccuracyOut]:
     ]
 
 
+@router.get("/models", response_model=list[ModelOut])
+async def model_registry(db: DbSession) -> list[ModelOut]:
+    """Model registry (Phase 6) — every trained model with lifecycle dates,
+    metrics, params, and the dataset range it was trained on."""
+    from sqlalchemy import text
+
+    models = (
+        (
+            await db.execute(
+                select(MlModel).order_by(MlModel.trained_at.desc(), MlModel.version.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    dataset_range: dict[str, tuple[date | None, date | None]] = {}
+    for m in models:
+        if m.target in dataset_range:
+            continue
+        row = (
+            await db.execute(
+                text(
+                    "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e "
+                    "FROM kpi_snapshots WHERE metric = :m"
+                ),
+                {"m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target},
+            )
+        ).first()
+        dataset_range[m.target] = (row.s if row else None, row.e if row else None)
+
+    out = []
+    for m in models:
+        start, end = dataset_range.get(m.target, (None, None))
+        out.append(
+            ModelOut(
+                id=m.id,
+                model_type=m.model_type,
+                target=m.target,
+                dimensions=m.dimensions,
+                version=m.version,
+                trained_at=m.trained_at,
+                training_rows=m.training_rows,
+                metrics=m.metrics,
+                params=m.params,
+                is_active=m.is_active,
+                activated_at=m.activated_at,
+                retired_at=m.retired_at,
+                dataset_start=start,
+                dataset_end=end,
+            )
+        )
+    return out
+
+
+@router.post(
+    "/models/{model_id}/retire",
+    response_model=ModelOut,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def retire_model(model_id: UUID, db: DbSession) -> ModelOut:
+    """Retire a model version from the registry (admin); the newest active
+    version stays in production."""
+    model = await db.get(MlModel, model_id)
+    if model is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Model not found")
+    if not model.is_active:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Model already retired")
+    model.is_active = False
+    model.retired_at = business_now()
+    await db.commit()
+    await db.refresh(model)
+    return ModelOut(
+        id=model.id,
+        model_type=model.model_type,
+        target=model.target,
+        dimensions=model.dimensions,
+        version=model.version,
+        trained_at=model.trained_at,
+        training_rows=model.training_rows,
+        metrics=model.metrics,
+        params=model.params,
+        is_active=model.is_active,
+        activated_at=model.activated_at,
+        retired_at=model.retired_at,
+    )
+
+
+@router.get("/backtest", response_model=BacktestOut)
+async def backtest(
+    db: DbSession,
+    horizon: int = Query(7, ge=1, le=30),
+    steps: int = Query(3, ge=1, le=6),
+) -> BacktestOut:
+    """Rolling-origin backtest of naive vs prophet vs arima on the revenue
+    series — honest walk-forward MAPE so the dashboard can show which model
+    holds up beyond the training window (Phase 6)."""
+    from app.services.ml.features import load_series
+    from app.services.ml.forecasting import rolling_backtest
+
+    frame = await load_series(db, "revenue_daily")
+    if len(frame) < 60:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Need at least 60 days of history for a meaningful backtest",
+        )
+    result = rolling_backtest(frame, horizon=horizon, steps=steps)
+    return BacktestOut(**result)
+
+
 @router.post(
     "/forecasts/retrain",
     dependencies=[Depends(require_role("admin"))],
@@ -249,6 +402,12 @@ async def update_anomaly(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anomaly not found")
     anomaly.status = body.status
     anomaly.acknowledged_by = user.id if body.status != "open" else None
+    if body.status == "resolved":
+        anomaly.resolved_at = anomaly.resolved_at or business_now()
+        anomaly.resolved_by = anomaly.resolved_by or user.id
+    else:
+        anomaly.resolved_at = None
+        anomaly.resolved_by = None
     await db.commit()
     await db.refresh(anomaly)
     return AnomalyOut.model_validate(anomaly)
