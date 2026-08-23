@@ -136,10 +136,12 @@ async def get_sales_transactions(
     user: Annotated[object, Depends(get_current_user)],
     sku: str | None = None,
     search: str | None = None,
+    sort_by: str | None = Query(None, description="Sort column: txn_date|product|channel|region|quantity|total_amount|ingested_at"),
+    sort_dir: str | None = Query(None, description="Sort direction: asc|desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> Paginated[TransactionRow]:
-    items, total = await queries.sales_transactions(db, f, page, page_size, sku, search)
+    items, total = await queries.sales_transactions(db, f, page, page_size, sku, search, sort_by, sort_dir)
     # field-level redaction: analysts see line-level rows without the money
     # fields (aggregates stay available via the dimension views)
     from app.api.deps import redact_sensitive

@@ -9,18 +9,22 @@ A 23-hour per-rule cooldown prevents notification spam on scheduled re-evaluatio
 """
 
 import logging
-import smtplib
 from datetime import date, datetime, timedelta
-from email.message import EmailMessage
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import business_now
-from app.core.config import get_settings
 from app.models import AlertRule, Anomaly, Notification, Profile
 
 logger = logging.getLogger(__name__)
+
+# Back-compat shim — older imports (e.g. tests) expect ``send_email`` here.
+# Prefer ``from app.services.email import send_alert_email`` in new code.
+try:
+    from app.services.email.service import send_alert_email as _send_alert_email  # noqa: F401
+except Exception:  # pragma: no cover
+    _send_alert_email = None  # type: ignore
 
 COOLDOWN_HOURS = 23
 
@@ -89,23 +93,16 @@ async def _evaluate_rule(db: AsyncSession, rule: AlertRule, today: date) -> str 
     return None
 
 
-def send_email(to: str, subject: str, body: str) -> None:
-    """Best-effort SMTP send; silently skipped when not configured."""
-    settings = get_settings()
-    host = getattr(settings, "smtp_host", "") or ""
-    if not host:
-        logger.info("SMTP not configured; skipping email to %s", to)
-        return
-    msg = EmailMessage()
-    msg["From"] = getattr(settings, "smtp_from", "alerts@bi-dashboard.local")
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(body)
-    with smtplib.SMTP(host, getattr(settings, "smtp_port", 587)) as server:
-        if getattr(settings, "smtp_user", ""):
-            server.starttls()
-            server.login(settings.smtp_user, settings.smtp_password)
-        server.send_message(msg)
+async def send_email(to: str, subject: str, body: str) -> bool:
+    """Back-compat wrapper — delegates to the central email service.
+
+    ``body`` is treated as the alert message; the rule name is extracted
+    from the subject prefix ``[BI Dashboard] `` when present.
+    """
+    from app.services.email.service import send_alert_email
+
+    rule_name = subject.removeprefix("[BI Dashboard] ").strip() or subject
+    return await send_alert_email(to, rule_name, body)
 
 
 async def evaluate_alerts(db: AsyncSession, today: date | None = None) -> int:
@@ -163,8 +160,16 @@ async def evaluate_alerts(db: AsyncSession, today: date | None = None) -> int:
             )
             created += 1
             if (rule.channels or {}).get("email"):
+                # Honor per-user preference (default on) and non-blocking send.
+                prefs = (user.preferences or {})
+                if prefs.get("anomaly_alerts") is False:
+                    continue
                 try:
-                    send_email(user.email, f"[BI Dashboard] {rule.name}", message)
+                    # Keep alert evaluation non-blocking — email is best-effort
+                    # and must never prevent the in-app notification from persisting.
+                    from app.services.email.service import send_alert_email as _alert_send
+
+                    await _alert_send(user.email, rule.name, message)
                 except Exception:
                     logger.exception("email send failed for %s", user.email)
     await db.commit()

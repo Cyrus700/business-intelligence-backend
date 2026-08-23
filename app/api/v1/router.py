@@ -12,6 +12,7 @@ from app.api.v1 import (
     health,
     landing,
     ml,
+    advanced,
     quality,
     rbac,
     recommendations,
@@ -23,6 +24,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(landing.router)
 api_router.include_router(analytics.router)
+api_router.include_router(advanced.router)
 api_router.include_router(ml.router)
 api_router.include_router(decision.router)
 api_router.include_router(decision.manager_router)

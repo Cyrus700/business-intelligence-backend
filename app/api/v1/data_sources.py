@@ -38,6 +38,13 @@ async def create_source(body: DataSourceIn, db: DbSession, user: CurrentUser) ->
             validate_public_http_url(str(body.config.get("url") or ""))
         except ValueError as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    if body.kind == "postgres":
+        try:
+            from app.services.etl.ssrf import validate_postgres_dsn
+
+            validate_postgres_dsn(str(body.config.get("dsn") or ""))
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
     existing = await db.execute(select(DataSource).where(DataSource.name == body.name))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "A source with this name already exists")
@@ -60,6 +67,14 @@ async def update_source(
     if config_url:
         try:
             validate_public_http_url(config_url)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    config_dsn = str((payload.get("config") or {}).get("dsn") or "")
+    if config_dsn:
+        try:
+            from app.services.etl.ssrf import validate_postgres_dsn
+
+            validate_postgres_dsn(config_dsn)
         except ValueError as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 

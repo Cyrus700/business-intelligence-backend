@@ -242,6 +242,30 @@ async def _system_health(db: DbSession) -> dict[str, Any]:
             f"{len(ai_statuses)} provider(s), {worst} failure(s)",
         )
 
+    # ── Email health ──────────────────────────────────────────────────
+    try:
+        from app.core.config import get_settings as _get
+        from app.services.email.service import is_configured, stats_snapshot
+
+        s = _get()
+        stats = stats_snapshot()
+        if not is_configured():
+            add("email", "degraded", None, "SMTP not configured — in-app notifications only " f"(sent={stats['sent']} failed={stats['failed']} skipped={stats['skipped']})")
+        else:
+            # Quick TCP check is too heavy for a health probe; report config
+            # + recent send stats instead. A dedicated /admin/email/test can
+            # do a live SMTP handshake with auth.
+            detail = (
+                f"smtp {s.smtp_host}:{s.smtp_port} as {s.smtp_from} "
+                f"(sent={stats['sent']} failed={stats['failed']} skipped={stats['skipped']})"
+            )
+            if stats["failed"] and stats["failed"] > stats["sent"]:
+                add("email", "degraded", None, detail + " — recent failures exceed successes")
+            else:
+                add("email", "ok", None, detail)
+    except Exception as exc:  # noqa: BLE001
+        add("email", "down", None, f"{type(exc).__name__}: {exc}")
+
     overall = "ok" if all(c["status"] == "ok" for c in components) else (
         "degraded" if all(c["status"] in ("ok", "degraded") for c in components) else "down"
     )

@@ -253,7 +253,14 @@ async def sales_by_dimension(db: AsyncSession, f: Filters, dimension: str) -> li
 
 
 async def sales_transactions(
-    db: AsyncSession, f: Filters, page: int, page_size: int, sku: str | None = None, search: str | None = None
+    db: AsyncSession,
+    f: Filters,
+    page: int,
+    page_size: int,
+    sku: str | None = None,
+    search: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> tuple[list[dict], int]:
     conditions = _sales_conditions(f, f.date_from, f.date_to)
     if sku:
@@ -276,6 +283,9 @@ async def sales_transactions(
             SalesTransaction.unit_price,
             SalesTransaction.discount,
             SalesTransaction.total_amount,
+            SalesTransaction.ingested_at,
+            SalesTransaction.etl_job_id,
+            SalesTransaction.source_id,
         )
         .select_from(
             SalesTransaction.__table__.outerjoin(
@@ -285,12 +295,26 @@ async def sales_transactions(
         .where(and_(*conditions))
     )
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+
+    # — Professional sorting: whitelisted columns only (prevents injection)
+    sort_map = {
+        "txn_date": SalesTransaction.txn_date,
+        "product": Product.name,
+        "customer": Customer.name,
+        "channel": SalesTransaction.channel,
+        "region": SalesTransaction.region,
+        "quantity": SalesTransaction.quantity,
+        "total_amount": SalesTransaction.total_amount,
+        "ingested_at": SalesTransaction.ingested_at,
+    }
+    col = sort_map.get((sort_by or "").lower(), SalesTransaction.txn_date)
+    desc = (sort_dir or "desc").lower() == "desc"
+    order = col.desc() if desc else col.asc()
+    # Tie-breaker for stable pagination
+    order2 = SalesTransaction.id.desc() if desc else SalesTransaction.id.asc()
+
     rows = (
-        await db.execute(
-            base.order_by(SalesTransaction.txn_date.desc(), SalesTransaction.id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
+        await db.execute(base.order_by(order, order2).offset((page - 1) * page_size).limit(page_size))
     ).all()
     items = [
         {
@@ -298,6 +322,9 @@ async def sales_transactions(
             "unit_price": float(r.unit_price),
             "discount": float(r.discount),
             "total_amount": float(r.total_amount),
+            "ingested_at": r.ingested_at.isoformat() if r.ingested_at else None,
+            "etl_job_id": str(r.etl_job_id) if r.etl_job_id else None,
+            "source_id": str(r.source_id) if r.source_id else None,
         }
         for r in rows
     ]

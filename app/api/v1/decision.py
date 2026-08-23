@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
@@ -226,12 +226,6 @@ class ReportOut(BaseModel):
     created_at: datetime
 
 
-class ReportRequest(BaseModel):
-    period_start: date
-    period_end: date
-    format: Literal["pdf", "xlsx"] = "pdf"
-
-
 @router.get("/reports", response_model=list[ReportOut])
 async def list_reports(db: DbSession) -> list[ReportOut]:
     rows = (
@@ -242,37 +236,169 @@ async def list_reports(db: DbSession) -> list[ReportOut]:
     return [ReportOut.model_validate(r) for r in rows]
 
 
+class ReportRequest(BaseModel):
+    period_start: date
+    period_end: date
+    format: Literal["pdf", "xlsx"] = "pdf"
+    email_me: bool = False  # when true, also email the file to the requester
+
+
+class ReportJobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: str
+    report_type: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+    format: str | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    report_id: UUID | None = None
+    position: int | None = None
+    total_in_queue: int | None = None
+    estimated_wait_seconds: int | None = None
+    error: str | None = None
+
+
 @router.post(
     "/reports/generate",
-    response_model=ReportOut,
+    response_model=ReportJobOut,
     dependencies=[Depends(require_role("manager"))],
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
-async def generate_report(body: ReportRequest, db: DbSession, user: CurrentUser) -> ReportOut:
-    from app.services.reports import builder
+async def generate_report(
+    body: ReportRequest, db: DbSession, user: CurrentUser
+) -> ReportJobOut:
+    """Enqueue a report build. Returns 202 with queue position. Worker builds it with concurrency 2.
+
+    When 100 managers POST at once, each INSERT is fast and the worker drains the queue
+    sequentially, so the API never blocks and the UI can show Queued → Processing → Completed.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     if body.period_end < body.period_start:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "period_end before period_start")
     title = f"Business summary {body.period_start:%d %b %Y} – {body.period_end:%d %b %Y}"
-    if body.format == "pdf":
-        payload = await builder.build_pdf(db, body.period_start, body.period_end, title)
-    else:
-        payload = await builder.build_xlsx(db, body.period_start, body.period_end)
 
-    key = make_key(f"report-{body.period_start}-{body.period_end}.{body.format}")
-    stored = FileStorage().save(key, payload)
-    report = Report(
-        report_type="custom",
+    from app.services.reports.queue import enqueue_report_job
+
+    job = await enqueue_report_job(
+        db,
+        period_start=body.period_start,
+        period_end=body.period_end,
+        fmt=body.format,
+        generated_by=user.id,
+        user_email=user.email,
+        email_me=body.email_me,
+        title=title,
+    )
+
+    # Return immediately - queue position will be polled via GET /reports/jobs
+    return ReportJobOut(
+        id=job.id,
+        status=job.status,
         period_start=body.period_start,
         period_end=body.period_end,
         format=body.format,
-        s3_key=stored,
-        generated_by=user.id,
+        created_at=job.created_at if hasattr(job, "created_at") else None,
+        report_id=None,
+        position=None,
+        total_in_queue=None,
+        estimated_wait_seconds=None,
+        error=None,
     )
-    db.add(report)
-    await db.commit()
-    await db.refresh(report)
-    return ReportOut.model_validate(report)
+
+
+@router.get("/reports/jobs", response_model=list[ReportJobOut])
+async def list_report_jobs(
+    db: DbSession, user: CurrentUser, status: str | None = None, limit: int = Query(20, ge=1, le=100)
+) -> list[ReportJobOut]:
+    """List report jobs for the current user (or all for admin). Shows queue, processing, completed, failed."""
+    from sqlalchemy import select as sa_select
+
+    from app.models.jobs import BackgroundJob
+    from app.services.reports.queue import get_queue_position
+
+    is_admin = user.role == "admin"
+    stmt = sa_select(BackgroundJob).where(BackgroundJob.name == "report_generate").order_by(BackgroundJob.run_at.desc()).limit(limit)
+    if not is_admin:
+        # Filter to own jobs via payload->>generated_by (JSONB)
+        stmt = stmt.where(BackgroundJob.payload["generated_by"].astext == str(user.id))
+    if status:
+        stmt = stmt.where(BackgroundJob.status == status)
+    rows = (await db.execute(stmt)).scalars().all()
+    out: list[ReportJobOut] = []
+    for r in rows:
+        payload = r.payload or {}
+        pos = None
+        total = None
+        est = None
+        if r.status in ("pending", "claimed"):
+            try:
+                pos, total = await get_queue_position(r.id, db)
+                est = max(0, (pos - 1) * 7) if pos else 0
+            except Exception:
+                pass
+        out.append(
+            ReportJobOut(
+                id=r.id,
+                status=r.status,
+                period_start=date.fromisoformat(payload["period_start"]) if payload.get("period_start") else None,
+                period_end=date.fromisoformat(payload["period_end"]) if payload.get("period_end") else None,
+                format=payload.get("format"),
+                created_at=r.created_at if hasattr(r, "created_at") else r.run_at,
+                started_at=r.started_at,
+                finished_at=r.finished_at,
+                report_id=UUID(payload["report_id"]) if payload.get("report_id") else None,
+                position=pos,
+                total_in_queue=total,
+                estimated_wait_seconds=est,
+                error=r.last_error,
+            )
+        )
+    return out
+
+
+@router.get("/reports/jobs/{job_id}", response_model=ReportJobOut)
+async def get_report_job(job_id: UUID, db: DbSession, user: CurrentUser) -> ReportJobOut:
+    from app.models.jobs import BackgroundJob
+    from app.services.reports.queue import get_queue_position
+
+    job = await db.get(BackgroundJob, job_id)
+    if not job or job.name != "report_generate":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    payload = job.payload or {}
+    # Only owner or admin can view
+    if str(payload.get("generated_by")) != str(user.id) and user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed")
+    pos = None
+    total = None
+    est = None
+    if job.status in ("pending", "claimed"):
+        try:
+            pos, total = await get_queue_position(job.id, db)
+            est = max(0, (pos - 1) * 7) if pos else 0
+        except Exception:
+            pass
+    return ReportJobOut(
+        id=job.id,
+        status=job.status,
+        period_start=date.fromisoformat(payload["period_start"]) if payload.get("period_start") else None,
+        period_end=date.fromisoformat(payload["period_end"]) if payload.get("period_end") else None,
+        format=payload.get("format"),
+        created_at=job.created_at if hasattr(job, "created_at") else job.run_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        report_id=UUID(payload["report_id"]) if payload.get("report_id") else None,
+        position=pos,
+        total_in_queue=total,
+        estimated_wait_seconds=est,
+        error=job.last_error,
+    )
 
 
 @router.get("/reports/{report_id}/download")

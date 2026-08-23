@@ -79,6 +79,9 @@ class TransactionRow(BaseModel):
     discount: float | None = None
     total_amount: float | None = None
     redacted: bool | None = None  # field-level redaction for analyst role
+    ingested_at: datetime | str | None = None  # worker ingestion timestamp (professional)
+    etl_job_id: str | None = None  # ETL job that produced this row (worker trace)
+    source_id: str | None = None
 
 
 class Paginated[T](BaseModel):

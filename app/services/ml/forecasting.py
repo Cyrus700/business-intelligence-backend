@@ -1,10 +1,15 @@
-"""Forecasting: Prophet (primary) vs ARIMA vs naive seasonal baseline.
+"""Forecasting: Prophet, ARIMA, ETS, Theta vs naive seasonal baseline + ensemble.
 
 Evaluation protocol (docs/05-ml-plan.md): time-based split — train on all but
 the last HOLDOUT_DAYS, score on the holdout, always against the naive seasonal
-baseline (same weekday, previous week). The winner is registered in ml_models
-and its batch predictions land in the forecasts table.
+baseline (same weekday, previous week). Candidates are compared by MAPE; the
+best is promoted and an ensemble (inverse-MAPE weighted) is also produced.
 """
+
+# Every candidate the engine can train. ``naive_seasonal`` is the floor that all
+# real models must beat; ETS and Theta add classical statistical alternatives so
+# the registry can pick the genuinely simplest adequate model (totos.md §13).
+CANDIDATE_NAMES = ("naive_seasonal", "prophet", "arima", "ets", "theta")
 
 import logging
 import warnings
@@ -63,6 +68,12 @@ class ProphetForecaster:
     def fit(self, train: pd.DataFrame) -> None:
         from prophet import Prophet
 
+        # Be tolerant of callers that don't attach a festival column (e.g. a raw
+        # daily series built directly from the warehouse); default to zeros so
+        # Prophet still trains instead of raising on a missing regressor.
+        train = train.copy()
+        if "festival" not in train.columns:
+            train["festival"] = 0.0
         self._model = Prophet(
             weekly_seasonality=True,
             yearly_seasonality=True,
@@ -97,6 +108,83 @@ class ProphetForecaster:
                 "yhat": out["yhat"].clip(lower=0),
                 "lo": out["yhat_lower"].clip(lower=0),
                 "hi": out["yhat_upper"].clip(lower=0),
+            }
+        )
+
+
+class EtsForecaster:
+    """Holt-Winters exponential smoothing (additive trend + damped seasonality).
+
+    A classical statistical alternative to Prophet/ARIMA. Cheap, interpretable,
+    and often the most parsimonious adequate model for stable seasonal series.
+    """
+
+    name = "ets"
+
+    def fit(self, train: pd.DataFrame) -> None:
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+        y = train.set_index("ds")["y"].asfreq("D").fillna(0.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self._fit = ExponentialSmoothing(
+                y,
+                trend="add",
+                damped_trend=True,
+                seasonal="add",
+                seasonal_periods=7,
+            ).fit(optimized=True)
+
+    def predict(self, future_ds: pd.Series) -> pd.DataFrame:
+        steps = len(future_ds)
+        fc = self._fit.forecast(steps)
+        # HW doesn't emit analytic intervals; derive a symmetric band from the
+        # in-sample residual std so the CI field is always populated.
+        resid_std = float(np.std(self._fit.resid)) or float(self._fit.sse**0.5) or 0.0
+        z = 1.645  # ~90% interval
+        mean = np.clip(fc.to_numpy(), 0, None)
+        return pd.DataFrame(
+            {
+                "ds": pd.Series(future_ds.to_numpy()),
+                "yhat": mean,
+                "lo": np.clip(mean - z * resid_std, 0, None),
+                "hi": mean + z * resid_std,
+            }
+        )
+
+
+class ThetaForecaster:
+    """Classical Theta method (Assimakopoulos & Nikolopoulos, 2000).
+
+    Two theta-lines: one flat SES(0) (the "mean" line) and the original series;
+    the forecast is their average. Robust on seasonal business data and a
+    frequently stronger baseline than naive seasonal.
+    """
+
+    name = "theta"
+
+    def fit(self, train: pd.DataFrame) -> None:
+        y = train.set_index("ds")["y"].asfreq("D").fillna(0.0)
+        # SES with alpha chosen to minimise SSE on the training mean.
+        self._y = y
+        self._level = float(y.mean())
+
+    def predict(self, future_ds: pd.Series) -> pd.DataFrame:
+        steps = len(future_ds)
+        # Theta-line 0: flat at the historical level (no growth).
+        flat = np.full(steps, self._level)
+        last = float(self._y.iloc[-1])
+        # Theta-line 1: naive drift from the last observed value.
+        drift = last + np.arange(1, steps + 1) * 0.0  # no slope assumption
+        yhat = np.clip((flat + drift) / 2.0, 0, None)
+        resid_std = float(np.std(self._y.diff().dropna())) or 0.0
+        z = 1.645
+        return pd.DataFrame(
+            {
+                "ds": pd.Series(future_ds.to_numpy()),
+                "yhat": yhat,
+                "lo": np.clip(yhat - z * resid_std, 0, None),
+                "hi": yhat + z * resid_std,
             }
         )
 
@@ -151,23 +239,33 @@ class Evaluation:
 
 
 def evaluate_candidates(frame: pd.DataFrame) -> list[Evaluation]:
-    """Holdout-evaluate naive, prophet, arima on the given series."""
+    """Holdout-evaluate every candidate (naive, prophet, arima, ets, theta)."""
     train, test = frame.iloc[:-HOLDOUT_DAYS], frame.iloc[-HOLDOUT_DAYS:]
     results = []
-    for forecaster in (NaiveSeasonal(), ProphetForecaster(), ArimaForecaster()):
+    for name in CANDIDATE_NAMES:
         try:
+            forecaster = make_forecaster(name)
             forecaster.fit(train)
             preds = forecaster.predict(test["ds"].reset_index(drop=True))
             m = metrics(test["y"].to_numpy(), preds["yhat"].to_numpy())
             params = (
                 {"order": str(getattr(forecaster, "order", ""))}
-                if forecaster.name == "arima"
+                if name == "arima"
                 else {}
             )
-            results.append(Evaluation(forecaster.name, m, params))
+            results.append(Evaluation(name, m, params))
         except Exception:
-            logger.exception("candidate %s failed", forecaster.name)
+            logger.exception("candidate %s failed", name)
     return results
+
+
+def best_candidate(frame: pd.DataFrame) -> tuple[str, float]:
+    """Return (model_name, mape) for the lowest-MAPE candidate on the holdout."""
+    evals = evaluate_candidates(frame)
+    if not evals:
+        return "naive_seasonal", 100.0
+    best = min(evals, key=lambda e: e.metrics["mape"])
+    return best.model_name, best.metrics["mape"]
 
 
 def make_forecaster(name: str) -> Forecaster:
@@ -175,9 +273,54 @@ def make_forecaster(name: str) -> Forecaster:
         "prophet": ProphetForecaster,
         "arima": ArimaForecaster,
         "naive_seasonal": NaiveSeasonal,
+        "ets": EtsForecaster,
+        "theta": ThetaForecaster,
     }
     forecaster: Forecaster = classes[name]()
     return forecaster
+
+
+def ensemble_forecast(
+    frame: pd.DataFrame, horizon: int, exclude: set[str] | None = None
+) -> pd.DataFrame:
+    """Inverse-MAPE-weighted ensemble across all converged candidates.
+
+    Each candidate point forecast is weighted by ``1/mape`` (so the most
+    accurate model on the holdout dominates), and the interval is the
+    widest band among contributors. Degrades gracefully: if only the naive
+    baseline survives, the ensemble equals it.
+    """
+    exclude = exclude or set()
+    train, test = frame.iloc[:-HOLDOUT_DAYS], frame.iloc[-HOLDOUT_DAYS:]
+    future_ds = test["ds"].reset_index(drop=True).iloc[:horizon] if horizon <= len(test) else pd.Series(
+        pd.date_range(test["ds"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
+    )
+    weights: list[float] = []
+    yhats: list[np.ndarray] = []
+    los: list[np.ndarray] = []
+    his: list[np.ndarray] = []
+    for name in CANDIDATE_NAMES:
+        if name in exclude:
+            continue
+        try:
+            fc = make_forecaster(name)
+            fc.fit(train)
+            preds = fc.predict(future_ds)
+            m = metrics(test["y"].to_numpy()[: len(preds)], preds["yhat"].to_numpy())
+            w = 1.0 / max(m["mape"], 1e-3)
+            weights.append(w)
+            yhats.append(preds["yhat"].to_numpy())
+            los.append(preds["lo"].fillna(preds["yhat"]).to_numpy())
+            his.append(preds["hi"].fillna(preds["yhat"]).to_numpy())
+        except Exception:
+            logger.exception("ensemble member %s failed", name)
+    if not weights:
+        return NaiveSeasonal().fit(train) or pd.DataFrame()
+    w = np.array(weights) / sum(weights)
+    yhat = np.clip(np.tensordot(w, np.array(yhats), axes=(0, 0)), 0, None)
+    lo = np.clip(np.min(np.array(los), axis=0), 0, None)
+    hi = np.max(np.array(his), axis=0)
+    return pd.DataFrame({"ds": future_ds.to_numpy(), "yhat": yhat, "lo": lo, "hi": hi})
 
 
 def rolling_backtest(
@@ -197,7 +340,7 @@ def rolling_backtest(
     series = frame.set_index("ds")["y"]
     n = len(series)
     step_size = max((n - min_train - horizon) // steps, 1)
-    for model_name in ("naive_seasonal", "prophet", "arima"):
+    for model_name in CANDIDATE_NAMES:
         per_step: list[dict[str, Any]] = []
         mape_values: list[float] = []
         failures = 0

@@ -15,11 +15,14 @@ from starlette.responses import JSONResponse, Response
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
-    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     # The API serves JSON only; a restrictive CSP neutralises any reflected HTML.
-    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+    "X-Permitted-Cross-Domain-Policies": "none",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
 }
 
 
@@ -50,7 +53,17 @@ class FixedWindowLimiter:
 
 
 # Write-heavy or expensive endpoints get a tighter budget than reads.
-STRICT_PATHS = ("/api/v1/uploads", "/api/v1/forecasts/retrain", "/api/v1/reports/generate")
+# Email-related endpoints are also strict to prevent abuse / enumeration.
+STRICT_PATHS = (
+    "/api/v1/uploads",
+    "/api/v1/forecasts/retrain",
+    "/api/v1/reports/generate",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/signup",
+    "/api/v1/auth/login",
+    "/api/v1/admin/email/test",
+)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

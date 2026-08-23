@@ -178,10 +178,26 @@ async def extract_rest_api(
 
     validate_public_http_url(url)
     own_client = client is None
-    client = client or httpx.AsyncClient(timeout=30)
+    # Never follow redirects automatically — a redirect to an internal host
+    # would bypass the pre-flight check. We handle one hop manually below.
+    client = client or httpx.AsyncClient(timeout=30, follow_redirects=False)
     try:
         resp = await client.get(url, headers=config.get("headers") or {})
+        # Manual single-hop redirect handling with re-validation
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("location")
+            if not location:
+                raise ValueError("REST source redirect missing Location header")
+            # Resolve relative redirects against the original URL
+            from urllib.parse import urljoin
+
+            redirect_url = urljoin(url, location)
+            validate_public_http_url(redirect_url)
+            resp = await client.get(redirect_url, headers=config.get("headers") or {})
         resp.raise_for_status()
+        # Guard against non-JSON bombs / huge payloads
+        if int(resp.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
+            raise ValueError("REST source response too large (>10 MB)")
         payload = resp.json()
     finally:
         if own_client:
@@ -202,6 +218,10 @@ async def extract_postgres(config: dict[str, Any]) -> pd.DataFrame:
         raise ValueError("postgres source config needs 'dsn' and 'query'")
     if not query.lstrip().lower().startswith("select"):
         raise ValueError("postgres source query must be a SELECT")
+    # SSRF guard for PG DSNs — block loopback / metadata
+    from app.services.etl.ssrf import validate_postgres_dsn
+
+    validate_postgres_dsn(dsn)
     engine = create_async_engine(dsn, connect_args={"statement_cache_size": 0})
     try:
         async with engine.connect() as conn:

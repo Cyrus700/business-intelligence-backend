@@ -29,6 +29,6 @@ class BackgroundJob(Base, TimestampMixin):
     finished_at: Mapped[datetime | None]
 
     __table_args__ = (
-        CheckConstraint("status IN ('pending', 'succeeded', 'failed')", name="valid_status"),
+        CheckConstraint("status IN ('pending', 'claimed', 'succeeded', 'failed')", name="valid_status"),
         Index("ix_background_jobs_pending", "status", "run_at"),
     )

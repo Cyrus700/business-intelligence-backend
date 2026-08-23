@@ -1,16 +1,19 @@
+import logging
 from uuid import NAMESPACE_URL, uuid5
 
 import bcrypt
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.core.security import sign_token
+from app.core.security import sign_reset_token, sign_token
 from app.models import Profile
 from app.schemas.identity import ProfileOut
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -94,25 +97,42 @@ async def google_callback(
             await db.execute(select(Profile).where(Profile.email == email))
         ).scalar_one_or_none()
 
+    # ADMIN_EMAIL from env is the source of truth — any Google login matching it becomes admin
+    # (case-insensitive). This makes home1051ab@gmail.com admin via "Continue with Google" without manual DB edit.
+    admin_email = (s.admin_email or "").strip().lower()
+    is_admin_login = bool(admin_email and email.strip().lower() == admin_email)
+
     if existing is None:
         profile = Profile(
             id=profile_id,
             email=email,
             full_name=name,
-            role="analyst",
+            role="admin" if is_admin_login else "analyst",
             is_active=True,
         )
         db.add(profile)
         await db.commit()
         await db.refresh(profile)
+        if is_admin_login:
+            logger.info("Google signup promoted %s to admin via ADMIN_EMAIL", email)
     else:
         profile = existing
+        # Keep display name in sync; auto-promote to admin if ADMIN_EMAIL now matches but role was lower
+        updated = False
         if profile.full_name != name:
             profile.full_name = name
-        await db.commit()
-        await db.refresh(profile)
+            updated = True
+        if is_admin_login and profile.role != "admin":
+            profile.role = "admin"
+            # Bump token_version so permission change takes effect immediately (old tokens invalidated)
+            profile.token_version = (profile.token_version or 0) + 1
+            updated = True
+            logger.info("Google login auto-promoted %s to admin via ADMIN_EMAIL", email)
+        if updated:
+            await db.commit()
+            await db.refresh(profile)
 
-    token = sign_token(profile.id, profile.email, profile.role)
+    token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version)
 
     frontend_url = s.frontend_url
     return RedirectResponse(
@@ -234,93 +254,124 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
 
     audit("auth.login", profile.id)
     await db.commit()
-    token = sign_token(profile.id, profile.email, profile.role)
+    token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version)
     return AuthOut(token=token, user=ProfileOut.model_validate(profile))
 
 
 @router.post("/signup", response_model=AuthOut, status_code=201)
-async def signup(body: SignupBody, db: DbSession) -> AuthOut:
+async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTasks) -> AuthOut:
     existing = await db.execute(select(Profile).where(Profile.email == body.email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(409, "An account with this email already exists")
 
     if len(body.password) < 8:
         raise HTTPException(422, "Password must be at least 8 characters")
+    if not (any(c.isalpha() for c in body.password) and any(c.isdigit() for c in body.password)):
+        raise HTTPException(422, "Password must contain at least one letter and one number")
+    if body.password.lower() in {"password", "12345678", "admin123", "qwerty123"}:
+        raise HTTPException(422, "Password is too common")
+
+    # ADMIN_EMAIL owns the admin role — even email/password signup honours it
+    s = get_settings()
+    admin_email = (s.admin_email or "").strip().lower()
+    assigned_role = "admin" if admin_email and body.email.strip().lower() == admin_email else "analyst"
 
     profile_id = uuid5(NAMESPACE_URL, f"email://{body.email}")
-    pw_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+    pw_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt(rounds=12)).decode()
 
     profile = Profile(
         id=profile_id,
         email=body.email,
         password_hash=pw_hash,
         full_name=body.full_name,
-        role="analyst",
+        role=assigned_role,
         is_active=True,
     )
     db.add(profile)
     await db.commit()
     await db.refresh(profile)
 
-    token = sign_token(profile.id, profile.email, profile.role)
+    token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version)
+
+    # Best-effort welcome email — never blocks signup or fails the request.
+    try:
+        from app.services.email.service import send_welcome_email
+
+        background_tasks.add_task(send_welcome_email, profile.email, profile.full_name)
+    except Exception:
+        logger.exception("failed to queue welcome email for %s", profile.email)
+
     return AuthOut(token=token, user=ProfileOut.model_validate(profile))
 
 
 @router.post("/forgot-password")
-async def forgot_password(body: ForgotPasswordBody, db: DbSession) -> dict[str, str]:
+async def forgot_password(
+    body: ForgotPasswordBody, db: DbSession, background_tasks: BackgroundTasks
+) -> dict[str, str]:
     result = await db.execute(select(Profile).where(Profile.email == body.email))
     profile = result.scalar_one_or_none()
     if profile is None:
         return {"message": "If an account exists for this email, a reset link has been sent."}
 
-    settings = get_settings()
-    reset_token = sign_token(profile.id, profile.email, profile.role)
+    # Short-lived, purpose-bound reset token (30 min, purpose=reset)
+    reset_token = sign_reset_token(profile.id, profile.email, profile.role, token_version=profile.token_version)
 
+    settings = get_settings()
     if settings.smtp_host:
         try:
-            import smtplib
-            from email.mime.text import MIMEText
+            from app.services.email.service import send_password_reset_email
 
-            msg = MIMEText(
-                f"Reset your password here:\n{settings.frontend_url}/reset-password?token={reset_token}"
+            # Background delivery so the endpoint returns quickly and timing
+            # doesn't leak whether the address was real.
+            background_tasks.add_task(
+                send_password_reset_email, profile.email, reset_token, profile.full_name
             )
-            msg["Subject"] = "Insightful — Password Reset"
-            msg["From"] = settings.smtp_from
-            msg["To"] = body.email
-
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-                if settings.smtp_user:
-                    server.login(settings.smtp_user, settings.smtp_password)
-                server.send_message(msg)
         except Exception:
-            raise HTTPException(502, "Failed to send reset email")
+            logger.exception("failed to queue reset email for %s", profile.email)
+            # Don't fail the request — the user-facing contract is always the
+            # same success message regardless of delivery outcome.
     else:
-        print(f"Password reset token for {body.email}: {reset_token}")
+        # Dev fallback — only in non-prod. In prod this branch is never taken
+        # because SMTP must be configured (Settings validation).
+        if get_settings().is_prod:
+            logger.warning("Password reset requested for %s but SMTP not configured (prod)", body.email)
+        else:
+            logger.info("Password reset token for %s: %s", body.email, reset_token)
+            print(f"Password reset token for {body.email}: {reset_token}")
 
     return {"message": "If an account exists for this email, a reset link has been sent."}
 
 
 @router.post("/reset-password")
 async def reset_password(token: str, new_password: str, db: DbSession) -> AuthOut:
-    from app.core.security import verify_token
+    from app.core.security import verify_reset_token
 
     try:
-        claims = verify_token(token)
+        claims = verify_reset_token(token)
     except Exception:
         raise HTTPException(401, "Invalid or expired reset token")
 
     if len(new_password) < 8:
         raise HTTPException(422, "Password must be at least 8 characters")
+    # Enforce basic complexity: at least one letter and one number
+    if not (any(c.isalpha() for c in new_password) and any(c.isdigit() for c in new_password)):
+        raise HTTPException(422, "Password must contain at least one letter and one number")
 
     profile = await db.get(Profile, claims.user_id)
     if profile is None:
         raise HTTPException(404, "User not found")
+    # Token version must still match — prevents replay after a prior reset
+    if claims.token_version is not None and profile.token_version != claims.token_version:
+        raise HTTPException(401, "Reset token has been invalidated — please request a new link")
 
-    profile.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    profile.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    # Bump token version so any previously-issued reset tokens are invalidated
+    # and existing sessions are rotated (single-use semantics).
+    profile.token_version = (profile.token_version or 0) + 1
     await db.commit()
     await db.refresh(profile)
 
-    new_token = sign_token(profile.id, profile.email, profile.role)
+    new_token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version)
     return AuthOut(token=new_token, user=ProfileOut.model_validate(profile))
 
 

@@ -1,7 +1,12 @@
-"""APScheduler wiring: scheduled pulls for cron-configured rest_api/postgres sources.
+"""APScheduler wiring — professional edition.
 
-Single-worker deployment owns the scheduler (documented in docs/plan/phase-2 risk
-table); a Postgres advisory lock guards against overlapping runs of the same source.
+- Every cron tick is dispatched through the professional worker pool
+  (`app.workers.pool`) so executions are durable, retried, and observable
+  (BackgroundJob rows + in-memory metrics). This is what the All Transactions
+  worker strip and `/admin/workers/*` read.
+- Single-worker ownership is still enforced via the scheduler's own
+  `max_instances=1` + Postgres advisory locks per source, but the pool's
+  `SKIP LOCKED` claim loop makes the same code safe to run on N workers.
 """
 
 import logging
@@ -13,6 +18,7 @@ from sqlalchemy import select, text
 from app.core.clock import business_now, business_today
 from app.core.database import get_session_factory
 from app.models import DataSource
+from app.workers import pool as worker_pool
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,7 @@ async def _run_scheduled_source(source_id: str) -> None:
             await db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), {"key": source_id})
 
 
+# ── Pure business logic (no worker awareness) — kept separate so tests can call them directly
 async def _weekly_retrain() -> None:
     from app.services.ml.registry import train_all
 
@@ -83,6 +90,41 @@ async def _nightly_insights_and_alerts() -> None:
             recs["new"],
             recs["generated"],
         )
+
+
+# ── Worker-pool registrations — professional tracked execution (retries, metrics, durably logged)
+# Each handler is a thin shim so the pool can retry/timeout/observe it independently.
+@worker_pool.register("ml_retrain")
+async def _w_ml_retrain(_payload: dict) -> None:
+    await _weekly_retrain()
+
+@worker_pool.register("anomaly_scan")
+async def _w_anomaly_scan(_payload: dict) -> None:
+    await _daily_anomaly_scan()
+
+@worker_pool.register("drift_check")
+async def _w_drift_check(_payload: dict) -> None:
+    await _daily_drift_check()
+
+@worker_pool.register("insights_alerts")
+async def _w_insights_alerts(_payload: dict) -> None:
+    await _nightly_insights_and_alerts()
+
+@worker_pool.register("source_pull")
+async def _w_source_pull(payload: dict) -> None:
+    await _run_scheduled_source(str(payload["source_id"]))
+
+@worker_pool.register("monthly_report")
+async def _w_monthly_report(_payload: dict) -> None:
+    await _monthly_report()
+
+@worker_pool.register("quality_audit")
+async def _w_quality_audit(_payload: dict) -> None:
+    await _daily_quality_audit()
+
+@worker_pool.register("report_schedules")
+async def _w_report_schedules(_payload: dict) -> None:
+    await _run_due_report_schedules()
 
 
 async def _monthly_report() -> None:
@@ -128,12 +170,13 @@ async def _run_due_report_schedules() -> None:
     Runs the same builder as the manual "Generate report" action, storing the
     file and dropping an in-app notification with the download link's report
     id, then rolls next_run_at forward so today's run can't repeat tomorrow.
+    Also sends an email with the report attached when SMTP is configured.
     """
     from datetime import timedelta
 
     from sqlalchemy import select as sa_select
 
-    from app.models import Notification, Report, ReportSchedule
+    from app.models import Notification, Profile, Report, ReportSchedule
     from app.services.reports import builder
     from app.services.reports.schedule import compute_next_run
     from app.services.storage import FileStorage, make_key
@@ -191,35 +234,90 @@ async def _run_due_report_schedules() -> None:
                 )
                 await db.commit()
                 logger.info("scheduled report %s generated for schedule %s", report.id, schedule.id)
+
+                # Best-effort email delivery — don't fail the schedule if it errors.
+                try:
+                    owner = await db.get(Profile, schedule.created_by)
+                    if owner and owner.is_active and owner.email:
+                        # Honor weekly_digest preference for weekly schedules.
+                        if schedule.frequency == "weekly" and (owner.preferences or {}).get("weekly_digest") is False:
+                            logger.info("skipping weekly digest email for %s (opted out)", owner.email)
+                        else:
+                            from app.services.email.service import send_report_ready_email
+
+                            mime = "application/pdf" if schedule.format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            fname = f"report-{start}-{end}.{schedule.format}"
+                            await send_report_ready_email(
+                                owner.email,
+                                title,
+                                str(start),
+                                str(end),
+                                schedule.format,
+                                attachment=(fname, payload, mime),
+                            )
+                except Exception:
+                    logger.exception("report email failed for schedule %s", schedule.id)
             except Exception:
                 logger.exception("failed to run report schedule %s", schedule.id)
                 await db.rollback()
 
 
+# ── Pool-backed tick wrappers — professional cron dispatch (observable, retried)
+async def _tick_ml_retrain() -> None:
+    await worker_pool.submit_and_wait("ml_retrain")
+
+async def _tick_anomaly_scan() -> None:
+    await worker_pool.submit_and_wait("anomaly_scan")
+
+async def _tick_drift_check() -> None:
+    await worker_pool.submit_and_wait("drift_check")
+
+async def _tick_insights_alerts() -> None:
+    await worker_pool.submit_and_wait("insights_alerts")
+
+async def _tick_monthly_report() -> None:
+    await worker_pool.submit_and_wait("monthly_report")
+
+async def _tick_quality_audit() -> None:
+    await worker_pool.submit_and_wait("quality_audit")
+
+async def _tick_report_schedules() -> None:
+    await worker_pool.submit_and_wait("report_schedules")
+
+async def _tick_source_pull(source_id: str) -> None:
+    await worker_pool.submit_and_wait("source_pull", {"source_id": source_id})
+
+
 async def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
-    _scheduler = AsyncIOScheduler()
+    # Tune pool concurrency from env (default 4, ideal for 1 vCPU; raise to 8 on 2 vCPU)
+    import asyncio
+    import os
+
+    concurrency = int(os.getenv("WORKER_CONCURRENCY", "4"))
+    worker_pool._semaphore = asyncio.Semaphore(concurrency)  # type: ignore[attr-defined]
+    worker_pool.start_claim_loop()
+    # Report queue worker for handling 100 concurrent exports professionally
+    try:
+        from app.services.reports.queue import start_report_claim_loop
+
+        start_report_claim_loop()
+    except Exception:
+        logger.exception("failed to start report claim loop")
+
+    _scheduler = AsyncIOScheduler(
+        job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 300}
+    )
     # ML lifecycle jobs (docs/05-ml-plan.md): weekly retrain, daily anomaly scan
-    _scheduler.add_job(_weekly_retrain, CronTrigger.from_crontab("0 2 * * 1"), id="ml-retrain")
-    _scheduler.add_job(
-        _daily_anomaly_scan, CronTrigger.from_crontab("30 1 * * *"), id="anomaly-scan"
-    )
-    _scheduler.add_job(
-        _daily_drift_check, CronTrigger.from_crontab("0 1 * * *"), id="drift-check"
-    )
-    # decision-support jobs (Phase 5): insights+alerts after the anomaly scan,
-    # monthly summary report on the 1st
-    _scheduler.add_job(
-        _nightly_insights_and_alerts, CronTrigger.from_crontab("0 3 * * *"), id="insights-alerts"
-    )
+    _scheduler.add_job(_tick_ml_retrain, CronTrigger.from_crontab("0 2 * * 1"), id="ml-retrain")
+    _scheduler.add_job(_tick_anomaly_scan, CronTrigger.from_crontab("30 1 * * *"), id="anomaly-scan")
+    _scheduler.add_job(_tick_drift_check, CronTrigger.from_crontab("0 1 * * *"), id="drift-check")
+    # decision-support jobs (Phase 5): insights+alerts after the anomaly scan
+    _scheduler.add_job(_tick_insights_alerts, CronTrigger.from_crontab("0 3 * * *"), id="insights-alerts")
     # Phase 3: daily data-quality audit after the anomaly scan
-    _scheduler.add_job(
-        _daily_quality_audit, CronTrigger.from_crontab("0 2 * * *"), id="quality-audit"
-    )
-    _scheduler.add_job(_monthly_report, CronTrigger.from_crontab("0 4 1 * *"), id="monthly-report")
-    _scheduler.add_job(
-        _run_due_report_schedules, CronTrigger.from_crontab("0 5 * * *"), id="report-schedules"
-    )
+    _scheduler.add_job(_tick_quality_audit, CronTrigger.from_crontab("0 2 * * *"), id="quality-audit")
+    _scheduler.add_job(_tick_monthly_report, CronTrigger.from_crontab("0 4 1 * *"), id="monthly-report")
+    _scheduler.add_job(_tick_report_schedules, CronTrigger.from_crontab("0 5 * * *"), id="report-schedules")
     async with get_session_factory()() as db:
         sources = (
             (
@@ -240,14 +338,35 @@ async def start_scheduler() -> AsyncIOScheduler:
         except ValueError:
             logger.error("invalid cron '%s' on source %s", source.schedule_cron, source.name)
             continue
-        _scheduler.add_job(_run_scheduled_source, trigger, args=[str(source.id)], id=str(source.id))
+        _scheduler.add_job(
+            _tick_source_pull,
+            trigger,
+            args=[str(source.id)],
+            id=str(source.id),
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=600,
+        )
     _scheduler.start()
-    logger.info("scheduler started with %d source job(s)", len(_scheduler.get_jobs()))
+    logger.info(
+        "scheduler started (pool=%s concurrency=%d) with %d cron job(s) + %d source pull(s)",
+        worker_pool.worker_id(),
+        concurrency,
+        len([j for j in _scheduler.get_jobs() if not j.id.startswith("src")]),
+        len(sources),
+    )
     return _scheduler
 
 
 def stop_scheduler() -> None:
     global _scheduler
+    worker_pool.stop_claim_loop()
+    try:
+        from app.services.reports.queue import stop_report_claim_loop
+
+        stop_report_claim_loop()
+    except Exception:
+        pass
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None

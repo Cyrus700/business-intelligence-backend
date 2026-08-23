@@ -64,6 +64,15 @@ def _hash_password(password: str) -> str:
 async def main() -> None:
     settings = get_settings()
 
+    # In prod, refuse to seed weak demo passwords unless explicitly forced.
+    if settings.is_prod:
+        demo_weak = any(u["password"] in {"Manager@123456", "Analyst@123456"} for u in SEED_USERS[1:])
+        if demo_weak:
+            print("Refusing to seed demo users with weak passwords in prod. Set ENV=dev or update passwords.")
+            print("Only the admin user will be seeded from ADMIN_EMAIL/ADMIN_PASSWORD.")
+            # Keep only admin
+            SEED_USERS[:] = SEED_USERS[:1]
+
     SEED_USERS[0]["email"] = settings.admin_email
     SEED_USERS[0]["password"] = settings.admin_password
 

@@ -107,3 +107,46 @@ def validate_public_http_url(url: str) -> str:
 def validate_rest_api_fetch(url: str, client: httpx.AsyncClient | None = None) -> None:
     """Public pre-flight that the ETL path runs before any request."""
     validate_public_http_url(url)
+
+
+def validate_postgres_dsn(dsn: str) -> str:
+    """Block PG DSNs that would probe loopback / cloud metadata.
+
+    The warehouse itself lives on a private network, so we cannot block all
+    RFC1918, but we must refuse loopback/link-local and the 169.254.169.254
+    metadata address that would leak instance credentials.
+    """
+    from urllib.parse import urlparse
+
+    # SQLAlchemy async DSN: postgresql+asyncpg://user:pass@host:5432/db
+    # urlparse needs a scheme it recognises — normalise to postgresql://
+    normalised = dsn.replace("postgresql+asyncpg://", "postgresql://").replace(
+        "postgresql+psycopg://", "postgresql://"
+    )
+    parsed = urlparse(normalised)
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Postgres DSN has no host")
+    lowered = host.rstrip(".").lower()
+    if lowered in {"localhost", "metadata.google.internal"}:
+        raise ValueError(f"Postgres DSN host '{host}' is blocked")
+    try:
+        ip = ipaddress.ip_address(lowered.split("%")[0])
+        if ip.is_loopback or ip.is_link_local or str(ip) == "169.254.169.254":
+            raise ValueError(f"Postgres DSN host '{host}' is a blocked address")
+        # Also block link-local range explicitly
+        if any(ip in net for net in _PRIVATE_NETS if str(net).startswith("169.254") or str(net).startswith("127.")):
+            raise ValueError(f"Postgres DSN host '{host}' is blocked")
+    except ValueError as e:
+        if str(e).startswith("Postgres DSN"):
+            raise
+        # hostname, not IP — resolve and check if it points to metadata/loopback
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or 5432)
+        except OSError:
+            return dsn
+        for info in infos:
+            addr = info[4][0]
+            if addr in {"127.0.0.1", "::1", "169.254.169.254"}:
+                raise ValueError(f"Postgres DSN host '{host}' resolves to blocked address {addr}")
+    return dsn

@@ -107,6 +107,127 @@ async def resume_scheduler_job(job_id: str) -> dict[str, str]:
     return {"status": "ok", "message": f"Job {job_id} resumed"}
 
 
+# ── Workers — professional pool observability (powers All Transactions strip) ──
+
+class WorkerMetricsOut(BaseModel):
+    worker_id: str
+    hostname: str
+    concurrency: int
+    uptime_seconds: float
+    succeeded: int
+    failed: int
+    retried: int
+    dead_lettered: int
+    avg_duration_ms: float
+    p50_ms: float
+    p95_ms: float
+    throughput_per_min: float
+    per_job: dict[str, dict[str, int]]
+
+
+class WorkerRunOut(BaseModel):
+    id: str
+    name: str
+    status: str
+    attempts: int
+    run_at: str | None
+    started_at: str | None
+    finished_at: str | None
+    last_error: str | None
+    worker_id: str | None
+
+
+class WorkersStatusOut(BaseModel):
+    pool: WorkerMetricsOut
+    scheduler: SchedulerStatusOut
+    queue_depth: int
+    recent_runs: list[WorkerRunOut]
+    etl_recent: list[dict[str, Any]]
+
+
+@router.get("/workers/status", response_model=WorkersStatusOut)
+async def workers_status(db: DbSession) -> WorkersStatusOut:
+    from app.models.jobs import BackgroundJob
+    from app.workers.pool import get_metrics
+
+    pool = get_metrics()
+    # queue depth = pending + claimed
+    q_depth = (await db.execute(select(func.count()).select_from(BackgroundJob).where(BackgroundJob.status.in_(["pending", "claimed"])))).scalar() or 0
+    recent = (await db.execute(select(BackgroundJob).order_by(BackgroundJob.run_at.desc()).limit(12))).scalars().all()
+    runs = [
+        WorkerRunOut(
+            id=str(r.id),
+            name=r.name,
+            status=r.status,
+            attempts=r.attempts,
+            run_at=r.run_at.isoformat() if r.run_at else None,
+            started_at=r.started_at.isoformat() if r.started_at else None,
+            finished_at=r.finished_at.isoformat() if r.finished_at else None,
+            last_error=(r.last_error[:200] if r.last_error else None),
+            worker_id=(r.payload or {}).get("worker_id"),
+        )
+        for r in recent
+    ]
+    # ETL recent for All Transactions correlation
+    etl_rows = (await db.execute(select(EtlJob).order_by(EtlJob.started_at.desc()).limit(5))).scalars().all()
+    etl_recent = [
+        {
+            "id": str(j.id),
+            "status": j.status,
+            "rows_loaded": j.rows_loaded,
+            "started_at": j.started_at.isoformat() if j.started_at else None,
+            "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+        }
+        for j in etl_rows
+    ]
+    # scheduler status inline
+    from app.workers.scheduler import _scheduler as sched
+
+    sched_jobs = []
+    if sched:
+        for job in sched.get_jobs():
+            sched_jobs.append(
+                SchedulerJobOut(
+                    id=job.id,
+                    name=job.name or job.id,
+                    next_run=job.next_run_time.isoformat() if job.next_run_time else None,
+                    last_run=None,
+                    status="scheduled" if job.next_run_time else "paused",
+                    schedule=str(job.trigger),
+                    trigger="cron",
+                )
+            )
+    sched_status = SchedulerStatusOut(running=sched.running if sched else False, jobs=sched_jobs, timezone="Asia/Kathmandu")
+    return WorkersStatusOut(
+        pool=WorkerMetricsOut(**pool),
+        scheduler=sched_status,
+        queue_depth=int(q_depth),
+        recent_runs=runs,
+        etl_recent=etl_recent,
+    )
+
+
+@router.get("/workers/runs", response_model=list[WorkerRunOut])
+async def workers_runs(db: DbSession, limit: int = 20) -> list[WorkerRunOut]:
+    from app.models.jobs import BackgroundJob
+
+    rows = (await db.execute(select(BackgroundJob).order_by(BackgroundJob.run_at.desc()).limit(min(limit, 50)))).scalars().all()
+    return [
+        WorkerRunOut(
+            id=str(r.id),
+            name=r.name,
+            status=r.status,
+            attempts=r.attempts,
+            run_at=r.run_at.isoformat() if r.run_at else None,
+            started_at=r.started_at.isoformat() if r.started_at else None,
+            finished_at=r.finished_at.isoformat() if r.finished_at else None,
+            last_error=(r.last_error[:200] if r.last_error else None),
+            worker_id=(r.payload or {}).get("worker_id"),
+        )
+        for r in rows
+    ]
+
+
 # ── Storage ────────────────────────────────────────────────────────────────
 
 
@@ -271,13 +392,64 @@ async def security_status(db: DbSession) -> SecurityStatusOut:
             "last_event": None,
         },
         auth={
-            "jwt_expiry_hours": 1,
+            "jwt_expiry_hours": settings.jwt_expiry_hours,
+            "jwt_reset_expiry_minutes": settings.jwt_reset_expiry_minutes,
             "bcrypt_cost": 12,
             "google_oauth": bool(settings.google_client_id),
             "failed_logins_24h": failed_logins,
             "last_failed": None,
         },
     )
+
+
+# ── Email ──────────────────────────────────────────────────────────────────
+
+
+class EmailTestIn(BaseModel):
+    to: str  # validated as EmailStr below in handler; manual check avoids extra dep
+
+    @staticmethod
+    def _validate_email(v: str) -> str:
+        import re
+
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v.strip()):
+            raise ValueError("invalid email address")
+        if "\n" in v or "\r" in v:
+            raise ValueError("header injection detected")
+        return v.strip()
+
+
+@router.get("/email/status")
+async def email_status() -> dict[str, Any]:
+    from app.core.config import get_settings
+    from app.services.email.service import is_configured, stats_snapshot
+
+    s = get_settings()
+    return {
+        "configured": is_configured(),
+        "host": s.smtp_host or None,
+        "port": s.smtp_port,
+        "from": s.smtp_from,
+        "stats": stats_snapshot(),
+    }
+
+
+@router.post("/email/test")
+async def email_test(body: EmailTestIn) -> dict[str, Any]:
+    from app.services.email.service import is_configured, send_test_email
+
+    # Input sanitisation — prevent header injection via the test endpoint
+    try:
+        to = EmailTestIn._validate_email(body.to)
+    except ValueError as e:
+        from fastapi import HTTPException
+
+        raise HTTPException(422, str(e)) from e
+
+    if not is_configured():
+        return {"status": "skipped", "detail": "SMTP not configured"}
+    ok = await send_test_email(to)
+    return {"status": "ok" if ok else "failed", "to": to, "sent": ok}
 
 
 # ── System quick stats ────────────────────────────────────────────────────
