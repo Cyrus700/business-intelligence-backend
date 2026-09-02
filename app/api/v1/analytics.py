@@ -1,12 +1,14 @@
 """Analytics endpoints: /kpis, /sales, /finance, /inventory (Phase 3)."""
 
+import dataclasses
 from datetime import date, timedelta
 from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 
-from app.api.deps import DbSession, get_current_user, require_role
+from app.api.deps import CurrentUser, DbSession, get_current_user, is_super_admin, require_role
 from app.core.clock import business_today
 from app.schemas.analytics import (
     DataCoverage,
@@ -53,8 +55,15 @@ FiltersDep = Annotated[Filters, Depends(get_filters)]
 router = APIRouter(tags=["analytics"], dependencies=[Depends(get_current_user)])
 
 
+def _scoped_filters(f: Filters, user: CurrentUser) -> Filters:
+    if is_super_admin(user):
+        return f
+    return dataclasses.replace(f, org_id=user.org_id)
+
+
 @router.get("/kpis/summary", response_model=KpiSummary)
-async def get_kpi_summary(db: DbSession, f: FiltersDep) -> KpiSummary:
+async def get_kpi_summary(db: DbSession, f: FiltersDep, user: CurrentUser) -> KpiSummary:
+    f = _scoped_filters(f, user)
     cards = await queries.kpi_summary(db, f)
     return KpiSummary(period_start=f.date_from, period_end=f.date_to, cards=cards)
 
@@ -63,9 +72,11 @@ async def get_kpi_summary(db: DbSession, f: FiltersDep) -> KpiSummary:
 async def get_kpi_timeseries(
     db: DbSession,
     f: FiltersDep,
+    user: CurrentUser,
     metric: Literal["revenue", "orders", "avg_order_value", "expense_total"] = "revenue",
     granularity: Literal["day", "week", "month", "quarter", "year"] = "day",
 ) -> Timeseries:
+    f = _scoped_filters(f, user)
     points = await queries.kpi_timeseries(db, f, metric, granularity)
     return Timeseries(metric=metric, granularity=granularity, points=points)
 
@@ -74,13 +85,19 @@ async def get_kpi_timeseries(
 async def list_kpi_definitions(
     db: DbSession,
     f: FiltersDep,
+    user: CurrentUser,
 ) -> list[KpiDefinitionOut]:
     """Metadata-driven KPI registry: formula, unit, target, thresholds, visibility."""
     from sqlalchemy import select
 
     from app.models import KpiDefinition
 
-    rows = (await db.execute(select(KpiDefinition).order_by(KpiDefinition.metric))).scalars().all()
+    stmt = select(KpiDefinition).order_by(KpiDefinition.metric)
+    if not is_super_admin(user) and user.org_id:
+        from sqlalchemy import or_
+
+        stmt = stmt.where(or_(KpiDefinition.org_id == user.org_id, KpiDefinition.org_id.is_(None)))
+    rows = (await db.execute(stmt)).scalars().all()
     return [KpiDefinitionOut.model_validate(r) for r in rows]
 
 
@@ -110,22 +127,26 @@ async def update_kpi_definition(
 
 
 @router.get("/sales/by-product", response_model=list[DimensionRow])
-async def sales_by_product(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
+async def sales_by_product(db: DbSession, f: FiltersDep, user: CurrentUser) -> list[DimensionRow]:
+    f = _scoped_filters(f, user)
     return await queries.sales_by_dimension(db, f, "product")
 
 
 @router.get("/sales/by-category", response_model=list[DimensionRow])
-async def sales_by_category(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
+async def sales_by_category(db: DbSession, f: FiltersDep, user: CurrentUser) -> list[DimensionRow]:
+    f = _scoped_filters(f, user)
     return await queries.sales_by_dimension(db, f, "category")
 
 
 @router.get("/sales/by-region", response_model=list[DimensionRow])
-async def sales_by_region(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
+async def sales_by_region(db: DbSession, f: FiltersDep, user: CurrentUser) -> list[DimensionRow]:
+    f = _scoped_filters(f, user)
     return await queries.sales_by_dimension(db, f, "region")
 
 
 @router.get("/sales/by-channel", response_model=list[DimensionRow])
-async def sales_by_channel(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
+async def sales_by_channel(db: DbSession, f: FiltersDep, user: CurrentUser) -> list[DimensionRow]:
+    f = _scoped_filters(f, user)
     return await queries.sales_by_dimension(db, f, "channel")
 
 
@@ -133,7 +154,7 @@ async def sales_by_channel(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
 async def get_sales_transactions(
     db: DbSession,
     f: FiltersDep,
-    user: Annotated[object, Depends(get_current_user)],
+    user: CurrentUser,
     sku: str | None = None,
     search: str | None = None,
     sort_by: str | None = Query(None, description="Sort column: txn_date|product|channel|region|quantity|total_amount|ingested_at"),
@@ -141,9 +162,8 @@ async def get_sales_transactions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> Paginated[TransactionRow]:
+    f = _scoped_filters(f, user)
     items, total = await queries.sales_transactions(db, f, page, page_size, sku, search, sort_by, sort_dir)
-    # field-level redaction: analysts see line-level rows without the money
-    # fields (aggregates stay available via the dimension views)
     from app.api.deps import redact_sensitive
 
     items = [redact_sensitive(user, item) for item in items]
@@ -151,7 +171,8 @@ async def get_sales_transactions(
 
 
 @router.get("/finance/expenses-by-category", response_model=list[DimensionRow])
-async def get_expenses_by_category(db: DbSession, f: FiltersDep) -> list[DimensionRow]:
+async def get_expenses_by_category(db: DbSession, f: FiltersDep, user: CurrentUser) -> list[DimensionRow]:
+    f = _scoped_filters(f, user)
     return await queries.expenses_by_category(db, f)
 
 
@@ -160,29 +181,28 @@ async def get_expenses_by_category(db: DbSession, f: FiltersDep) -> list[Dimensi
     response_model=list[PnlRow],
     dependencies=[Depends(require_role("manager"))],
 )
-async def get_pnl(db: DbSession, f: FiltersDep) -> list[PnlRow]:
+async def get_pnl(db: DbSession, f: FiltersDep, user: CurrentUser) -> list[PnlRow]:
+    f = _scoped_filters(f, user)
     return await queries.monthly_pnl(db, f)
 
 
 @router.get("/inventory/levels", response_model=list[InventoryRow])
 async def get_inventory_levels(
     db: DbSession,
+    user: CurrentUser,
     below_reorder: bool = False,
     as_of: Annotated[
         date | None, Query(description="Newest snapshot on or before this date")
     ] = None,
 ) -> list[InventoryRow]:
-    return await queries.inventory_levels(db, below_reorder_only=below_reorder, as_of=as_of)
+    org_id = None if is_super_admin(user) else user.org_id
+    return await queries.inventory_levels(db, below_reorder_only=below_reorder, as_of=as_of, org_id=org_id)
 
 
 @router.get("/data-coverage", response_model=DataCoverage)
-async def get_data_coverage(db: DbSession) -> DataCoverage:
-    """Which dates the warehouse actually holds, and when it was last loaded.
-
-    Lets the UI label a range picker honestly ("no data for today — latest is
-    X") instead of rendering an empty chart that looks like a zero.
-    """
-    return DataCoverage.model_validate(await queries.data_coverage(db))
+async def get_data_coverage(db: DbSession, user: CurrentUser) -> DataCoverage:
+    org_id = None if is_super_admin(user) else user.org_id
+    return DataCoverage.model_validate(await queries.data_coverage(db, org_id=org_id))
 
 
 @router.get("/watermark")
@@ -209,17 +229,13 @@ async def get_watermark(db: DbSession) -> dict:
 async def diagnose_change_endpoint(
     db: DbSession,
     f: FiltersDep,
+    user: CurrentUser,
     metric: Literal[
         "revenue", "orders", "avg_order_value", "gross_margin", "expense_total"
     ] = "revenue",
     dimensions: str = "region,channel,product",
 ) -> dict:
-    """Diagnostic analytics: decompose a metric's period-over-period change.
-
-    The comparison period is the equal-length window immediately before
-    ``date_from``. Each dimension member's absolute delta is expressed as a
-    share of the total change (contribution decomposition).
-    """
+    f = _scoped_filters(f, user)
     dims = tuple(d.strip() for d in dimensions.split(",") if d.strip())
     return await diagnose_change(
         db,
@@ -230,6 +246,7 @@ async def diagnose_change_endpoint(
         region=f.region,
         channel=f.channel,
         category=f.category,
+        org_id=f.org_id,
     )
 
 

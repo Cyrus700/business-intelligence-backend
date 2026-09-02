@@ -15,6 +15,7 @@ class Intent(StrEnum):
     CHANNELS = "channels"
     REGIONS = "regions"
     COMPARE = "compare"
+    BUSINESS = "business"
     HELP = "help"
     GREETING = "greeting"
     THANKS = "thanks"
@@ -23,6 +24,23 @@ class Intent(StrEnum):
 
 
 _KEYWORDS: dict[Intent, tuple[str, ...]] = {
+    Intent.BUSINESS: (
+        "business name",
+        "company name",
+        "organization name",
+        "organisation name",
+        "org name",
+        "workspace name",
+        "what business",
+        "which business",
+        "my business",
+        "this business",
+        "business is this",
+        "who am i",
+        "what is my",
+        "account name",
+        "tenant name",
+    ),
     # Specific intents first: "revenue forecast" must match FORECAST, not REVENUE.
     Intent.FORECAST: (
         "forecast",

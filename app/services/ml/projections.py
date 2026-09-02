@@ -268,6 +268,7 @@ async def project_current_period(
     metric: str = "revenue",
     period: str = "month",
     lookback_days: int = 90,
+    org_id=None,
 ) -> PeriodProjection:
     """Project how the current month or quarter lands, from live daily data."""
     today = business_today()
@@ -278,7 +279,7 @@ async def project_current_period(
 
     history_from = min(start, today - timedelta(days=lookback_days - 1))
     points = await kpi_timeseries(
-        db, Filters(date_from=history_from, date_to=today), metric, "day"
+        db, Filters(date_from=history_from, date_to=today, org_id=org_id), metric, "day"
     )
     history = [(p["period"], float(p["value"])) for p in points]
     return project_period(history, start, end, today, metric=metric, period_label=label)
@@ -292,8 +293,9 @@ async def simulate_current_period(
     orders_change_pct: float = 0.0,
     aov_change_pct: float = 0.0,
     expense_change_pct: float = 0.0,
+    org_id=None,
 ) -> Scenario:
-    cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=start, date_to=end))}
+    cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=start, date_to=end, org_id=org_id))}
     return simulate(
         revenue=float(cards.get("revenue", {}).get("value") or 0.0),
         orders=float(cards.get("orders", {}).get("value") or 0.0),

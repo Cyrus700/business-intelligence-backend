@@ -42,19 +42,26 @@ async def get_current_user(
     # Session revocation: every JWT carries a "ver" claim minted from
     # profiles.token_version at sign-in. Role downgrades / account flips bump
     # token_version, so pre-downgrade tokens stop working on the very next
-    # request — no reliance on JWT expiry. Tokens minted without a ver claim
-    # (legacy/3rd-party) are accepted as version 0.
-    if (
-        claims.token_version is not None
-        and profile.token_version != claims.token_version
-    ):
+    # request — no reliance on JWT expiry.
+    # Missing ver is treated as 0 (legacy), but if DB has been bumped (>=1) a
+    # token without ver is still rejected — prevents stripping `ver` to bypass revocation.
+    claims_ver = claims.token_version if claims.token_version is not None else 0
+    if claims_ver != profile.token_version:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Session revoked — your token was invalidated by a permissions change. Sign in again.",
         )
-    # DB is authoritative for role (JWT app_metadata may lag a role change)
+    # Enforce org membership for non-super-admins (post-migration, org_id is NOT NULL)
+    if not getattr(profile, "is_super_admin", False) and profile.org_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Organization membership required — ask your admin for an invite or register your business.",
+        )
+    # DB is authoritative for role/org (JWT app_metadata may lag)
+    # If JWT carries org_id but DB differs, DB wins (prevents stale token reuse after org moves)
     request.state.user = profile
     request.state.org_id = profile.org_id
+    request.state.is_super_admin = bool(getattr(profile, "is_super_admin", False))
     return profile
 
 
@@ -108,20 +115,32 @@ def require_permission(*permissions: str) -> Callable[..., Profile]:
 # ── attribute-based access helpers ────────────────────────────────────────
 
 def user_org_id(user: Profile) -> UUID | None:
-    """Tenant scope of the caller (None = default org, multi-tenancy off)."""
+    """Tenant scope of the caller."""
     return user.org_id
 
 
-def org_predicate(column: ColumnElement, org_id: UUID | None) -> ColumnElement:
-    """Row-level tenant filter: the row's org must match the caller's org.
+def is_super_admin(user: Profile) -> bool:
+    return bool(getattr(user, "is_super_admin", False))
 
-    Rows with NULL org_id are legacy/default-org rows and remain visible to
-    everyone (single-tenant history), which keeps the existing warehouse data
-    fully readable after the migration.
+
+def org_predicate(column: ColumnElement, org_id: UUID | None) -> ColumnElement:
+    """Row-level tenant filter: STRICT equality only (no NULL legacy escape).
+
+    Legacy NULL rows have been backfilled into an explicit "legacy" org during
+    the multi-tenant migration; allowing column.is_(None) would leak cross-tenant
+    data.
     """
     if org_id is None:
-        return column.is_(None)  # legacy mode: only unassigned rows exist
-    return column.is_(None) | (column == org_id)
+        # Caller's org is required; transient absence means deny (not leak).
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Organization membership required")
+    return column == org_id
+
+
+def org_predicate_or_super_admin(column: ColumnElement, org_id: UUID | None, *, is_super: bool) -> ColumnElement | None:
+    """Helper for routes that allow super-admin to see all. Returns None → no filter."""
+    if is_super:
+        return None
+    return org_predicate(column, org_id)
 
 
 SENSITIVE_FIELDS = ("total_amount", "discount", "unit_price", "amount")

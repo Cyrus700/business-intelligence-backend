@@ -30,13 +30,18 @@ class MlModel(Base):
     is_active: Mapped[bool] = mapped_column(default=False)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         CheckConstraint(
             "model_type IN ('prophet', 'arima', 'isolation_forest', 'regression_ensemble')",
             name="valid_model_type",
         ),
-        UniqueConstraint("model_type", "target", "dimensions", "version", name="uq_model_version"),
+        UniqueConstraint("model_type", "target", "dimensions", "version", "org_id", name="uq_model_version"),
+        Index("ix_ml_models_org_id", "org_id"),
+        Index("ix_ml_models_org_target", "org_id", "target"),
     )
 
 
@@ -53,6 +58,9 @@ class Forecast(Base):
     yhat_lower: Mapped[Decimal | None] = mapped_column(Metric)
     yhat_upper: Mapped[Decimal | None] = mapped_column(Metric)
     generated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -60,6 +68,8 @@ class Forecast(Base):
         ),
         Index("ix_forecasts_target_date", "target", "forecast_date"),
         Index("ix_forecasts_model_id", "model_id"),
+        Index("ix_forecasts_org_id", "org_id"),
+        Index("ix_forecasts_org_target_date", "org_id", "target", "forecast_date"),
     )
 
 
@@ -83,6 +93,9 @@ class Anomaly(Base):
     resolved_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     # anomalies on the same business day across metrics are grouped into one
     # correlated event (root-cause-aware alerting)
     correlation_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -96,6 +109,8 @@ class Anomaly(Base):
             name="valid_status",
         ),
         Index("ix_anomalies_status", "status"),
+        Index("ix_anomalies_org_id", "org_id"),
+        Index("ix_anomalies_org_status", "org_id", "status"),
     )
 
 
@@ -116,6 +131,9 @@ class AnomalyFeedback(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     disposition: Mapped[str]  # 'false_positive' | 'confirmed'
     note: Mapped[str | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -125,6 +143,7 @@ class AnomalyFeedback(Base):
             "disposition IN ('false_positive', 'confirmed')", name="valid_disposition"
         ),
         Index("ix_anomaly_feedback_anomaly_created", "anomaly_id", "created_at"),
+        Index("ix_anomaly_feedback_org_id", "org_id"),
     )
 
 
@@ -148,4 +167,9 @@ class ModelDrift(Base):
     holdout_mape: Mapped[Decimal | None] = mapped_column(Metric)
     threshold_mape: Mapped[Decimal | None] = mapped_column(Metric)
     triggered: Mapped[bool] = mapped_column(default=False)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    __table_args__ = (Index("ix_model_drift_org_id", "org_id"),)

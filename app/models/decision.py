@@ -34,6 +34,9 @@ class Insight(Base):
     status: Mapped[str] = mapped_column(default="open")
     action: Mapped[str | None] = mapped_column(String(255))
     impact_estimate: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     # dedupe key so re-runs don't duplicate insights (Phase 5)
     dedupe_key: Mapped[str | None] = mapped_column(unique=True)
 
@@ -50,6 +53,8 @@ class Insight(Base):
         CheckConstraint("priority IN ('low', 'medium', 'high')", name="valid_priority"),
         Index("ix_insights_generated_at", "generated_at"),
         Index("ix_insights_type_generated", "insight_type", "generated_at"),
+        Index("ix_insights_org_id", "org_id"),
+        Index("ix_insights_org_type_generated", "org_id", "insight_type", "generated_at"),
     )
 
 
@@ -68,12 +73,16 @@ class AlertRule(Base, TimestampMixin):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         CheckConstraint(
             "condition IN ('gt', 'lt', 'pct_change_gt', 'anomaly_detected')",
             name="valid_condition",
         ),
+        Index("ix_alert_rules_org_id", "org_id"),
     )
 
 
@@ -93,9 +102,15 @@ class Notification(Base):
     title: Mapped[str]
     body: Mapped[str | None] = mapped_column(Text)
     is_read: Mapped[bool] = mapped_column(default=False)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
-    __table_args__ = (Index("ix_notifications_user_unread", "user_id", "is_read"),)
+    __table_args__ = (
+        Index("ix_notifications_user_unread", "user_id", "is_read"),
+        Index("ix_notifications_org_id", "org_id"),
+    )
 
 
 class Report(Base):
@@ -110,6 +125,9 @@ class Report(Base):
     generated_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
@@ -118,6 +136,7 @@ class Report(Base):
             name="valid_report_type",
         ),
         CheckConstraint("format IN ('pdf', 'xlsx')", name="valid_format"),
+        Index("ix_reports_org_id", "org_id"),
     )
 
 
@@ -146,6 +165,9 @@ class ReportSchedule(Base, TimestampMixin):
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         CheckConstraint("frequency IN ('weekly', 'monthly')", name="valid_frequency"),
@@ -157,6 +179,7 @@ class ReportSchedule(Base, TimestampMixin):
             "day_of_month IS NULL OR (day_of_month BETWEEN 1 AND 28)", name="valid_day_of_month"
         ),
         Index("ix_report_schedules_due", "is_active", "next_run_at"),
+        Index("ix_report_schedules_org_id", "org_id"),
     )
 
 
@@ -175,6 +198,9 @@ class RecommendationFeedback(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     action: Mapped[str]  # 'accepted' | 'dismissed' | 'postponed' | 'actioned'
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -185,4 +211,5 @@ class RecommendationFeedback(Base):
         ),
         CheckConstraint("LENGTH(rec_key) > 0", name="ck_rec_key_not_empty"),
         Index("ix_rec_feedback_key_created", "rec_key", "created_at"),
+        Index("ix_rec_feedback_org_id", "org_id"),
     )

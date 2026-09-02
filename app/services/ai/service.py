@@ -323,14 +323,15 @@ async def answer_question(
     user=None,
 ) -> AnswerResult:
     intent = detect_intent(question)
+    org_id = None if getattr(user, "is_super_admin", False) else getattr(user, "org_id", None) if user else None
     if intent in CONVERSATIONAL_INTENTS:
         try:
-            return AnswerResult(reply=await local_answer(db, question, intent), source="local")
+            return AnswerResult(reply=await local_answer(db, question, intent, org_id=org_id, user=user), source="local")
         except Exception as e:
             logger.warning("Local conversational answer failed: %s", e)
             await _reset_transaction(db)
 
-    business_context = await build_business_context(db)
+    business_context = await build_business_context(db, user=user, org_id=org_id)
     system_prompt = _build_system_prompt(role, business_context, page, intent)
     msgs = _recent_history(history or [])
     # The snapshot is evidence too: an answer that quotes it without calling a
@@ -367,7 +368,7 @@ async def answer_question(
 
     await _reset_transaction(db)
     try:
-        reply = await local_answer(db, question, intent)
+        reply = await local_answer(db, question, intent, org_id=org_id, user=user)
         if reply.strip():
             return AnswerResult(reply=reply, source="local")
     except Exception as e:
@@ -431,6 +432,8 @@ def _needs_live_tools(question: str, intent: Intent) -> bool:
     routed through the tool-grounded path and arrives as one block instead.
     Streaming a guess faster is not a feature.
     """
+    if intent == Intent.BUSINESS:
+        return True
     if parse_period(question) is not None:
         return True
     if intent in SNAPSHOT_BLIND_INTENTS:
@@ -453,9 +456,10 @@ async def stream_answer(
     already contain.
     """
     intent = detect_intent(question)
+    org_id_pre = None if getattr(user, "is_super_admin", False) else getattr(user, "org_id", None) if user else None
     if intent in CONVERSATIONAL_INTENTS:
         try:
-            yield await local_answer(db, question, intent)
+            yield await local_answer(db, question, intent, org_id=org_id_pre, user=user)
             return
         except Exception as e:
             logger.warning("Local conversational answer failed: %s", e)
@@ -466,7 +470,8 @@ async def stream_answer(
         yield result.reply
         return
 
-    business_context = await build_business_context(db)
+    org_id = None if getattr(user, "is_super_admin", False) else getattr(user, "org_id", None) if user else None
+    business_context = await build_business_context(db, user=user, org_id=org_id)
     # No tools are attached to a streaming call, so the prompt must not claim
     # otherwise: told to "CALL THE TOOLS" with none available, the model either
     # stalls or narrates a tool call it never made.

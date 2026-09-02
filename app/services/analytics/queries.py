@@ -7,6 +7,7 @@ composite indexes (docs/03-database-schema.md).
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from uuid import UUID
 
 from sqlalchemy import Date, and_, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +36,7 @@ class Filters:
     regions: tuple[str, ...] = ()
     channels: tuple[str, ...] = ()
     categories: tuple[str, ...] = ()
+    org_id: UUID | None = None
 
     @property
     def has_dimensions(self) -> bool:
@@ -49,6 +51,8 @@ class Filters:
 
 def _sales_conditions(f: Filters, date_from: date, date_to: date) -> list:
     conditions = [SalesTransaction.txn_date.between(date_from, date_to)]
+    if f.org_id is not None:
+        conditions.append(SalesTransaction.org_id == f.org_id)
     if f.regions:
         conditions.append(SalesTransaction.region.in_(f.regions))
     elif f.region:
@@ -58,18 +62,28 @@ def _sales_conditions(f: Filters, date_from: date, date_to: date) -> list:
     elif f.channel:
         conditions.append(SalesTransaction.channel == f.channel)
     if f.categories:
+        cat_filter = Product.category.in_(f.categories)
+        if f.org_id is not None:
+            cat_filter = (Product.category.in_(f.categories)) & (Product.org_id == f.org_id)
         conditions.append(
             SalesTransaction.product_id.in_(
-                select(Product.id).where(Product.category.in_(f.categories))
+                select(Product.id).where(cat_filter)
             )
         )
     elif f.category:
+        cat_filter = Product.category == f.category
+        if f.org_id is not None:
+            cat_filter = (Product.category == f.category) & (Product.org_id == f.org_id)
         conditions.append(
             SalesTransaction.product_id.in_(
-                select(Product.id).where(Product.category == f.category)
+                select(Product.id).where(cat_filter)
             )
         )
     return conditions
+
+
+def _org_filter(col, org_id: UUID | None) -> list:
+    return [col == org_id] if org_id is not None else []
 
 
 @cached_query(ttl_seconds=30)
@@ -106,10 +120,11 @@ async def _sales_kpis(
 
 
 @cached_query(ttl_seconds=30)
-async def _expense_kpi(db: AsyncSession, date_from: date, date_to: date) -> float:
-    stmt = select(func.coalesce(func.sum(Expense.amount), 0)).where(
-        Expense.expense_date.between(date_from, date_to)
-    )
+async def _expense_kpi(db: AsyncSession, date_from: date, date_to: date, org_id: UUID | None = None) -> float:
+    conditions = [Expense.expense_date.between(date_from, date_to)]
+    if org_id is not None:
+        conditions.append(Expense.org_id == org_id)
+    stmt = select(func.coalesce(func.sum(Expense.amount), 0)).where(and_(*conditions))
     return float((await db.execute(stmt)).scalar_one())
 
 
@@ -118,16 +133,18 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
     prev_from, prev_to = f.previous_period()
     previous = await _sales_kpis(db, f, prev_from, prev_to)
     if not f.has_dimensions:  # expenses have no sales dimensions
-        current["expense_total"] = await _expense_kpi(db, f.date_from, f.date_to)
-        previous["expense_total"] = await _expense_kpi(db, prev_from, prev_to)
+        current["expense_total"] = await _expense_kpi(db, f.date_from, f.date_to, f.org_id)
+        previous["expense_total"] = await _expense_kpi(db, prev_from, prev_to, f.org_id)
 
     # Metadata-driven parameters (Phase 5): labels, units, targets and
     # thresholds come from kpi_definitions, editable by admins.
+    def_stmt = select(KpiDefinition).where(KpiDefinition.is_active.is_(True))
+    if f.org_id is not None:
+        def_stmt = def_stmt.where(
+            or_(KpiDefinition.org_id == f.org_id, KpiDefinition.org_id.is_(None))
+        )
     definitions = {
-        d.metric: d
-        for d in (
-            await db.execute(select(KpiDefinition).where(KpiDefinition.is_active.is_(True)))
-        ).scalars()
+        d.metric: d for d in (await db.execute(def_stmt)).scalars()
     }
 
     cards = []
@@ -173,16 +190,13 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
 
 async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity: str) -> list[dict]:
     if metric == "expense_total":
-        # date_trunc() on a DATE returns TIMESTAMPTZ, which the driver hands back as a
-        # UTC-converted aware datetime. Calling .date() on that silently shifts every
-        # bucket one day earlier for any database timezone ahead of UTC (Asia/Kathmandu
-        # is +05:45), so a 10 June sale is reported on 9 June. Casting the truncated
-        # value back to DATE in SQL keeps the bucket on the business day and hands
-        # Python a plain date with no timezone attached.
         bucket = cast(func.date_trunc(granularity, cast(Expense.expense_date, Date)), Date)
+        base_cond = [Expense.expense_date.between(f.date_from, f.date_to)]
+        if f.org_id is not None:
+            base_cond.append(Expense.org_id == f.org_id)
         stmt = (
             select(bucket.label("period"), func.sum(Expense.amount).label("value"))
-            .where(Expense.expense_date.between(f.date_from, f.date_to))
+            .where(and_(*base_cond))
             .group_by(bucket)
             .order_by(bucket)
         )
@@ -206,17 +220,20 @@ async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity:
 
 
 async def sales_by_dimension(db: AsyncSession, f: Filters, dimension: str) -> list[dict]:
+    # Org filter: sales rows already filtered via _sales_conditions, but join must not leak cross-org products
     if dimension == "product":
         key, sku = Product.name, Product.sku
-        stmt_from = SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        join_cond = Product.id == SalesTransaction.product_id
+        if f.org_id is not None:
+            join_cond = (Product.id == SalesTransaction.product_id) & (Product.org_id == f.org_id)
+        stmt_from = SalesTransaction.__table__.join(Product.__table__, join_cond)
         group = [Product.name, Product.sku]
     elif dimension == "category":
+        join_cond = Product.id == SalesTransaction.product_id
+        if f.org_id is not None:
+            join_cond = (Product.id == SalesTransaction.product_id) & (Product.org_id == f.org_id)
         key, sku = Product.category, None
-        stmt_from = SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        stmt_from = SalesTransaction.__table__.join(Product.__table__, join_cond)
         group = [Product.category]
     else:
         key = getattr(SalesTransaction, dimension)  # region | channel
@@ -332,13 +349,16 @@ async def sales_transactions(
 
 
 async def expenses_by_category(db: AsyncSession, f: Filters) -> list[dict]:
+    conds = [Expense.expense_date.between(f.date_from, f.date_to)]
+    if f.org_id is not None:
+        conds.append(Expense.org_id == f.org_id)
     stmt = (
         select(
             Expense.category.label("key"),
             func.count(Expense.id).label("orders"),
             func.sum(Expense.amount).label("revenue"),
         )
-        .where(Expense.expense_date.between(f.date_from, f.date_to))
+        .where(and_(*conds))
         .group_by(Expense.category)
         .order_by(func.sum(Expense.amount).desc())
     )
@@ -356,9 +376,10 @@ async def expenses_by_category(db: AsyncSession, f: Filters) -> list[dict]:
 
 
 async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
-    # See the note in kpi_timeseries: the outer cast keeps months on the
-    # business calendar instead of drifting a day under UTC conversion.
     sales_month = cast(func.date_trunc("month", cast(SalesTransaction.txn_date, Date)), Date)
+    sales_conds = [SalesTransaction.txn_date.between(f.date_from, f.date_to)]
+    if f.org_id is not None:
+        sales_conds.append(SalesTransaction.org_id == f.org_id)
     revenue_q = (
         select(
             sales_month.label("month"),
@@ -373,14 +394,17 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
                 Product.__table__, Product.id == SalesTransaction.product_id
             )
         )
-        .where(SalesTransaction.txn_date.between(f.date_from, f.date_to))
+        .where(and_(*sales_conds))
         .group_by(sales_month)
         .subquery()
     )
     expense_month = cast(func.date_trunc("month", cast(Expense.expense_date, Date)), Date)
+    exp_conds = [Expense.expense_date.between(f.date_from, f.date_to)]
+    if f.org_id is not None:
+        exp_conds.append(Expense.org_id == f.org_id)
     expense_q = (
         select(expense_month.label("month"), func.sum(Expense.amount).label("expenses"))
-        .where(Expense.expense_date.between(f.date_from, f.date_to))
+        .where(and_(*exp_conds))
         .group_by(expense_month)
         .subquery()
     )
@@ -410,7 +434,7 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
 
 
 @cached_query(ttl_seconds=60)
-async def data_coverage(db: AsyncSession) -> dict:
+async def data_coverage(db: AsyncSession, org_id=None) -> dict:
     """What the warehouse actually holds, per fact table.
 
     Grounds every "what about <date>?" answer: without it the assistant cannot
@@ -418,6 +442,9 @@ async def data_coverage(db: AsyncSession) -> dict:
     loaded", and will confidently report 0 for both. Also surfaces the newest
     ingestion timestamp so the UI can show data freshness.
     """
+    def _org_cond(col, oid):
+        return [col == oid] if oid is not None else []
+
     sales = (
         await db.execute(
             select(
@@ -425,7 +452,7 @@ async def data_coverage(db: AsyncSession) -> dict:
                 func.max(SalesTransaction.txn_date),
                 func.count(SalesTransaction.id),
                 func.max(SalesTransaction.ingested_at),
-            )
+            ).where(and_(*_org_cond(SalesTransaction.org_id, org_id)))
         )
     ).one()
     expenses = (
@@ -435,7 +462,7 @@ async def data_coverage(db: AsyncSession) -> dict:
                 func.max(Expense.expense_date),
                 func.count(Expense.id),
                 func.max(Expense.ingested_at),
-            )
+            ).where(and_(*_org_cond(Expense.org_id, org_id)))
         )
     ).one()
     inventory = (
@@ -445,7 +472,7 @@ async def data_coverage(db: AsyncSession) -> dict:
                 func.max(InventoryLevel.snapshot_date),
                 func.count(InventoryLevel.id),
                 func.max(InventoryLevel.ingested_at),
-            )
+            ).where(and_(*_org_cond(InventoryLevel.org_id, org_id)))
         )
     ).one()
 
@@ -481,7 +508,7 @@ async def data_coverage(db: AsyncSession) -> dict:
 
 
 async def inventory_levels(
-    db: AsyncSession, below_reorder_only: bool = False, as_of: date | None = None
+    db: AsyncSession, below_reorder_only: bool = False, as_of: date | None = None, org_id=None
 ) -> list[dict]:
     """Stock position per product.
 
@@ -493,10 +520,15 @@ async def inventory_levels(
         InventoryLevel.product_id,
         func.max(InventoryLevel.snapshot_date).label("latest_date"),
     )
+    if org_id is not None:
+        latest_q = latest_q.where(InventoryLevel.org_id == org_id)
     if as_of is not None:
         latest_q = latest_q.where(InventoryLevel.snapshot_date <= as_of)
     latest = latest_q.group_by(InventoryLevel.product_id).subquery()
-    stmt = (
+    join_cond = Product.id == InventoryLevel.product_id
+    if org_id is not None:
+        join_cond = (Product.id == InventoryLevel.product_id) & (Product.org_id == org_id)
+    base_select = (
         select(
             Product.sku,
             Product.name.label("product"),
@@ -517,11 +549,13 @@ async def inventory_levels(
                     latest.c.product_id == InventoryLevel.product_id,
                     latest.c.latest_date == InventoryLevel.snapshot_date,
                 ),
-            ).join(Product.__table__, Product.id == InventoryLevel.product_id)
+            ).join(Product.__table__, join_cond)
         )
         .order_by(Product.sku)
     )
-    rows = [dict(r._mapping) for r in (await db.execute(stmt)).all()]
+    if org_id is not None:
+        base_select = base_select.where(InventoryLevel.org_id == org_id)
+    rows = [dict(r._mapping) for r in (await db.execute(base_select)).all()]
     if below_reorder_only:
         rows = [r for r in rows if r["below_reorder"]]
     return rows

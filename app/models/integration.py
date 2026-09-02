@@ -16,18 +16,22 @@ class DataSource(Base, TimestampMixin):
     __tablename__ = "data_sources"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    name: Mapped[str] = mapped_column(unique=True)
+    name: Mapped[str]
     kind: Mapped[str]
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     target_domain: Mapped[str]
     schedule_cron: Mapped[str | None]
     status: Mapped[str] = mapped_column(default="active")
-    org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         CheckConstraint(f"kind IN {SOURCE_KINDS}", name="valid_kind"),
         CheckConstraint(f"target_domain IN {TARGET_DOMAINS}", name="valid_domain"),
         CheckConstraint("status IN ('active', 'paused', 'error')", name="valid_status"),
+        Index("ix_data_sources_org_id", "org_id"),
+        Index("ix_data_sources_org_name", "org_id", "name", unique=True),
     )
 
 
@@ -37,6 +41,7 @@ class RawUpload(Base):
         CheckConstraint(
             "status IN ('received', 'validated', 'loaded', 'failed')", name="valid_status"
         ),
+        Index("ix_raw_uploads_org_id", "org_id"),
         {"schema": "staging"},
     )
 
@@ -50,7 +55,9 @@ class RawUpload(Base):
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
-    org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     row_count: Mapped[int | None]
     status: Mapped[str] = mapped_column(default="received")
     error_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -64,7 +71,9 @@ class EtlJob(Base):
     data_source_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("data_sources.id", ondelete="SET NULL")
     )
-    org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     trigger: Mapped[str]
     started_at: Mapped[datetime] = mapped_column(server_default=func.now())
     finished_at: Mapped[datetime | None]
@@ -78,4 +87,6 @@ class EtlJob(Base):
         CheckConstraint("trigger IN ('manual', 'schedule', 'upload')", name="valid_trigger"),
         CheckConstraint("status IN ('running', 'succeeded', 'failed')", name="valid_status"),
         Index("ix_etl_jobs_status_started", "status", "started_at"),
+        Index("ix_etl_jobs_org_id", "org_id"),
+        Index("ix_etl_jobs_org_status", "org_id", "status"),
     )

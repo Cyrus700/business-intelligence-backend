@@ -46,11 +46,14 @@ def npr(value: float | None) -> str:
 
 
 async def build_business_context(
-    db: AsyncSession, days: int = DEFAULT_WINDOW_DAYS
+    db: AsyncSession, days: int = DEFAULT_WINDOW_DAYS, *, org_id=None, user=None
 ) -> str:
+    # Resolve org scope: per-business isolation, super-admin sees all
+    if org_id is None and user is not None:
+        org_id = None if getattr(user, "is_super_admin", False) else getattr(user, "org_id", None)
     today = business_today()
     window_start = today - timedelta(days=days - 1)
-    f = Filters(date_from=window_start, date_to=today)
+    f = Filters(date_from=window_start, date_to=today, org_id=org_id)
     lines: list[str] = []
 
     # Temporal anchor first. Without it the model has no idea what "today" is
@@ -62,12 +65,28 @@ async def build_business_context(
         f"current time {now:%H:%M} {BUSINESS_TZ_NAME}."
     )
     lines.append(f"- The figures below cover {window_start.isoformat()} → {today.isoformat()}.")
+    # Business identity — must be first-class so "what is my business name?" is answered correctly
+    try:
+        if org_id is not None:
+            from app.models.identity import Organization
+
+            org = await db.get(Organization, org_id)
+            if org:
+                lines.append(f"- Business / workspace name: **{org.name}** (org_id {org.id})")
+            else:
+                lines.append(f"- Business / workspace id: {org_id} (name not found)")
+        elif user is not None and getattr(user, "is_super_admin", False):
+            lines.append("- Business / workspace: Platform Super-Admin (sees all organizations)")
+        if user is not None:
+            lines.append(f"- Signed-in user: {getattr(user, 'email', 'unknown')} · role {getattr(user, 'role', 'unknown')}")
+    except Exception:
+        pass
     # Everything appended above is calendar metadata, not warehouse data — the
     # "nothing loaded yet" check at the end measures growth past this point.
     header_lines = len(lines)
 
     try:
-        coverage = await data_coverage(db)
+        coverage = await data_coverage(db, org_id=org_id)
         if coverage["first_date"]:
             lines.append(
                 f"- Warehouse holds data from {coverage['first_date']} to "
@@ -107,7 +126,7 @@ async def build_business_context(
         pass
 
     try:
-        levels = await inventory_levels(db)
+        levels = await inventory_levels(db, org_id=org_id)
         if levels:
             total_units = sum(float(r["quantity_on_hand"]) for r in levels)
             low_items = [r for r in levels if r["below_reorder"]]
@@ -125,26 +144,15 @@ async def build_business_context(
         pass
 
     try:
-        model = (
-            await db.execute(
-                select(MlModel)
-                .where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
-                .order_by(MlModel.trained_at.desc())
-            )
-        ).scalar_one_or_none()
+        mq = select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+        if org_id is not None:
+            mq = mq.where(MlModel.org_id == org_id)
+        model = (await db.execute(mq.order_by(MlModel.trained_at.desc()))).scalar_one_or_none()
         if model:
-            rows = (
-                (
-                    await db.execute(
-                        select(Forecast)
-                        .where(Forecast.model_id == model.id)
-                        .order_by(Forecast.forecast_date)
-                        .limit(DEFAULT_WINDOW_DAYS)
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            fq = select(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(DEFAULT_WINDOW_DAYS)
+            if org_id is not None:
+                fq = fq.where(Forecast.org_id == org_id)
+            rows = ((await db.execute(fq)).scalars().all())
             if rows:
                 total = sum(float(r.yhat) for r in rows)
                 avg = total / len(rows)
@@ -156,18 +164,10 @@ async def build_business_context(
         pass
 
     try:
-        anoms = (
-            (
-                await db.execute(
-                    select(Anomaly)
-                    .where(Anomaly.status == "open")
-                    .order_by(Anomaly.detected_at.desc())
-                    .limit(10)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(10)
+        if org_id is not None:
+            aq = aq.where(Anomaly.org_id == org_id)
+        anoms = ((await db.execute(aq)).scalars().all())
         if anoms:
             top = anoms[:3]
             detail = ", ".join(

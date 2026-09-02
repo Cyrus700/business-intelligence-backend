@@ -26,11 +26,20 @@ class Product(Base, TimestampMixin):
     __tablename__ = "products"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    sku: Mapped[str] = mapped_column(unique=True)
+    sku: Mapped[str]
     name: Mapped[str]
     category: Mapped[str | None]
     unit_cost: Mapped[Decimal | None] = mapped_column(Money)
     unit_price: Mapped[Decimal | None] = mapped_column(Money)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
+
+    __table_args__ = (
+        UniqueConstraint("sku", "org_id", name="uq_products_sku_org"),
+        Index("ix_products_org_id", "org_id"),
+        Index("ix_products_sku", "sku"),
+    )
 
 
 class Customer(Base, TimestampMixin):
@@ -75,6 +84,9 @@ class SalesTransaction(Base):
     etl_job_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("etl_jobs.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     # When this row landed in the warehouse, on the business clock. Distinct
     # from the business date above: a February sale uploaded in March has
     # txn_date=February, ingested_at=March. Powers "uploaded today" views and
@@ -86,6 +98,8 @@ class SalesTransaction(Base):
         Index("ix_sales_ingested_at", "ingested_at"),
         Index("ix_sales_txn_date_product", "txn_date", "product_id"),
         Index("ix_sales_txn_date_region", "txn_date", "region"),
+        Index("ix_sales_org_id", "org_id"),
+        Index("ix_sales_org_txn_date", "org_id", "txn_date"),
         CheckConstraint("quantity > 0", name="positive_quantity"),
     )
 
@@ -106,6 +120,9 @@ class Expense(Base):
     etl_job_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("etl_jobs.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     # When this row landed in the warehouse, on the business clock. Distinct
     # from the business date above: a February sale uploaded in March has
     # txn_date=February, ingested_at=March. Powers "uploaded today" views and
@@ -115,6 +132,8 @@ class Expense(Base):
     __table_args__ = (
         Index("ix_expenses_expense_date", "expense_date"),
         Index("ix_expenses_ingested_at", "ingested_at"),
+        Index("ix_expenses_org_id", "org_id"),
+        Index("ix_expenses_org_date", "org_id", "expense_date"),
         CheckConstraint(
             "category IN ('rent', 'salaries', 'utilities', 'marketing', 'logistics', 'other')",
             name="valid_category",
@@ -135,6 +154,9 @@ class InventoryLevel(Base):
     source_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("data_sources.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     # When this row landed in the warehouse, on the business clock. Distinct
     # from the business date above: a February sale uploaded in March has
     # txn_date=February, ingested_at=March. Powers "uploaded today" views and
@@ -144,6 +166,8 @@ class InventoryLevel(Base):
     __table_args__ = (
         Index("ix_inventory_snapshot_date", "snapshot_date"),
         Index("ix_inventory_ingested_at", "ingested_at"),
+        Index("ix_inventory_org_id", "org_id"),
+        Index("ix_inventory_org_snapshot", "org_id", "snapshot_date"),
         UniqueConstraint("snapshot_date", "product_id", "warehouse", name="uq_inventory_snapshot"),
     )
 
@@ -156,11 +180,16 @@ class KpiSnapshot(Base):
     metric: Mapped[str]
     dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     value: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         Index("ix_kpi_snapshots_date_metric", "snapshot_date", "metric"),
         Index("ix_kpi_snapshots_metric_dims", "metric", "dimensions"),
-        UniqueConstraint("snapshot_date", "metric", "dimensions", name="uq_kpi_point"),
+        Index("ix_kpi_snapshots_org_id", "org_id"),
+        Index("ix_kpi_snapshots_org_metric_date", "org_id", "metric", "snapshot_date"),
+        UniqueConstraint("snapshot_date", "metric", "dimensions", "org_id", name="uq_kpi_point"),
     )
 
 
@@ -182,6 +211,9 @@ class KpiDefinition(Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     visibility: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     is_active: Mapped[bool] = mapped_column(default=True)
     updated_at: Mapped[datetime] = mapped_column(
@@ -191,4 +223,5 @@ class KpiDefinition(Base):
     __table_args__ = (
         CheckConstraint("char_length(metric) > 0", name="ck_kpi_metric_not_empty"),
         Index("ix_kpi_definitions_metric", "metric"),
+        Index("ix_kpi_definitions_org_id", "org_id"),
     )

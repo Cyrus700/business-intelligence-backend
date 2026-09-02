@@ -27,13 +27,15 @@ def _batches(rows: list[dict[str, Any]]) -> Iterator[list[dict[str, Any]]]:
         yield rows[i : i + BATCH_SIZE]
 
 
-async def _ensure_products(db: AsyncSession, records: list[dict[str, Any]]) -> dict[str, uuid.UUID]:
+async def _ensure_products(db: AsyncSession, records: list[dict[str, Any]], org_id: uuid.UUID | None = None) -> dict[str, uuid.UUID]:
     wanted = {r["sku"]: r for r in records if r.get("sku")}
     if not wanted:
         return {}
+    stmt = select(Product).where(Product.sku.in_(wanted))
+    if org_id is not None:
+        stmt = stmt.where(Product.org_id == org_id)
     existing = {
-        p.sku: p.id
-        for p in (await db.execute(select(Product).where(Product.sku.in_(wanted)))).scalars()
+        p.sku: p.id for p in (await db.execute(stmt)).scalars()
     }
     for sku, r in wanted.items():
         if sku not in existing:
@@ -42,6 +44,7 @@ async def _ensure_products(db: AsyncSession, records: list[dict[str, Any]]) -> d
                 name=r.get("product_name") or sku,
                 category=r.get("category"),
                 unit_price=r.get("unit_price"),
+                org_id=org_id,
             )
             db.add(product)
             await db.flush()
@@ -75,10 +78,11 @@ async def load_sales(
     records: list[dict[str, Any]],
     source_id: uuid.UUID | None,
     etl_job_id: uuid.UUID | None,
+    org_id: uuid.UUID | None = None,
 ) -> LoadResult:
     if not records:
         return LoadResult()
-    products = await _ensure_products(db, records)
+    products = await _ensure_products(db, records, org_id=org_id)
     customers = await _ensure_customers(db, records)
     # One stamp for the whole run: every row from an upload shares its
     # ingestion instant, so "uploaded today" groups cleanly.
@@ -97,6 +101,7 @@ async def load_sales(
             "row_hash": r["row_hash"],
             "source_id": source_id,
             "etl_job_id": etl_job_id,
+            "org_id": org_id,
             "ingested_at": ingested_at,
         }
         for r in records
@@ -118,6 +123,7 @@ async def load_expenses(
     records: list[dict[str, Any]],
     source_id: uuid.UUID | None,
     etl_job_id: uuid.UUID | None,
+    org_id: uuid.UUID | None = None,
 ) -> LoadResult:
     if not records:
         return LoadResult()
@@ -130,6 +136,7 @@ async def load_expenses(
             "row_hash": r["row_hash"],
             "source_id": source_id,
             "etl_job_id": etl_job_id,
+            "org_id": org_id,
             "ingested_at": ingested_at,
         }
         for r in records
@@ -151,10 +158,11 @@ async def load_inventory(
     records: list[dict[str, Any]],
     source_id: uuid.UUID | None,
     etl_job_id: uuid.UUID | None,
+    org_id: uuid.UUID | None = None,
 ) -> LoadResult:
     if not records:
         return LoadResult()
-    products = await _ensure_products(db, records)
+    products = await _ensure_products(db, records, org_id=org_id)
     ingested_at = business_now().replace(tzinfo=None)
     rows = [
         {
@@ -164,6 +172,7 @@ async def load_inventory(
             "reorder_level": r["reorder_level"],
             "warehouse": r["warehouse"],
             "source_id": source_id,
+            "org_id": org_id,
             "ingested_at": ingested_at,
         }
         for r in records

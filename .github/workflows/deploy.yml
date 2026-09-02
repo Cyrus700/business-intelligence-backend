@@ -1,0 +1,51 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "alembic/**"
+      - "Dockerfile"
+      - "deploy/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Rsync backend to EC2
+        run: |
+          rsync -az --delete \
+            --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' \
+            --exclude '.pytest_cache' --exclude 'var/' --exclude '.env' \
+            -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new" \
+            ./ "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/business-intelligence-backend/"
+
+      - name: Deploy backend on EC2
+        run: |
+          ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -s <<'EOSSH'
+          set -euo pipefail
+          cd ~/app
+          # If monorepo compose exists, use it; else backend-only compose
+          if [ -f deploy/docker-compose.prod.yml ]; then COMPOSE="deploy/docker-compose.prod.yml"; else COMPOSE="business-intelligence-backend/deploy/docker-compose.prod.yml"; fi
+          echo "Using $COMPOSE"
+          docker compose -f "$COMPOSE" build api
+          docker compose -f "$COMPOSE" run --rm api alembic upgrade head || docker compose -f "$COMPOSE" run --rm api uv run alembic upgrade head
+          docker compose -f "$COMPOSE" up -d api
+          sleep 5
+          curl -fsS http://127.0.0.1:8000/api/v1/health | head -c 200; echo " — backend ok"
+          docker compose -f "$COMPOSE" ps
+          EOSSH

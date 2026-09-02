@@ -145,3 +145,143 @@ def verification_code(code: str, full_name: str | None = None) -> tuple[str, str
     """
     html = _wrap("Verification code", f"Your code is {code}", html_body)
     return subject, text, html
+
+
+def business_email_verification(full_name: str | None, business_name: str, verify_url: str) -> tuple[str, str, str]:
+    name = full_name or "there"
+    subject = f"{BRAND} — Verify your email for {business_name}"
+    text = (
+        f"Hi {name},\n\n"
+        f"You registered '{business_name}' on {BRAND}.\n"
+        f"Please verify your email within 24 hours: {verify_url}\n\n"
+        f"After verification, our System Admin will review your business. You'll receive an approval email shortly.\n"
+    )
+    html_body = f"""
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Hi {name},</p>
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Thanks for registering <strong>{business_name}</strong> on <strong>{BRAND}</strong>.</p>
+      <div style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};border-radius:8px;padding:16px;margin:16px 0;">
+        <div style="font-size:13px;color:{COLOR_MUTED};margin-bottom:4px;">Business</div>
+        <div style="font-size:15px;font-weight:600;color:{COLOR_PRIMARY};">{business_name}</div>
+      </div>
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Please verify your email within <strong>24 hours</strong> by clicking below. After verification, our System Admin will review your request — you'll get an approval email once accepted.</p>
+      <p style="margin:0;color:{COLOR_MUTED};font-size:12px;word-break:break-all;">Or copy: <a href="{verify_url}" style="color:{COLOR_ACCENT};">{verify_url}</a></p>
+    """
+    html = _wrap("Verify your email", f"Verify email for {business_name}", html_body, verify_url, "Verify email →")
+    return subject, text, html
+
+
+def business_pending_confirmation(full_name: str | None, business_name: str) -> tuple[str, str, str]:
+    name = full_name or "there"
+    subject = f"{BRAND} — Your business '{business_name}' is pending approval"
+    text = (
+        f"Hi {name},\n\n"
+        f"Your business '{business_name}' has been received and is pending System Admin approval.\n"
+        f"We've verified your email. Our team will review within 24 hours. You'll receive an email once approved.\n\n"
+        f"— {BRAND} Team\n"
+    )
+    html_body = f"""
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Hi {name},</p>
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Your business <strong>{business_name}</strong> is now <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;">Pending Approval</span></p>
+      <div style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};border-radius:8px;padding:14px 16px;margin:12px 0;">
+        <div style="font-size:13px;color:{COLOR_TEXT};line-height:1.6;">✅ Email verified<br>⏳ Awaiting System Admin review (usually &lt; 24h)</div>
+      </div>
+      <p style="margin:0;color:{COLOR_MUTED};font-size:13px;line-height:1.6;">We'll email you as soon as it's approved. No further action needed.</p>
+    """
+    html = _wrap("Business pending approval", f"{business_name} is pending approval", html_body)
+    return subject, text, html
+
+
+def business_admin_notification(business_name: str, business_email: str, contact_name: str | None, admin_url: str) -> tuple[str, str, str]:
+    subject = f"{BRAND} — New business pending approval: {business_name}"
+    text = (
+        f"New business registration pending approval:\n\n"
+        f"Business: {business_name}\n"
+        f"Contact: {contact_name or '—'} <{business_email}>\n"
+        f"Review: {admin_url}\n"
+    )
+    html_body = f"""
+      <p style="margin:0 0 8px;color:{COLOR_MUTED};font-size:12px;letter-spacing:0.04em;text-transform:uppercase;">Action required — new business</p>
+      <p style="margin:0 0 12px;color:{COLOR_PRIMARY};font-size:16px;font-weight:600;">{business_name} is awaiting approval</p>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border:1px solid {COLOR_BORDER};border-radius:8px;overflow:hidden;margin:12px 0;">
+        <tr><td style="padding:10px 14px;background:{COLOR_BG};font-size:12px;color:{COLOR_MUTED};">Business</td><td style="padding:10px 14px;font-size:13px;font-weight:600;">{business_name}</td></tr>
+        <tr><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:12px;color:{COLOR_MUTED};">Admin email</td><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:13px;">{contact_name or '—'} &lt;{business_email}&gt;</td></tr>
+      </table>
+      <p style="margin:0;color:{COLOR_MUTED};font-size:13px;">Review and approve in the admin panel. Business Admin will be notified automatically.</p>
+    """
+    html = _wrap("New business pending approval", f"{business_name} awaiting approval", html_body, admin_url, "Review in admin →")
+    return subject, text, html
+
+
+def business_approved(full_name: str | None, business_name: str, login_url: str) -> tuple[str, str, str]:
+    name = full_name or "there"
+    subject = f"{BRAND} — Your business '{business_name}' is approved ✓"
+    text = (
+        f"Hi {name},\n\n"
+        f"Great news — your business '{business_name}' has been approved by our System Admin.\n"
+        f"You can now sign in as Business Admin at {login_url}\n\n"
+        f"From your dashboard you can invite Managers & Analysts and start uploading data.\n\n"
+        f"— {BRAND} Team\n"
+    )
+    html_body = f"""
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Hi {name},</p>
+      <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:16px;margin:12px 0;">
+        <div style="font-size:14px;font-weight:700;color:#065f46;">✓ Your business is approved</div>
+        <div style="font-size:15px;font-weight:600;color:{COLOR_PRIMARY};margin-top:6px;">{business_name}</div>
+        <div style="font-size:12px;color:#047857;margin-top:4px;">You are now Business Admin — full control of this workspace.</div>
+      </div>
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Sign in to invite your team (Managers & Analysts) and upload your first data file. Your workspace is isolated per organization.</p>
+      <ul style="margin:12px 0;padding-left:18px;color:{COLOR_TEXT};font-size:13px;line-height:1.7;">
+        <li>Invite team: <strong>Users → Invite</strong></li>
+        <li>Upload data: <strong>Data → Upload</strong></li>
+        <li>Explore: KPIs, forecasts, anomalies, insights</li>
+      </ul>
+    """
+    html = _wrap("Your business is approved", f"{business_name} approved", html_body, login_url, "Sign in →")
+    return subject, text, html
+
+
+def business_rejected(full_name: str | None, business_name: str, reason: str | None) -> tuple[str, str, str]:
+    name = full_name or "there"
+    reason_txt = reason or "No specific reason provided. You may contact support."
+    subject = f"{BRAND} — Update on your business '{business_name}'"
+    text = (
+        f"Hi {name},\n\n"
+        f"After review, your business '{business_name}' was not approved.\n"
+        f"Reason: {reason_txt}\n\n"
+        f"You may correct the information and register again, or contact support.\n\n"
+        f"— {BRAND} Team\n"
+    )
+    html_body = f"""
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">Hi {name},</p>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;margin:12px 0;">
+        <div style="font-size:14px;font-weight:700;color:#991b1b;">Your business was not approved</div>
+        <div style="font-size:14px;font-weight:600;color:{COLOR_PRIMARY};margin-top:6px;">{business_name}</div>
+      </div>
+      <p style="margin:0 0 8px;color:{COLOR_TEXT};font-size:13px;font-weight:600;">Reason:</p>
+      <div style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};border-radius:8px;padding:12px 14px;font-size:13px;color:{COLOR_TEXT};line-height:1.6;">{reason_txt}</div>
+      <p style="margin:12px 0 0;color:{COLOR_MUTED};font-size:13px;">You can fix the issue and register again, or reply to this email for assistance.</p>
+    """
+    html = _wrap("Update on your business", f"{business_name} review update", html_body)
+    return subject, text, html
+
+
+def invite_email(business_name: str, inviter_email: str, role: str, invite_url: str, invite_token: str) -> tuple[str, str, str]:
+    subject = f"{BRAND} — You've been invited to join {business_name} as {role.title()}"
+    text = (
+        f"You've been invited to join '{business_name}' on {BRAND} as {role}.\n"
+        f"Invited by: {inviter_email}\n"
+        f"Accept invite: {invite_url}\n"
+        f"Token: {invite_token}\n\n"
+        f"This invite expires in 7 days.\n"
+    )
+    html_body = f"""
+      <p style="margin:0 0 12px;color:{COLOR_TEXT};font-size:14px;line-height:1.6;">You've been invited to join <strong>{business_name}</strong> on <strong>{BRAND}</strong> as <span style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;">{role.title()}</span></p>
+      <p style="margin:0 0 12px;color:{COLOR_MUTED};font-size:13px;">Invited by {inviter_email}</p>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border:1px solid {COLOR_BORDER};border-radius:8px;overflow:hidden;margin:12px 0;">
+        <tr><td style="padding:10px 14px;background:{COLOR_BG};font-size:12px;color:{COLOR_MUTED};">Role</td><td style="padding:10px 14px;font-size:13px;font-weight:600;text-transform:capitalize;">{role}</td></tr>
+        <tr><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:12px;color:{COLOR_MUTED};">Expires</td><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:13px;">7 days</td></tr>
+      </table>
+      <p style="margin:0;color:{COLOR_MUTED};font-size:12px;word-break:break-all;">Token: <span style="font-family:monospace;background:{COLOR_BG};padding:2px 6px;border-radius:4px;">{invite_token}</span></p>
+    """
+    html = _wrap(f"You're invited to {business_name}", f"Join {business_name} as {role.title()}", html_body, invite_url, "Accept invite →")
+    return subject, text, html

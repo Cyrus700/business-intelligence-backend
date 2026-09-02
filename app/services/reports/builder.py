@@ -17,16 +17,18 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 
-async def _report_data(db: AsyncSession, start: date, end: date) -> dict:
+async def _report_data(db: AsyncSession, start: date, end: date, org_id=None) -> dict:
+    org_filter = " AND org_id = :org_id" if org_id is not None else ""
+    extra = {"s": start, "e": end, "org_id": str(org_id)} if org_id else {"s": start, "e": end}
     kpis = pd.DataFrame(
         (
             await db.execute(
                 text(
                     "SELECT metric, snapshot_date, value FROM kpi_snapshots "
-                    "WHERE dimensions = '{}'::jsonb AND snapshot_date BETWEEN :s AND :e "
+                    f"WHERE dimensions = '{{}}'::jsonb AND snapshot_date BETWEEN :s AND :e{org_filter} "
                     "ORDER BY snapshot_date"
                 ),
-                {"s": start, "e": end},
+                extra,
             )
         ).all(),
         columns=["metric", "date", "value"],
@@ -36,20 +38,20 @@ async def _report_data(db: AsyncSession, start: date, end: date) -> dict:
             text(
                 "SELECT p.name, SUM(st.total_amount) AS revenue, SUM(st.quantity) AS qty "
                 "FROM sales_transactions st JOIN products p ON p.id = st.product_id "
-                "WHERE st.txn_date BETWEEN :s AND :e "
+                f"WHERE st.txn_date BETWEEN :s AND :e{org_filter.replace('org_id', 'st.org_id')} "
                 "GROUP BY p.name ORDER BY revenue DESC LIMIT 8"
             ),
-            {"s": start, "e": end},
+            extra,
         )
     ).all()
     insights = (
         await db.execute(
             text(
                 "SELECT title, body, severity FROM insights "
-                "WHERE generated_at::date BETWEEN :s AND :e "
+                f"WHERE generated_at::date BETWEEN :s AND :e{org_filter} "
                 "ORDER BY generated_at DESC LIMIT 8"
             ),
-            {"s": start, "e": end},
+            extra,
         )
     ).all()
     anomalies = (
@@ -57,9 +59,9 @@ async def _report_data(db: AsyncSession, start: date, end: date) -> dict:
             text(
                 "SELECT metric, severity, status, context->>'date' AS day, "
                 "observed_value, expected_value FROM anomalies "
-                "WHERE (context->>'date')::date BETWEEN :s AND :e ORDER BY day"
+                f"WHERE (context->>'date')::date BETWEEN :s AND :e{org_filter} ORDER BY day"
             ),
-            {"s": start, "e": end},
+            extra,
         )
     ).all()
     return {
@@ -79,8 +81,8 @@ def _kpi_totals(kpis: pd.DataFrame) -> dict[str, float]:
     }
 
 
-async def build_pdf(db: AsyncSession, start: date, end: date, title: str) -> bytes:
-    data = await _report_data(db, start, end)
+async def build_pdf(db: AsyncSession, start: date, end: date, title: str, org_id=None) -> bytes:
+    data = await _report_data(db, start, end, org_id=org_id)
     totals = _kpi_totals(data["kpis"])
     buf = io.BytesIO()
 
@@ -165,10 +167,10 @@ async def build_pdf(db: AsyncSession, start: date, end: date, title: str) -> byt
     return buf.getvalue()
 
 
-async def build_xlsx(db: AsyncSession, start: date, end: date) -> bytes:
+async def build_xlsx(db: AsyncSession, start: date, end: date, org_id=None) -> bytes:
     from openpyxl import Workbook
 
-    data = await _report_data(db, start, end)
+    data = await _report_data(db, start, end, org_id=org_id)
     wb = Workbook()
 
     ws = wb.active

@@ -32,7 +32,7 @@ async def run_source(
     try:
         from app.services.etl.pipeline import run_source_pipeline
 
-        result = await run_source_pipeline(db, source, trigger="manual")
+        result = await run_source_pipeline(db, source, trigger="manual", org_id=user_org_id(user))
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
     job = await db.get(EtlJob, UUID(result.job_id))

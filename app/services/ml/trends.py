@@ -8,8 +8,8 @@ from app.services.ml.features import load_series
 TARGETS = {"revenue": "revenue_daily", "orders": "orders_daily", "expenses": "expenses_daily"}
 
 
-async def trend_summary(db: AsyncSession, metric: str, window_days: int = 90) -> dict | None:
-    frame = await load_series(db, TARGETS[metric])
+async def trend_summary(db: AsyncSession, metric: str, window_days: int = 90, org_id=None) -> dict | None:
+    frame = await load_series(db, TARGETS[metric], org_id=org_id)
     if len(frame) < window_days:
         return None
     tail = frame.tail(window_days)

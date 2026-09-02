@@ -41,15 +41,18 @@ async def _load_or_create_conversation(
         conv = await db.get(Conversation, uuid.UUID(conv_id))
         if not conv or conv.user_id != user.id:
             raise HTTPException(404, "Conversation not found")
+        # Org check: conversation must belong to caller's org (prevents IDOR via stolen conv_id across orgs)
+        if conv.org_id is not None and conv.org_id != user.org_id and not getattr(user, "is_super_admin", False):
+            raise HTTPException(404, "Conversation not found")
         cid = conv.id
         conv.updated_at = now
     else:
-        conv = Conversation(user_id=user.id, title=question[:80], updated_at=now)
+        conv = Conversation(user_id=user.id, org_id=user.org_id, title=question[:80], updated_at=now)
         db.add(conv)
         await db.flush()
         cid = conv.id
 
-    db.add(Message(conversation_id=cid, role="user", content=question))
+    db.add(Message(conversation_id=cid, org_id=user.org_id, role="user", content=question))
     await db.flush()
 
     from sqlalchemy import select as sa_select
@@ -80,7 +83,7 @@ async def ai_chat(
     result = await answer_question(db, user.role, body.message, msgs, page=page, user=user)
 
     try:
-        db.add(Message(conversation_id=cid, role="assistant", content=result.reply))
+        db.add(Message(conversation_id=cid, org_id=user.org_id, role="assistant", content=result.reply))
         await db.commit()
     except Exception:
         # Never fail the request over persistence: the user still gets the answer.
@@ -113,7 +116,7 @@ async def ai_chat_stream(
     async def _save_assistant(reply: str) -> None:
         if not reply:
             return
-        db.add(Message(conversation_id=cid, role="assistant", content=polish_reply(reply)))
+        db.add(Message(conversation_id=cid, org_id=user.org_id, role="assistant", content=polish_reply(reply)))
         await db.commit()
 
     async def event_gen():
@@ -318,9 +321,12 @@ async def ai_insights(
 ) -> list[InsightOut]:
     from app.services.analytics import queries
     from app.services.analytics.queries import Filters
+    from app.api.deps import is_super_admin
 
     today = business_today()
-    filters = Filters(date_from=today - timedelta(days=29), date_to=today)
+    # Scope filters to caller's org unless super-admin (sees all)
+    org_id = None if is_super_admin(user) else user.org_id
+    filters = Filters(date_from=today - timedelta(days=29), date_to=today, org_id=org_id)
     insights: list[InsightOut] = []
 
     if scope in ("dashboard", "all"):
@@ -347,7 +353,7 @@ async def ai_insights(
             )
 
     if scope in ("inventory", "all"):
-        stock = await queries.inventory_levels(db, below_reorder_only=True)
+        stock = await queries.inventory_levels(db, below_reorder_only=True, org_id=org_id)
         if stock:
             names = [s.get("product", "") or s.get("sku", "") for s in stock[:5]]
             insights.append(
@@ -368,24 +374,15 @@ async def ai_insights(
         from app.models.ml import Forecast as ForecastModel
         from app.models.ml import MlModel
 
-        model = (
-            await db.execute(
-                select(MlModel).where(
-                    MlModel.target == "revenue_daily", MlModel.is_active.is_(True)
-                )
-            )
-        ).scalar_one_or_none()
+        mq = select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+        if org_id is not None:
+            mq = mq.where(MlModel.org_id == org_id)
+        model = (await db.execute(mq)).scalar_one_or_none()
         if model:
-            rows = (
-                (await db.execute(
-                    select(ForecastModel)
-                    .where(ForecastModel.model_id == model.id)
-                    .order_by(ForecastModel.forecast_date)
-                    .limit(30)
-                ))
-                .scalars()
-                .all()
-            )
+            fq = select(ForecastModel).where(ForecastModel.model_id == model.id).order_by(ForecastModel.forecast_date).limit(30)
+            if org_id is not None:
+                fq = fq.where(ForecastModel.org_id == org_id)
+            rows = (await db.execute(fq)).scalars().all()
             if rows:
                 total = sum(float(r.yhat) for r in rows)
                 insights.append(
@@ -471,7 +468,10 @@ async def executive_briefing(
     period_str = f"{today - timedelta(days=30)} to {today}"
 
     # Gather structured data for the briefing
-    filters = Filters(date_from=today - timedelta(days=29), date_to=today)
+    from app.api.deps import is_super_admin as _is_super
+
+    _org = None if _is_super(user) else user.org_id
+    filters = Filters(date_from=today - timedelta(days=29), date_to=today, org_id=_org)
     kpis = await queries.kpi_summary(db, filters)
     kpi_lines = [f"{c['metric'].replace('_', ' ').title()}: {c.get('value', 0):,.0f}" for c in kpis[:5]]
 

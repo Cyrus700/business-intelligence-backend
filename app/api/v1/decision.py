@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
 from app.core.clock import business_today
-from app.models import AlertRule, Insight, Notification, Report, ReportSchedule
+from app.models import AlertRule, Insight, Notification, Profile, Report, ReportSchedule
 from app.services.reports.schedule import compute_next_run
 from app.services.storage import FileStorage, make_key
 
@@ -39,13 +39,18 @@ class InsightOut(BaseModel):
 @router.get("/insights", response_model=list[InsightOut])
 async def list_insights(
     db: DbSession,
+    user: CurrentUser,
     insight_type: str | None = Query(None, alias="type"),
     severity: str | None = None,
     pinned: bool | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> list[InsightOut]:
+    from app.api.deps import is_super_admin
+
     stmt = select(Insight).order_by(Insight.is_pinned.desc(), Insight.generated_at.desc())
+    if not is_super_admin(user) and user.org_id is not None:
+        stmt = stmt.where(Insight.org_id == user.org_id)
     if insight_type:
         stmt = stmt.where(Insight.insight_type == insight_type)
     if severity:
@@ -62,10 +67,10 @@ async def list_insights(
     dependencies=[Depends(require_role("admin"))],
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def generate_now(db: DbSession) -> dict[str, int]:
+async def generate_now(db: DbSession, user: CurrentUser) -> dict[str, int]:
     from app.services.insights.engine import generate_insights
 
-    created = await generate_insights(db)
+    created = await generate_insights(db, org_id=user.org_id)
     return {"created": created}
 
 
@@ -74,9 +79,13 @@ async def generate_now(db: DbSession) -> dict[str, int]:
     response_model=InsightOut,
     dependencies=[Depends(require_role("manager"))],
 )
-async def pin_insight(insight_id: UUID, db: DbSession) -> InsightOut:
+async def pin_insight(insight_id: UUID, db: DbSession, user: CurrentUser) -> InsightOut:
+    from app.api.deps import is_super_admin
+
     insight = await db.get(Insight, insight_id)
     if insight is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Insight not found")
+    if not is_super_admin(user) and insight.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Insight not found")
     insight.is_pinned = not insight.is_pinned
     await db.commit()
@@ -122,8 +131,13 @@ manager_router = APIRouter(
 
 
 @manager_router.get("", response_model=list[AlertRuleOut])
-async def list_rules(db: DbSession) -> list[AlertRuleOut]:
-    rows = (await db.execute(select(AlertRule).order_by(AlertRule.created_at))).scalars().all()
+async def list_rules(db: DbSession, user: CurrentUser) -> list[AlertRuleOut]:
+    from app.api.deps import is_super_admin
+
+    stmt = select(AlertRule).order_by(AlertRule.created_at)
+    if not is_super_admin(user) and user.org_id is not None:
+        stmt = stmt.where(AlertRule.org_id == user.org_id)
+    rows = (await db.execute(stmt)).scalars().all()
     return [AlertRuleOut.model_validate(r) for r in rows]
 
 
@@ -133,7 +147,7 @@ async def create_rule(body: AlertRuleIn, db: DbSession, user: CurrentUser) -> Al
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "threshold is required for this condition"
         )
-    rule = AlertRule(**body.model_dump(), created_by=user.id)
+    rule = AlertRule(**body.model_dump(), created_by=user.id, org_id=user.org_id)
     db.add(rule)
     await db.commit()
     await db.refresh(rule)
@@ -141,9 +155,13 @@ async def create_rule(body: AlertRuleIn, db: DbSession, user: CurrentUser) -> Al
 
 
 @manager_router.patch("/{rule_id}", response_model=AlertRuleOut)
-async def update_rule(rule_id: UUID, body: AlertRuleUpdate, db: DbSession) -> AlertRuleOut:
+async def update_rule(rule_id: UUID, body: AlertRuleUpdate, db: DbSession, user: CurrentUser) -> AlertRuleOut:
+    from app.api.deps import is_super_admin
+
     rule = await db.get(AlertRule, rule_id)
     if rule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rule not found")
+    if not is_super_admin(user) and rule.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Rule not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
@@ -153,19 +171,23 @@ async def update_rule(rule_id: UUID, body: AlertRuleUpdate, db: DbSession) -> Al
 
 
 @manager_router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_rule(rule_id: UUID, db: DbSession) -> None:
+async def delete_rule(rule_id: UUID, db: DbSession, user: CurrentUser) -> None:
+    from app.api.deps import is_super_admin
+
     rule = await db.get(AlertRule, rule_id)
     if rule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rule not found")
+    if not is_super_admin(user) and rule.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Rule not found")
     await db.delete(rule)
     await db.commit()
 
 
 @manager_router.post("/evaluate", status_code=status.HTTP_202_ACCEPTED)
-async def evaluate_now(db: DbSession) -> dict[str, int]:
+async def evaluate_now(db: DbSession, user: CurrentUser) -> dict[str, int]:
     from app.services.alerts.engine import evaluate_alerts
 
-    created = await evaluate_alerts(db)
+    created = await evaluate_alerts(db, org_id=user.org_id)
     return {"notifications": created}
 
 
@@ -227,12 +249,13 @@ class ReportOut(BaseModel):
 
 
 @router.get("/reports", response_model=list[ReportOut])
-async def list_reports(db: DbSession) -> list[ReportOut]:
-    rows = (
-        (await db.execute(select(Report).order_by(Report.created_at.desc()).limit(50)))
-        .scalars()
-        .all()
-    )
+async def list_reports(db: DbSession, user: CurrentUser) -> list[ReportOut]:
+    from app.api.deps import is_super_admin
+
+    stmt = select(Report).order_by(Report.created_at.desc()).limit(50)
+    if not is_super_admin(user) and user.org_id is not None:
+        stmt = stmt.where(Report.org_id == user.org_id)
+    rows = (await db.execute(stmt)).scalars().all()
     return [ReportOut.model_validate(r) for r in rows]
 
 
@@ -317,16 +340,25 @@ async def generate_report(
 async def list_report_jobs(
     db: DbSession, user: CurrentUser, status: str | None = None, limit: int = Query(20, ge=1, le=100)
 ) -> list[ReportJobOut]:
-    """List report jobs for the current user (or all for admin). Shows queue, processing, completed, failed."""
+    """List report jobs — super-admin sees all, business admin sees own org's jobs, others see own only."""
     from sqlalchemy import select as sa_select
 
     from app.models.jobs import BackgroundJob
     from app.services.reports.queue import get_queue_position
+    from app.api.deps import is_super_admin
 
-    is_admin = user.role == "admin"
     stmt = sa_select(BackgroundJob).where(BackgroundJob.name == "report_generate").order_by(BackgroundJob.run_at.desc()).limit(limit)
-    if not is_admin:
-        # Filter to own jobs via payload->>generated_by (JSONB)
+    if is_super_admin(user):
+        pass  # super sees all
+    elif user.role == "admin":
+        # Business admin: see jobs of users in same org (via profiles)
+        stmt = stmt.where(
+            BackgroundJob.payload["generated_by"].astext.in_(
+                sa_select(Profile.id).where(Profile.org_id == user.org_id)
+            )
+        )
+    else:
+        # Manager/analyst: only own jobs
         stmt = stmt.where(BackgroundJob.payload["generated_by"].astext == str(user.id))
     if status:
         stmt = stmt.where(BackgroundJob.status == status)
@@ -402,9 +434,13 @@ async def get_report_job(job_id: UUID, db: DbSession, user: CurrentUser) -> Repo
 
 
 @router.get("/reports/{report_id}/download")
-async def download_report(report_id: UUID, db: DbSession) -> Response:
+async def download_report(report_id: UUID, db: DbSession, user: CurrentUser) -> Response:
+    from app.api.deps import is_super_admin
+
     report = await db.get(Report, report_id)
     if report is None or not report.s3_key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
+    if not is_super_admin(user) and report.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
     key = (
         report.s3_key.split("var/uploads/")[-1]
@@ -503,6 +539,7 @@ async def create_schedule(
         day_of_month=body.day_of_month,
         next_run_at=compute_next_run(body.frequency, body.day_of_week, body.day_of_month, today),
         created_by=user.id,
+        org_id=user.org_id,
     )
     db.add(schedule)
     await db.commit()

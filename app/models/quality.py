@@ -68,11 +68,13 @@ class DataQualityRun(Base):
     triggered_by: Mapped[str] = mapped_column(default="schedule")  # schedule | manual | etl
     duration_ms: Mapped[int] = mapped_column(default=0)
     error: Mapped[str | None] = mapped_column(Text)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("triggered_by IN ('schedule', 'manual', 'etl')", name="valid_trigger"),
         Index("ix_dq_runs_date", "run_date"),
+        Index("ix_dq_runs_org_id", "org_id"),
     )
 
 
@@ -105,6 +107,7 @@ class DataQualityIssue(Base):
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
     resolved_at: Mapped[datetime | None]
+    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
@@ -113,4 +116,5 @@ class DataQualityIssue(Base):
         CheckConstraint(f"severity IN {DQ_ISSUE_SEVERITIES}", name="valid_severity"),
         CheckConstraint(f"status IN {DQ_ISSUE_STATUSES}", name="valid_status"),
         Index("ix_dq_issues_status_severity", "status", "severity"),
+        Index("ix_dq_issues_org_id", "org_id"),
     )

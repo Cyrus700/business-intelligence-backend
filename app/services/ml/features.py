@@ -38,6 +38,10 @@ _SERIES_SQL = (
     "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
     "WHERE metric = :metric AND dimensions = CAST(:dim AS jsonb) ORDER BY snapshot_date"
 )
+_SERIES_SQL_ORG = (
+    "SELECT snapshot_date AS ds, value AS y FROM kpi_snapshots "
+    "WHERE metric = :metric AND dimensions = CAST(:dim AS jsonb) AND org_id = :org_id ORDER BY snapshot_date"
+)
 
 # which segment key(s) each target can be sliced by — mirrors the segment
 # columns kpi_builder.py actually populates dimensions with.
@@ -53,7 +57,7 @@ _MARKETING_SQL = (
 )
 
 
-async def discover_segments(db: AsyncSession, target: str) -> list[dict[str, str]]:
+async def discover_segments(db: AsyncSession, target: str, org_id=None) -> list[dict[str, str]]:
     """Distinct non-empty segment values already present for this target."""
     keys = SEGMENT_KEYS.get(target, ())
     if not keys:
@@ -61,15 +65,26 @@ async def discover_segments(db: AsyncSession, target: str) -> list[dict[str, str
     metric = TARGET_METRIC[target]
     segments: list[dict[str, str]] = []
     for key in keys:
-        rows = (
-            await db.execute(
-                text(
-                    "SELECT DISTINCT dimensions->>:key AS v FROM kpi_snapshots "
-                    "WHERE metric = :metric AND dimensions ? :key"
-                ),
-                {"key": key, "metric": metric},
-            )
-        ).all()
+        if org_id is not None:
+            rows = (
+                await db.execute(
+                    text(
+                        "SELECT DISTINCT dimensions->>:key AS v FROM kpi_snapshots "
+                        "WHERE metric = :metric AND dimensions ? :key AND org_id = :org_id"
+                    ),
+                    {"key": key, "metric": metric, "org_id": str(org_id)},
+                )
+            ).all()
+        else:
+            rows = (
+                await db.execute(
+                    text(
+                        "SELECT DISTINCT dimensions->>:key AS v FROM kpi_snapshots "
+                        "WHERE metric = :metric AND dimensions ? :key"
+                    ),
+                    {"key": key, "metric": metric},
+                )
+            ).all()
         segments.extend({key: v} for v, in rows if v)
     return segments
 
@@ -83,9 +98,19 @@ def festival_flags(dates: pd.Series) -> pd.Series:
     return flags
 
 
-async def _marketing_series(db: AsyncSession, dates: pd.Series) -> pd.Series:
+async def _marketing_series(db: AsyncSession, dates: pd.Series, org_id=None) -> pd.Series:
     """Daily marketing expense, reindexed onto `dates` (0 where none logged)."""
-    rows = (await db.execute(text(_MARKETING_SQL))).all()
+    if org_id is not None:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT expense_date AS ds, SUM(amount) AS spend FROM expenses WHERE category = 'marketing' AND org_id = :org_id GROUP BY expense_date ORDER BY expense_date"
+                ),
+                {"org_id": str(org_id)},
+            )
+        ).all()
+    else:
+        rows = (await db.execute(text(_MARKETING_SQL))).all()
     spend = pd.DataFrame(rows, columns=["ds", "spend"])
     if spend.empty:
         return pd.Series(0.0, index=dates.index)
@@ -96,7 +121,7 @@ async def _marketing_series(db: AsyncSession, dates: pd.Series) -> pd.Series:
 
 
 async def load_series(
-    db: AsyncSession, target: str, dimensions: dict[str, Any] | None = None
+    db: AsyncSession, target: str, dimensions: dict[str, Any] | None = None, org_id=None
 ) -> pd.DataFrame:
     """Continuous daily frame [ds, y, festival, marketing] with missing days as
     explicit zeros.
@@ -108,11 +133,19 @@ async def load_series(
     (or {}) for the whole-business series.
     """
     dims = dimensions or {}
-    rows = (
-        await db.execute(
-            text(_SERIES_SQL), {"metric": TARGET_METRIC[target], "dim": json.dumps(dims)}
-        )
-    ).all()
+    if org_id is not None:
+        rows = (
+            await db.execute(
+                text(_SERIES_SQL_ORG),
+                {"metric": TARGET_METRIC[target], "dim": json.dumps(dims), "org_id": str(org_id)},
+            )
+        ).all()
+    else:
+        rows = (
+            await db.execute(
+                text(_SERIES_SQL), {"metric": TARGET_METRIC[target], "dim": json.dumps(dims)}
+            )
+        ).all()
     frame = pd.DataFrame(rows, columns=["ds", "y"])
     if frame.empty:
         return frame
@@ -121,7 +154,7 @@ async def load_series(
     full = pd.DataFrame({"ds": pd.date_range(frame["ds"].min(), frame["ds"].max(), freq="D")})
     frame = full.merge(frame, on="ds", how="left").fillna({"y": 0.0})
     frame["festival"] = festival_flags(frame["ds"])
-    frame["marketing"] = await _marketing_series(db, frame["ds"])
+    frame["marketing"] = await _marketing_series(db, frame["ds"], org_id=org_id)
     return frame
 
 

@@ -45,8 +45,10 @@ def _report(
         report["preview"] = preview
     if warnings:
         report["warnings"] = warnings
-    if upload.error_report and "error" in upload.error_report:
-        report["error"] = upload.error_report["error"]
+    # Use __dict__ to avoid lazy-load MissingGreenlet after commit expiry
+    _err = upload.__dict__.get("error_report")
+    if _err and "error" in _err:
+        report["error"] = _err["error"]
     if extra:
         report.update(extra)
     return report
@@ -95,7 +97,7 @@ async def upload_file(
 
     try:
         result = await run_frame_pipeline(
-            db, domain, extract.frame, trigger="upload", source_id=data_source_id
+            db, domain, extract.frame, trigger="upload", source_id=data_source_id, org_id=user_org_id(user)
         )
     except ValueError as e:  # e.g. missing required columns
         upload.status = "failed"

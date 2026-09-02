@@ -254,3 +254,54 @@ async def send_test_email(to: str) -> bool:
     text = f"This is a test email from {templates.BRAND}. If you received it, SMTP is configured correctly."
     html = templates._wrap("Test email", "SMTP test", f'<p style="margin:0;color:{templates.COLOR_TEXT};font-size:14px;">This is a test email from <strong>{templates.BRAND}</strong>. If you received it, SMTP is configured correctly.</p>')
     return await send_email(to, subject, text, html)
+
+
+async def send_business_verification_email(to: str, business_name: str, token: str, full_name: str | None = None) -> bool:
+    s = get_settings()
+    verify_url = f"{s.frontend_url}/verify-email?token={token}"
+    subject, text, html = templates.business_email_verification(full_name, business_name, verify_url)
+    return await send_email(to, subject, text, html)
+
+
+async def send_business_pending_admin_email(business_name: str, business_email: str, contact_name: str | None = None) -> bool:
+    s = get_settings()
+    admin_email = (s.admin_email or "").strip()
+    if not admin_email:
+        logger.info("No admin_email configured; skipping admin notification for %s", business_name)
+        return False
+    admin_url = f"{s.frontend_url}/admin/dashboard"
+    subject, text, html = templates.business_admin_notification(business_name, business_email, contact_name, admin_url)
+    # Send to ADMIN_EMAIL (could be comma-separated list)
+    recipients = [e.strip() for e in admin_email.split(",") if e.strip()]
+    ok = True
+    for rcpt in recipients:
+        if not await send_email(rcpt, subject, text, html):
+            ok = False
+    return ok
+
+
+async def send_business_pending_confirmation_email(to: str, business_name: str, full_name: str | None = None) -> bool:
+    subject, text, html = templates.business_pending_confirmation(full_name, business_name)
+    return await send_email(to, subject, text, html)
+
+
+async def send_business_approved_email(to: str, business_name: str, full_name: str | None = None) -> bool:
+    s = get_settings()
+    login_url = f"{s.frontend_url}/login"
+    subject, text, html = templates.business_approved(full_name, business_name, login_url)
+    return await send_email(to, subject, text, html)
+
+
+async def send_business_rejected_email(to: str, business_name: str, reason: str | None, full_name: str | None = None) -> bool:
+    subject, text, html = templates.business_rejected(full_name, business_name, reason)
+    return await send_email(to, subject, text, html)
+
+
+async def send_invite_email(to: str, token: str, inviter_email: str, role: str, business_name: str | None = None) -> bool:
+    s = get_settings()
+    # business_name fallback: try to resolve via inviter's org if not provided
+    if not business_name:
+        business_name = "your workspace"
+    invite_url = f"{s.frontend_url}/signup?invite={token}"
+    subject, text, html = templates.invite_email(business_name, inviter_email, role, invite_url, token)
+    return await send_email(to, subject, text, html)

@@ -151,14 +151,22 @@ def _parse_date(value: Any, default: date | None) -> date | None:
         return default
 
 
-async def _no_data(db: AsyncSession, date_from: date, date_to: date, what: str) -> str:
+def _org_id_for(user) -> Any | None:
+    if user is None:
+        return None
+    if getattr(user, "is_super_admin", False):
+        return None  # super-admin sees all
+    return getattr(user, "org_id", None)
+
+
+async def _no_data(db: AsyncSession, date_from: date, date_to: date, what: str, user=None) -> str:
     """Explain an empty result honestly.
 
     "Zero sales on that date" and "we hold no data for that date" are different
     facts, and conflating them is how an assistant ends up reporting a
     confident 0 for a day that was never loaded.
     """
-    coverage = await data_coverage(db)
+    coverage = await data_coverage(db, org_id=_org_id_for(user))
     first, last = coverage.get("first_date"), coverage.get("last_date")
     if first is None or last is None:
         return f"The warehouse has no {what} data loaded at all yet."
@@ -186,9 +194,9 @@ async def _query_kpis(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     from app.services.analytics.queries import kpi_summary
 
     date_from, date_to = _window(kwargs)
-    cards = await kpi_summary(db, Filters(date_from=date_from, date_to=date_to))
+    cards = await kpi_summary(db, Filters(date_from=date_from, date_to=date_to, org_id=_org_id_for(user)))
     if not cards or all(c.get("value") in (None, 0) for c in cards):
-        return await _no_data(db, date_from, date_to, "KPI")
+        return await _no_data(db, date_from, date_to, "KPI", user=user)
     lines = [f"KPIs {date_from} → {date_to}:"]
     for c in cards:
         value = c.get("value")
@@ -205,9 +213,9 @@ async def _sales_by_dimension(db: AsyncSession, user: Profile, **kwargs: Any) ->
     if dim not in ("product", "category", "channel", "region"):
         return "Unsupported dimension (product|category|channel|region)."
     date_from, date_to = _window(kwargs)
-    rows = await sales_by_dimension(db, Filters(date_from=date_from, date_to=date_to), dim)
+    rows = await sales_by_dimension(db, Filters(date_from=date_from, date_to=date_to, org_id=_org_id_for(user)), dim)
     if not rows:
-        return await _no_data(db, date_from, date_to, f"{dim} sales")
+        return await _no_data(db, date_from, date_to, f"{dim} sales", user=user)
     limit = max(1, min(int(kwargs.get("limit") or 5), 15))
     lines = [f"Top {dim} revenue {date_from} → {date_to}:"]
     for r in rows[:limit]:
@@ -219,9 +227,9 @@ async def _sales_by_dimension(db: AsyncSession, user: Profile, **kwargs: Any) ->
 
 async def _expenses(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     date_from, date_to = _window(kwargs)
-    rows = await expenses_by_category(db, Filters(date_from=date_from, date_to=date_to))
+    rows = await expenses_by_category(db, Filters(date_from=date_from, date_to=date_to, org_id=_org_id_for(user)))
     if not rows:
-        return await _no_data(db, date_from, date_to, "expense")
+        return await _no_data(db, date_from, date_to, "expense", user=user)
     limit = max(1, min(int(kwargs.get("limit") or 5), 15))
     lines = [f"Expenses by category {date_from} → {date_to}:"]
     for r in rows[:limit]:
@@ -236,10 +244,10 @@ async def _timeseries(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     date_from, date_to = _window(kwargs)
     granularity = str(kwargs.get("granularity") or "day")
     points = await kpi_timeseries(
-        db, Filters(date_from=date_from, date_to=date_to), metric, granularity
+        db, Filters(date_from=date_from, date_to=date_to, org_id=_org_id_for(user)), metric, granularity
     )
     if not points:
-        return await _no_data(db, date_from, date_to, metric)
+        return await _no_data(db, date_from, date_to, metric, user=user)
     # Short windows are returned in full: sampling a 7-day question down to a
     # stride would silently drop the very days the user asked about.
     sampled = points if len(points) <= 31 else points[:: max(1, len(points) // 20)][:20]
@@ -256,36 +264,21 @@ async def _forecast(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     from app.models import Forecast, MlModel
 
     target = str(kwargs.get("target") or "revenue_daily")
+    oid = _org_id_for(user)
     # Retraining can leave more than one model flagged active for a target;
     # scalar_one_or_none() raises on that, turning a normal state into a tool
     # error. Take the newest and answer.
-    model = (
-        (
-            await db.execute(
-                select(MlModel)
-                .where(MlModel.target == target, MlModel.is_active.is_(True))
-                .order_by(MlModel.trained_at.desc())
-                .limit(1)
-            )
-        )
-        .scalars()
-        .first()
-    )
+    mq = select(MlModel).where(MlModel.target == target, MlModel.is_active.is_(True))
+    if oid is not None:
+        mq = mq.where(MlModel.org_id == oid)
+    model = ((await db.execute(mq.order_by(MlModel.trained_at.desc()).limit(1))).scalars().first())
     if model is None:
         return f"No trained forecast model for {target} yet."
     horizon = max(1, min(int(kwargs.get("horizon") or 30), 90))
-    rows = (
-        (
-            await db.execute(
-                select(Forecast)
-                .where(Forecast.model_id == model.id)
-                .order_by(Forecast.forecast_date)
-                .limit(horizon)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    fq = select(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(horizon)
+    if oid is not None:
+        fq = fq.where(Forecast.org_id == oid)
+    rows = ((await db.execute(fq)).scalars().all())
     if not rows:
         return f"Model for {target} has no projections."
     total = sum(float(r.yhat) for r in rows)
@@ -323,7 +316,10 @@ async def _anomalies(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
 
     from app.models import Anomaly
 
+    oid = _org_id_for(user)
     stmt = select(Anomaly).order_by(Anomaly.detected_at.desc())
+    if oid is not None:
+        stmt = stmt.where(Anomaly.org_id == oid)
     metric = kwargs.get("metric")
     if metric:
         stmt = stmt.where(Anomaly.metric == str(metric))
@@ -348,7 +344,7 @@ async def _anomalies(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
 
     if not rows:
         if windowed:
-            return await _no_data(db, date_from, date_to, "anomaly")
+            return await _no_data(db, date_from, date_to, "anomaly", user=user)
         return "No anomalies found."
     scope = f" {date_from} → {date_to}" if windowed else ""
     lines = [f"Anomalies{scope} ({len(rows)}):"]
@@ -367,7 +363,7 @@ async def _anomalies(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
 async def _inventory(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     below_only = bool(kwargs.get("below_reorder_only", True))
     as_of = _parse_date(kwargs.get("as_of"), None)
-    rows = await inventory_levels(db, below_reorder_only=below_only, as_of=as_of)
+    rows = await inventory_levels(db, below_reorder_only=below_only, as_of=as_of, org_id=_org_id_for(user))
     if not rows:
         return "No inventory below reorder level." if below_only else "No inventory levels found."
     limit = max(1, min(int(kwargs.get("limit") or 10), 25))
@@ -404,7 +400,7 @@ async def _search_past(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
 
     query_text = str(kwargs.get("query") or "")
     limit = max(1, min(int(kwargs.get("limit") or 5), 10))
-    hits = await get_retriever().search(db, query_text, top_k=limit)
+    hits = await get_retriever().search(db, query_text, top_k=limit, org_id=_org_id_for(user))
     if not hits:
         return "No past insights, anomalies or recommendations match that."
     lines = [f"Past findings close to '{query_text}':"]
@@ -429,9 +425,9 @@ async def _explain_change(db: AsyncSession, user: Profile, **kwargs: Any) -> str
     prev_from = prev_to - timedelta(days=span - 1)
     top_n = max(1, min(int(kwargs.get("limit") or 5), 10))
 
-    b = await explain_change(db, dim, (date_from, date_to), (prev_from, prev_to), top_n)
+    b = await explain_change(db, dim, (date_from, date_to), (prev_from, prev_to), top_n, org_id=_org_id_for(user))
     if b.total_current == 0 and b.total_previous == 0:
-        return await _no_data(db, date_from, date_to, f"{dim} sales")
+        return await _no_data(db, date_from, date_to, f"{dim} sales", user=user)
 
     change = f"{b.change_pct:+.1f}%" if b.change_pct is not None else "n/a"
     lines = [
@@ -467,11 +463,11 @@ async def _revenue_bridge(db: AsyncSession, user: Profile, **kwargs: Any) -> str
     date_from, date_to = _window(kwargs)
     cards = {
         c["metric"]: c
-        for c in await kpi_summary(db, Filters(date_from=date_from, date_to=date_to))
+        for c in await kpi_summary(db, Filters(date_from=date_from, date_to=date_to, org_id=_org_id_for(user)))
     }
     rev, orders = cards.get("revenue"), cards.get("orders")
     if not rev or not orders or not rev.get("previous_value"):
-        return await _no_data(db, date_from, date_to, "revenue")
+        return await _no_data(db, date_from, date_to, "revenue", user=user)
 
     bridge = price_volume_bridge(
         orders_current=float(orders["value"] or 0),
@@ -501,9 +497,9 @@ async def _concentration(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     if dim not in ("product", "category", "channel", "region"):
         return "Unsupported dimension (product|category|channel|region)."
     date_from, date_to = _window(kwargs)
-    c = await analyse_concentration(db, dim, date_from, date_to)
+    c = await analyse_concentration(db, dim, date_from, date_to, org_id=_org_id_for(user))
     if not c.members:
-        return await _no_data(db, date_from, date_to, f"{dim} sales")
+        return await _no_data(db, date_from, date_to, f"{dim} sales", user=user)
     return "\n".join(
         [
             f"Revenue concentration by {dim}, {date_from} → {date_to}:",
@@ -526,7 +522,7 @@ async def _project_period(db: AsyncSession, user: Profile, **kwargs: Any) -> str
     if period not in ("month", "quarter"):
         return "Unsupported period_type (month|quarter)."
 
-    p = await project_current_period(db, metric=metric, period=period)
+    p = await project_current_period(db, metric=metric, period=period, org_id=_org_id_for(user))
     if p.days_elapsed == 0:
         return (
             f"No {metric} recorded yet for {p.period_label} "
@@ -574,9 +570,10 @@ async def _simulate(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
         orders_change_pct=orders_pct,
         aov_change_pct=aov_pct,
         expense_change_pct=expense_pct,
+        org_id=_org_id_for(user),
     )
     if sc.baseline_revenue == 0:
-        return await _no_data(db, date_from, date_to, "revenue")
+        return await _no_data(db, date_from, date_to, "revenue", user=user)
     d = sc.as_dict()
     return "\n".join(
         [
@@ -596,7 +593,7 @@ async def _simulate(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
 
 
 async def _coverage(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
-    c = await data_coverage(db)
+    c = await data_coverage(db, org_id=_org_id_for(user))
     if c["first_date"] is None:
         return "The warehouse is empty — no data has been loaded yet."
     lines = [
@@ -614,6 +611,27 @@ async def _coverage(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
         lines.append(
             f"- {name}: {b['row_count']:,} rows, {b['first_date']} → {b['last_date']}{stamp}"
         )
+    return "\n".join(lines)
+
+
+async def _business_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
+    oid = _org_id_for(user)
+    if oid is None:
+        if getattr(user, "is_super_admin", False):
+            return "Signed-in as Platform Super-Admin — you can see all organizations via the org switcher. No single business name."
+        return "No workspace assigned to this account — invite required or register a business."
+    from app.models.identity import Organization
+
+    org = await db.get(Organization, oid)
+    if not org:
+        return f"No organization found for org_id {oid}."
+    lines = [f"Business / workspace: **{org.name}**", f"- Name: {org.name}", f"- ID: {org.id}", f"- Slug: {org.slug or '—'}", f"- Is legacy: {org.is_legacy}", f"- Signed-in: {user.email} ({user.role})"]
+    try:
+        c = await data_coverage(db, org_id=oid)
+        if c["first_date"]:
+            lines.append(f"- Data: {c['first_date']} → {c['last_date']} ({c['days_behind']} days behind)")
+    except Exception:
+        pass
     return "\n".join(lines)
 
 
@@ -933,6 +951,17 @@ TOOLS: dict[str, AITool] = {
         ),
         parameters={"type": "object", "properties": {}},
         handler=_coverage,
+    ),
+    "get_business_info": AITool(
+        name="get_business_info",
+        description=(
+            "The signed-in user's business / workspace identity: organization name, id, slug, "
+            "and the user's email/role. CALL THIS immediately when the user asks 'what is "
+            "my business name', 'which business am I in', 'what workspace is this', "
+            "or any identity question — never guess the name."
+        ),
+        parameters={"type": "object", "properties": {}},
+        handler=_business_info,
     ),
 }
 

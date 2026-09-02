@@ -87,19 +87,16 @@ class InsightRetriever:
         # kept synchronous-returning for clarity; executed from the async path
         raise NotImplementedError
 
-    async def _refresh(self, db: AsyncSession) -> list[RetrieverResult]:
-        """Full rebuild from the warehouse tables."""
+    async def _refresh(self, db: AsyncSession, org_id=None) -> list[RetrieverResult]:
+        """Full rebuild from the warehouse tables (org-scoped)."""
+        # Org scoping: Insights/Anomalies are per-business; cache is global but we filter here.
+        # For full per-org cache you'd key by org_id; v1 filters rows after load. Super-admin sees all.
         all_rows: list[dict] = []
 
-        insights = (
-            (
-                await db.execute(
-                    select(Insight).order_by(Insight.generated_at.desc()).limit(MAX_DOCS)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        iq = select(Insight).order_by(Insight.generated_at.desc()).limit(MAX_DOCS)
+        if org_id is not None:
+            iq = iq.where(Insight.org_id == org_id)
+        insights = ((await db.execute(iq)).scalars().all())
         for ins in insights:
             all_rows.append(
                 {
@@ -113,15 +110,10 @@ class InsightRetriever:
                 }
             )
 
-        anomalies = (
-            (
-                await db.execute(
-                    select(Anomaly).order_by(Anomaly.detected_at.desc()).limit(MAX_DOCS)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        aq = select(Anomaly).order_by(Anomaly.detected_at.desc()).limit(MAX_DOCS)
+        if org_id is not None:
+            aq = aq.where(Anomaly.org_id == org_id)
+        anomalies = ((await db.execute(aq)).scalars().all())
         for a in anomalies:
             ctx = a.context or {}
             date_str = ctx.get("date", "?")
@@ -152,9 +144,16 @@ class InsightRetriever:
         ]
         return docs
 
-    async def search(self, db: AsyncSession, query: str, top_k: int = 5) -> list[RetrieverResult]:
-        if not getattr(self, "_docs", None) or self._stale():
-            self._docs = await self._refresh(db)
+    async def search(self, db: AsyncSession, query: str, top_k: int = 5, org_id=None) -> list[RetrieverResult]:
+        # Per-org: we rebuild filtered by org_id each call when org changes would otherwise leak.
+        # Keep global TTL but force refresh when org differs from last build's org.
+        # Simplest v1: always refresh with org filter if cache stale or org provided (org-scoped correctness over speed).
+        needs_refresh = not getattr(self, "_docs", None) or self._stale()
+        # If caller is org-scoped, ensure docs belong to that org — rebuild filtered
+        if org_id is not None:
+            needs_refresh = True
+        if needs_refresh:
+            self._docs = await self._refresh(db, org_id=org_id)
             self._built_at = time.monotonic()
             if self._docs:
                 self._matrix = np.stack([embed(d.text) for d in self._docs])
@@ -178,8 +177,8 @@ class InsightRetriever:
             )
         return results
 
-    async def refresh(self, db: AsyncSession) -> int:
-        self._docs = await self._refresh(db)
+    async def refresh(self, db: AsyncSession, org_id=None) -> int:
+        self._docs = await self._refresh(db, org_id=org_id)
         self._matrix = np.stack([embed(d.text) for d in self._docs]) if self._docs else None
         self._built_at = time.monotonic()
         return len(self._docs)

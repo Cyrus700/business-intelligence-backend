@@ -113,17 +113,16 @@ class BacktestOut(BaseModel):
 
 
 async def _active_model(
-    db, target: str, dimensions: dict[str, Any] | None = None
+    db, target: str, dimensions: dict[str, Any] | None = None, org_id=None
 ) -> MlModel | None:
-    return (
-        await db.execute(
-            select(MlModel).where(
-                MlModel.target == target,
-                MlModel.dimensions == (dimensions or {}),
-                MlModel.is_active.is_(True),
-            )
-        )
-    ).scalar_one_or_none()
+    q = select(MlModel).where(
+        MlModel.target == target,
+        MlModel.dimensions == (dimensions or {}),
+        MlModel.is_active.is_(True),
+    )
+    if org_id is not None:
+        q = q.where(MlModel.org_id == org_id)
+    return (await db.execute(q)).scalar_one_or_none()
 
 
 def _roll30_summary(df: pd.DataFrame) -> dict[str, Any] | None:
@@ -137,12 +136,14 @@ def _roll30_summary(df: pd.DataFrame) -> dict[str, Any] | None:
 @router.get("/forecasts", response_model=ForecastOut)
 async def get_forecast(
     db: DbSession,
+    user: CurrentUser,
     target: str = "revenue_daily",
     horizon: int = Query(30, ge=1, le=90),
     region: str | None = None,
     channel: str | None = None,
     category: str | None = None,
 ) -> ForecastOut:
+    from app.api.deps import is_super_admin
     from app.services.ml.features import load_series
     from app.services.ml.forecasting import NaiveSeasonal
 
@@ -153,8 +154,9 @@ async def get_forecast(
         dims["channel"] = channel
     if category:
         dims["category"] = category
+    org_id = None if is_super_admin(user) else user.org_id
 
-    model = await _active_model(db, target, dims)
+    model = await _active_model(db, target, dims, org_id=org_id)
     if model is not None:
         rows = (
             (
@@ -186,7 +188,7 @@ async def get_forecast(
                 ],
             )
 
-    frame = await load_series(db, target, dims)
+    frame = await load_series(db, target, dims, org_id=org_id)
     if len(frame) < 7:
         return ForecastOut(
             target=target,
@@ -223,8 +225,13 @@ async def get_forecast(
 
 
 @router.get("/forecasts/accuracy", response_model=list[AccuracyOut])
-async def forecast_accuracy(db: DbSession) -> list[AccuracyOut]:
-    models = (await db.execute(select(MlModel).where(MlModel.is_active.is_(True)))).scalars().all()
+async def forecast_accuracy(db: DbSession, user: CurrentUser) -> list[AccuracyOut]:
+    from app.api.deps import is_super_admin
+
+    q = select(MlModel).where(MlModel.is_active.is_(True))
+    if not is_super_admin(user) and user.org_id is not None:
+        q = q.where(MlModel.org_id == user.org_id)
+    models = (await db.execute(q)).scalars().all()
     return [
         AccuracyOut(
             target=m.target,
@@ -239,34 +246,41 @@ async def forecast_accuracy(db: DbSession) -> list[AccuracyOut]:
 
 
 @router.get("/models", response_model=list[ModelOut])
-async def model_registry(db: DbSession) -> list[ModelOut]:
+async def model_registry(db: DbSession, user: CurrentUser) -> list[ModelOut]:
     """Model registry (Phase 6) — every trained model with lifecycle dates,
     metrics, params, and the dataset range it was trained on."""
     from sqlalchemy import text
+    from app.api.deps import is_super_admin
 
-    models = (
-        (
-            await db.execute(
-                select(MlModel).order_by(MlModel.trained_at.desc(), MlModel.version.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    q = select(MlModel).order_by(MlModel.trained_at.desc(), MlModel.version.desc())
+    if not is_super_admin(user) and user.org_id is not None:
+        q = q.where(MlModel.org_id == user.org_id)
+    models = ((await db.execute(q)).scalars().all())
 
     dataset_range: dict[str, tuple[date | None, date | None]] = {}
     for m in models:
         if m.target in dataset_range:
             continue
-        row = (
-            await db.execute(
-                text(
-                    "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e "
-                    "FROM kpi_snapshots WHERE metric = :m"
-                ),
-                {"m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target},
-            )
-        ).first()
+        if user.org_id is not None and not is_super_admin(user):
+            row = (
+                await db.execute(
+                    text(
+                        "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e "
+                        "FROM kpi_snapshots WHERE metric = :m AND org_id = :org"
+                    ),
+                    {"m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target, "org": str(user.org_id)},
+                )
+            ).first()
+        else:
+            row = (
+                await db.execute(
+                    text(
+                        "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e "
+                        "FROM kpi_snapshots WHERE metric = :m"
+                    ),
+                    {"m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target},
+                )
+            ).first()
         dataset_range[m.target] = (row.s if row else None, row.e if row else None)
 
     out = []
@@ -298,11 +312,15 @@ async def model_registry(db: DbSession) -> list[ModelOut]:
     response_model=ModelOut,
     dependencies=[Depends(require_role("admin"))],
 )
-async def retire_model(model_id: UUID, db: DbSession) -> ModelOut:
+async def retire_model(model_id: UUID, db: DbSession, user: CurrentUser) -> ModelOut:
     """Retire a model version from the registry (admin); the newest active
     version stays in production."""
+    from app.api.deps import is_super_admin
+
     model = await db.get(MlModel, model_id)
     if model is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Model not found")
+    if not is_super_admin(user) and model.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Model not found")
     if not model.is_active:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Model already retired")
@@ -329,16 +347,19 @@ async def retire_model(model_id: UUID, db: DbSession) -> ModelOut:
 @router.get("/backtest", response_model=BacktestOut)
 async def backtest(
     db: DbSession,
+    user: CurrentUser,
     horizon: int = Query(7, ge=1, le=30),
     steps: int = Query(3, ge=1, le=6),
 ) -> BacktestOut:
     """Rolling-origin backtest of naive vs prophet vs arima on the revenue
     series — honest walk-forward MAPE so the dashboard can show which model
     holds up beyond the training window (Phase 6)."""
+    from app.api.deps import is_super_admin
     from app.services.ml.features import load_series
     from app.services.ml.forecasting import rolling_backtest
 
-    frame = await load_series(db, "revenue_daily")
+    org_id = None if is_super_admin(user) else user.org_id
+    frame = await load_series(db, "revenue_daily", org_id=org_id)
     if len(frame) < 60:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -353,11 +374,13 @@ async def backtest(
     dependencies=[Depends(require_role("admin"))],
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def retrain(db: DbSession) -> dict[str, Any]:
+async def retrain(db: DbSession, user: CurrentUser) -> dict[str, Any]:
     """Synchronous retrain of all targets (takes ~30-60s; acceptable for admin use)."""
     from app.services.ml.registry import train_all
+    from app.api.deps import is_super_admin
 
-    models = await train_all(db)
+    org_id = None if is_super_admin(user) else user.org_id
+    models = await train_all(db, org_id=org_id)
     return {
         "retrained": [
             {
@@ -374,12 +397,17 @@ async def retrain(db: DbSession) -> dict[str, Any]:
 @router.get("/anomalies", response_model=list[AnomalyOut])
 async def list_anomalies(
     db: DbSession,
+    user: CurrentUser,
     status_filter: str | None = Query(None, alias="status"),
     severity: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> list[AnomalyOut]:
+    from app.api.deps import is_super_admin
+
     stmt = select(Anomaly).order_by(Anomaly.detected_at.desc())
+    if not is_super_admin(user) and user.org_id is not None:
+        stmt = stmt.where(Anomaly.org_id == user.org_id)
     if status_filter:
         stmt = stmt.where(Anomaly.status == status_filter)
     if severity:
@@ -397,8 +425,12 @@ async def list_anomalies(
 async def update_anomaly(
     anomaly_id: UUID, body: AnomalyUpdate, db: DbSession, user: CurrentUser
 ) -> AnomalyOut:
+    from app.api.deps import is_super_admin
+
     anomaly = await db.get(Anomaly, anomaly_id)
     if anomaly is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Anomaly not found")
+    if not is_super_admin(user) and anomaly.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anomaly not found")
     anomaly.status = body.status
     anomaly.acknowledged_by = user.id if body.status != "open" else None
@@ -416,12 +448,15 @@ async def update_anomaly(
 @router.get("/trends", response_model=TrendOut)
 async def get_trend(
     db: DbSession,
+    user: CurrentUser,
     metric: Literal["revenue", "orders", "expenses"] = "revenue",
     window_days: int = Query(90, ge=14, le=365),
 ) -> TrendOut:
+    from app.api.deps import is_super_admin
     from app.services.ml.trends import trend_summary
 
-    summary = await trend_summary(db, metric, window_days)
+    org_id = None if is_super_admin(user) else user.org_id
+    summary = await trend_summary(db, metric, window_days, org_id=org_id)
     if summary is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not enough history for a trend")
     return TrendOut(**summary)

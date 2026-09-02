@@ -582,7 +582,7 @@ async def _source_quality(
 
 
 async def run_quality_audit(
-    db: AsyncSession, triggered_by: str = "schedule"
+    db: AsyncSession, triggered_by: str = "schedule", org_id=None
 ) -> DataQualityRun | None:
     """Run the full quality audit and persist a DataQualityRun + issues."""
     start = time.perf_counter()
@@ -634,6 +634,7 @@ async def run_quality_audit(
         triggered_by=triggered_by,
         duration_ms=int((time.perf_counter() - start) * 1000),
         status="succeeded",
+        org_id=org_id,
     )
     db.add(run)
     await db.flush()
@@ -641,6 +642,7 @@ async def run_quality_audit(
     all_issues.sort(key=lambda i: (i.row_count, i.issue_type), reverse=True)
     for issue in all_issues[:_MAX_ISSUES_PER_TYPE]:
         issue.run_id = run.id
+        issue.org_id = org_id
         db.add(issue)
 
     try:

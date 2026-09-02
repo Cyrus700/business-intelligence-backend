@@ -286,8 +286,8 @@ def concentration(values: dict[str, float], dimension: str = "product") -> Conce
 
 # ── warehouse-backed wrappers ──────────────────────────────────────────────
 
-async def _revenue_by(db: AsyncSession, dimension: str, start: date, end: date) -> dict[str, float]:
-    rows = await sales_by_dimension(db, Filters(date_from=start, date_to=end), dimension)
+async def _revenue_by(db: AsyncSession, dimension: str, start: date, end: date, org_id=None) -> dict[str, float]:
+    rows = await sales_by_dimension(db, Filters(date_from=start, date_to=end, org_id=org_id), dimension)
     return {r["key"]: float(r["revenue"]) for r in rows}
 
 
@@ -297,17 +297,18 @@ async def explain_change(
     current: tuple[date, date],
     previous: tuple[date, date],
     top_n: int = DEFAULT_TOP_N,
+    org_id=None,
 ) -> ChangeBreakdown:
     """Decomposition of the movement between two explicit windows."""
     return decompose(
-        await _revenue_by(db, dimension, *current),
-        await _revenue_by(db, dimension, *previous),
+        await _revenue_by(db, dimension, *current, org_id=org_id),
+        await _revenue_by(db, dimension, *previous, org_id=org_id),
         dimension=dimension,
         top_n=top_n,
     )
 
 
 async def analyse_concentration(
-    db: AsyncSession, dimension: str, start: date, end: date
+    db: AsyncSession, dimension: str, start: date, end: date, org_id=None
 ) -> Concentration:
-    return concentration(await _revenue_by(db, dimension, start, end), dimension=dimension)
+    return concentration(await _revenue_by(db, dimension, start, end, org_id=org_id), dimension=dimension)

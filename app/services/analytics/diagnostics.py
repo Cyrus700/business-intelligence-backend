@@ -89,6 +89,7 @@ async def diagnose_change(
     region: str | None = None,
     channel: str | None = None,
     category: str | None = None,
+    org_id=None,
 ) -> dict:
     """Decompose a metric's period-over-period change by dimension."""
     metric = metric if metric in SUPPORTED_METRICS else "revenue"
@@ -98,7 +99,7 @@ async def diagnose_change(
     prev_to = date_from - timedelta(days=1)
     prev_from = prev_to - timedelta(days=span - 1)
 
-    filters = {"region": region, "channel": channel, "category": category}
+    filters = {"region": region, "channel": channel, "category": category, "org_id": org_id}
 
     total_current = await _metric_total(db, metric, date_from, date_to, filters)
     total_previous = await _metric_total(db, metric, prev_from, prev_to, filters)
@@ -108,7 +109,7 @@ async def diagnose_change(
     dim_results: dict[str, dict] = {}
     for dimension in dimensions:
         members = await _member_breakdown(
-            db, metric, dimension, date_from, date_to, prev_from, prev_to, filters
+            db, metric, dimension, date_from, date_to, prev_from, prev_to, filters, org_id=org_id
         )
         contributions = []
         for key, cur, prev in members:
@@ -214,16 +215,19 @@ async def _metric_total(
     date_to: date,
     filters: dict[str, str | None],
 ) -> float:
+    org_id = filters.get("org_id")
     if metric == "expense_total":
         value = func.sum(Expense.amount)
-        stmt = (
-            select(func.coalesce(value, 0))
-            .where(Expense.expense_date.between(date_from, date_to))
-        )
+        conds = [Expense.expense_date.between(date_from, date_to)]
+        if org_id:
+            conds.append(Expense.org_id == org_id)
+        stmt = select(func.coalesce(value, 0)).where(and_(*conds))
         return float((await db.execute(stmt)).scalar_one())
 
     value_expr, joins = _metric_expr(metric)
     conditions = [SalesTransaction.txn_date.between(date_from, date_to)]
+    if org_id:
+        conditions.append(SalesTransaction.org_id == org_id)
     conditions += _sales_filters(filters)
     stmt = select(func.coalesce(value_expr, 0))
     for join in joins:
@@ -243,18 +247,24 @@ async def _member_breakdown(
     prev_from: date,
     prev_to: date,
     filters: dict[str, str | None],
+    org_id=None,
 ) -> list[tuple[str, float, float]]:
     """Per-member (current, previous) values for a dimension."""
     if metric == "expense_total":
         key = Expense.category
+        cur_conds = [Expense.expense_date.between(date_from, date_to)]
+        prev_conds = [Expense.expense_date.between(prev_from, prev_to)]
+        if org_id:
+            cur_conds.append(Expense.org_id == org_id)
+            prev_conds.append(Expense.org_id == org_id)
         current_q = (
             select(key.label("key"), func.sum(Expense.amount).label("v"))
-            .where(Expense.expense_date.between(date_from, date_to))
+            .where(and_(*cur_conds))
             .group_by(key)
         )
         previous_q = (
             select(key.label("key"), func.sum(Expense.amount).label("v"))
-            .where(Expense.expense_date.between(prev_from, prev_to))
+            .where(and_(*prev_conds))
             .group_by(key)
         )
     else:
@@ -270,6 +280,8 @@ async def _member_breakdown(
 
         value_expr, _ = _metric_expr(metric)
         conditions = _sales_filters(filters)
+        if org_id:
+            conditions.append(SalesTransaction.org_id == org_id)
 
         def build(d_from: date, d_to: date):
             stmt = (
@@ -319,9 +331,10 @@ def _sales_filters(filters: dict[str, str | None]) -> list:
     if filters.get("channel"):
         conditions.append(SalesTransaction.channel == filters["channel"])
     if filters.get("category"):
-        conditions.append(
-            SalesTransaction.product_id.in_(
-                select(Product.id).where(Product.category == filters["category"])
-            )
-        )
+        cat = filters["category"]
+        prod_q = select(Product.id).where(Product.category == cat)
+        if filters.get("org_id"):
+            prod_q = prod_q.where(Product.org_id == filters["org_id"])
+        conditions.append(SalesTransaction.product_id.in_(prod_q))
+    # org_id handled separately in _metric_total/_member_breakdown where needed
     return conditions

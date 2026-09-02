@@ -22,26 +22,46 @@ KPI_SHIFT_THRESHOLD_PCT = 15.0
 METRIC_LABEL = {"revenue": "Revenue", "orders": "Orders", "expense_total": "Expenses"}
 
 
-async def _window_sum(db: AsyncSession, metric: str, start: date, end: date) -> float:
-    value = (
-        await db.execute(
-            text(
-                "SELECT COALESCE(SUM(value), 0) FROM kpi_snapshots "
-                "WHERE metric = :m AND dimensions = '{}'::jsonb "
-                "AND snapshot_date BETWEEN :s AND :e"
-            ),
-            {"m": metric, "s": start, "e": end},
-        )
-    ).scalar_one()
+async def _window_sum(db: AsyncSession, metric: str, start: date, end: date, org_id=None) -> float:
+    if org_id is not None:
+        value = (
+            await db.execute(
+                text(
+                    "SELECT COALESCE(SUM(value), 0) FROM kpi_snapshots "
+                    "WHERE metric = :m AND dimensions = '{}'::jsonb "
+                    "AND snapshot_date BETWEEN :s AND :e AND org_id = :org_id"
+                ),
+                {"m": metric, "s": start, "e": end, "org_id": str(org_id)},
+            )
+        ).scalar_one()
+    else:
+        value = (
+            await db.execute(
+                text(
+                    "SELECT COALESCE(SUM(value), 0) FROM kpi_snapshots "
+                    "WHERE metric = :m AND dimensions = '{}'::jsonb "
+                    "AND snapshot_date BETWEEN :s AND :e"
+                ),
+                {"m": metric, "s": start, "e": end},
+            )
+        ).scalar_one()
     return float(value)
 
 
-async def _latest_data_date(db: AsyncSession) -> date | None:
-    value = (
-        await db.execute(
-            text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
-        )
-    ).scalar_one()
+async def _latest_data_date(db: AsyncSession, org_id=None) -> date | None:
+    if org_id is not None:
+        value = (
+            await db.execute(
+                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue' AND org_id = :org_id"),
+                {"org_id": str(org_id)},
+            )
+        ).scalar_one()
+    else:
+        value = (
+            await db.execute(
+                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
+            )
+        ).scalar_one()
     return value
 
 
@@ -49,13 +69,13 @@ def _fmt(value: float) -> str:
     return f"NPR {value:,.0f}"
 
 
-async def detect_kpi_shifts(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def detect_kpi_shifts(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     found = []
     for metric, label in METRIC_LABEL.items():
         cur_start = today - timedelta(days=6)
         prev_start, prev_end = today - timedelta(days=13), today - timedelta(days=7)
-        current = await _window_sum(db, metric, cur_start, today)
-        previous = await _window_sum(db, metric, prev_start, prev_end)
+        current = await _window_sum(db, metric, cur_start, today, org_id=org_id)
+        previous = await _window_sum(db, metric, prev_start, prev_end, org_id=org_id)
         if previous <= 0:
             continue
         change = (current - previous) / previous * 100
@@ -93,25 +113,23 @@ async def detect_kpi_shifts(db: AsyncSession, today: date) -> list[dict[str, Any
     return found
 
 
-async def detect_forecast_outlook(db: AsyncSession, today: date) -> list[dict[str, Any]]:
-    model = (
-        await db.execute(
-            select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
-        )
-    ).scalar_one_or_none()
+async def detect_forecast_outlook(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
+    q = select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+    if org_id is not None:
+        q = q.where(MlModel.org_id == org_id)
+    model = (await db.execute(q)).scalar_one_or_none()
     if model is None:
         return []
     horizon_end = today + timedelta(days=30)
-    forecast_sum = (
-        await db.execute(
-            select(func.coalesce(func.sum(Forecast.yhat), 0)).where(
-                Forecast.model_id == model.id,
-                Forecast.forecast_date > today,
-                Forecast.forecast_date <= horizon_end,
-            )
-        )
-    ).scalar_one()
-    actual_sum = await _window_sum(db, "revenue", today - timedelta(days=29), today)
+    fq = select(func.coalesce(func.sum(Forecast.yhat), 0)).where(
+        Forecast.model_id == model.id,
+        Forecast.forecast_date > today,
+        Forecast.forecast_date <= horizon_end,
+    )
+    if org_id is not None:
+        fq = fq.where(Forecast.org_id == org_id)
+    forecast_sum = (await db.execute(fq)).scalar_one()
+    actual_sum = await _window_sum(db, "revenue", today - timedelta(days=29), today, org_id=org_id)
     if actual_sum <= 0 or float(forecast_sum) <= 0:
         return []
     change = (float(forecast_sum) - actual_sum) / actual_sum * 100
@@ -141,17 +159,12 @@ async def detect_forecast_outlook(db: AsyncSession, today: date) -> list[dict[st
     ]
 
 
-async def detect_new_anomalies(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def detect_new_anomalies(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     since = datetime.combine(today - timedelta(days=1), datetime.min.time())
-    anomalies = (
-        (
-            await db.execute(
-                select(Anomaly).where(Anomaly.status == "open", Anomaly.detected_at >= since)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    q = select(Anomaly).where(Anomaly.status == "open", Anomaly.detected_at >= since)
+    if org_id is not None:
+        q = q.where(Anomaly.org_id == org_id)
+    anomalies = ((await db.execute(q)).scalars().all())
     found = []
     for a in anomalies:
         context = a.context or {}
@@ -180,15 +193,20 @@ async def detect_new_anomalies(db: AsyncSession, today: date) -> list[dict[str, 
     return found
 
 
-async def detect_restock_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
-    latest = (
-        select(
-            InventoryLevel.product_id,
-            func.max(InventoryLevel.snapshot_date).label("latest_date"),
-        )
-        .group_by(InventoryLevel.product_id)
-        .subquery()
+async def detect_restock_recommendations(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
+    latest_q = select(
+        InventoryLevel.product_id,
+        func.max(InventoryLevel.snapshot_date).label("latest_date"),
     )
+    if org_id is not None:
+        latest_q = latest_q.where(InventoryLevel.org_id == org_id)
+    latest = latest_q.group_by(InventoryLevel.product_id).subquery()
+    inv_cond = [InventoryLevel.quantity_on_hand <= InventoryLevel.reorder_level]
+    if org_id is not None:
+        inv_cond.append(InventoryLevel.org_id == org_id)
+        prod_join = (Product.id == InventoryLevel.product_id) & (Product.org_id == org_id)
+    else:
+        prod_join = Product.id == InventoryLevel.product_id
     rows = (
         await db.execute(
             select(
@@ -202,24 +220,37 @@ async def detect_restock_recommendations(db: AsyncSession, today: date) -> list[
                     latest,
                     (latest.c.product_id == InventoryLevel.product_id)
                     & (latest.c.latest_date == InventoryLevel.snapshot_date),
-                ).join(Product.__table__, Product.id == InventoryLevel.product_id)
+                ).join(Product.__table__, prod_join)
             )
-            .where(InventoryLevel.quantity_on_hand <= InventoryLevel.reorder_level)
+            .where(*inv_cond)
         )
     ).all()
     found = []
     for sku, name, on_hand, reorder in rows[:5]:
-        avg_daily = (
-            await db.execute(
-                text(
-                    "SELECT COALESCE(AVG(qty), 0) FROM ("
-                    "  SELECT txn_date, SUM(quantity) AS qty FROM sales_transactions st"
-                    "  JOIN products p ON p.id = st.product_id WHERE p.sku = :sku"
-                    "  AND txn_date >= :since GROUP BY txn_date) t"
-                ),
-                {"sku": sku, "since": today - timedelta(days=30)},
-            )
-        ).scalar_one()
+        if org_id is not None:
+            avg_daily = (
+                await db.execute(
+                    text(
+                        "SELECT COALESCE(AVG(qty), 0) FROM ("
+                        "  SELECT txn_date, SUM(quantity) AS qty FROM sales_transactions st"
+                        "  JOIN products p ON p.id = st.product_id WHERE p.sku = :sku"
+                        "  AND st.org_id = :org_id AND txn_date >= :since GROUP BY txn_date) t"
+                    ),
+                    {"sku": sku, "org_id": str(org_id), "since": today - timedelta(days=30)},
+                )
+            ).scalar_one()
+        else:
+            avg_daily = (
+                await db.execute(
+                    text(
+                        "SELECT COALESCE(AVG(qty), 0) FROM ("
+                        "  SELECT txn_date, SUM(quantity) AS qty FROM sales_transactions st"
+                        "  JOIN products p ON p.id = st.product_id WHERE p.sku = :sku"
+                        "  AND txn_date >= :since GROUP BY txn_date) t"
+                    ),
+                    {"sku": sku, "since": today - timedelta(days=30)},
+                )
+            ).scalar_one()
         suggested = max(int(float(avg_daily) * 30), reorder)
         found.append(
             {
@@ -246,9 +277,9 @@ async def detect_restock_recommendations(db: AsyncSession, today: date) -> list[
     return found
 
 
-async def generate_insights(db: AsyncSession) -> int:
+async def generate_insights(db: AsyncSession, org_id=None) -> int:
     """Run all detectors; insert deduped insights. Returns number created."""
-    today = await _latest_data_date(db)
+    today = await _latest_data_date(db, org_id=org_id)
     if today is None:
         return 0
     findings: list[dict[str, Any]] = []
@@ -259,12 +290,18 @@ async def generate_insights(db: AsyncSession) -> int:
         detect_restock_recommendations,
     ):
         try:
-            findings.extend(await detector(db, today))
+            findings.extend(await detector(db, today, org_id=org_id))
         except Exception:
             logger.exception("insight detector %s failed", detector.__name__)
 
     created = 0
     for finding in findings:
+        # Ensure org_id is set and dedupe_key is per-org to avoid cross-org dedup collisions
+        if org_id is not None:
+            finding.setdefault("org_id", org_id)
+            # scope dedupe_key by org
+            if finding.get("dedupe_key"):
+                finding["dedupe_key"] = f"{org_id}:{finding['dedupe_key']}"
         stmt = (
             pg_insert(Insight)
             .values(**finding)

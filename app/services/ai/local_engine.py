@@ -39,6 +39,14 @@ async def _kpi_map(db: AsyncSession, f: Filters) -> dict[str, dict[str, Any]]:
     return {c["metric"]: c for c in await kpi_summary(db, f)}
 
 
+def _org_for_user(user) -> Any | None:
+    if user is None:
+        return None
+    if getattr(user, "is_super_admin", False):
+        return None
+    return getattr(user, "org_id", None)
+
+
 def _period_label(f: Filters) -> str:
     """Human label for the window actually being queried."""
     label = _LABELS.get((f.date_from, f.date_to))
@@ -64,7 +72,7 @@ def _remember_label(f: Filters, label: str) -> None:
         _LABELS.clear()
 
 
-async def _resolve_window(db: AsyncSession, today: date | None = None) -> Filters:
+async def _resolve_window(db: AsyncSession, today: date | None = None, org_id=None) -> Filters:
     """Most recent {WINDOW_DAYS}-day window that actually contains data.
 
     Skips back up to WINDOW_SHIFTS empty windows so the assistant answers with
@@ -76,6 +84,7 @@ async def _resolve_window(db: AsyncSession, today: date | None = None) -> Filter
         f = Filters(
             date_from=today - timedelta(days=WINDOW_DAYS - 1 + span),
             date_to=today - timedelta(days=span),
+            org_id=org_id,
         )
         try:
             cards = await _kpi_map(db, f)
@@ -85,10 +94,10 @@ async def _resolve_window(db: AsyncSession, today: date | None = None) -> Filter
         exp = cards.get("expense_total", {}).get("value") or 0
         if float(rev) > 0 or float(exp) > 0:
             return f
-    return Filters(date_from=today - timedelta(days=WINDOW_DAYS - 1), date_to=today)
+    return Filters(date_from=today - timedelta(days=WINDOW_DAYS - 1), date_to=today, org_id=org_id)
 
 
-async def local_answer(db: AsyncSession, question: str, intent: Intent) -> str:
+async def local_answer(db: AsyncSession, question: str, intent: Intent, org_id=None, user=None) -> str:
     """Answer from live warehouse data without an LLM.
 
     A period named in the question wins over the rolling default, and is never
@@ -96,15 +105,18 @@ async def local_answer(db: AsyncSession, question: str, intent: Intent) -> str:
     2019" both collapse onto the same 30-day window and return byte-identical
     replies.
     """
+    # Resolve org_id from user if not explicitly given
+    if org_id is None and user is not None:
+        org_id = _org_for_user(user)
     asked = parse_period(question)
     if asked is not None:
-        f = Filters(date_from=asked.start, date_to=asked.end)
+        f = Filters(date_from=asked.start, date_to=asked.end, org_id=org_id)
         _remember_label(f, asked.label)
-        outside = await _outside_coverage(db, asked)
+        outside = await _outside_coverage(db, asked, org_id=org_id)
         if outside:
             return outside
     else:
-        f = await _resolve_window(db)
+        f = await _resolve_window(db, org_id=org_id)
 
     try:
         handler = _HANDLERS.get(intent)
@@ -127,14 +139,14 @@ async def _rollback(db: AsyncSession) -> None:
         logger.debug("rollback failed", exc_info=True)
 
 
-async def _outside_coverage(db: AsyncSession, asked: ParsedPeriod) -> str | None:
+async def _outside_coverage(db: AsyncSession, asked: ParsedPeriod, org_id=None) -> str | None:
     """Explain a window the warehouse simply has no data for.
 
     Reporting रू 0 for a date that was never loaded is the single most
     misleading thing this assistant can do, so it is called out explicitly.
     """
     try:
-        coverage = await data_coverage(db)
+        coverage = await data_coverage(db, org_id=org_id)
     except Exception:
         # e.g. the ingested_at column is missing because migrations are behind.
         logger.warning("data_coverage unavailable", exc_info=True)
@@ -275,30 +287,19 @@ async def _profit(db: AsyncSession, f: Filters, q: str) -> str:
 
 
 async def _forecast(db: AsyncSession, f: Filters, q: str) -> str:
-    model = (
-        await db.execute(
-            select(MlModel)
-            .where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
-            .order_by(MlModel.trained_at.desc())
-        )
-    ).scalar_one_or_none()
+    mq = select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+    if f.org_id is not None:
+        mq = mq.where(MlModel.org_id == f.org_id)
+    model = (await db.execute(mq.order_by(MlModel.trained_at.desc()))).scalar_one_or_none()
     if not model:
         return (
             "No active forecast model found. Train one from the **ML / Forecast** section, "
             "then ask me again — or check the **Revenue Forecast** panel."
         )
-    rows = (
-        (
-            await db.execute(
-                select(Forecast)
-                .where(Forecast.model_id == model.id)
-                .order_by(Forecast.forecast_date)
-                .limit(WINDOW_DAYS)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    fq = select(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(WINDOW_DAYS)
+    if f.org_id is not None:
+        fq = fq.where(Forecast.org_id == f.org_id)
+    rows = ((await db.execute(fq)).scalars().all())
     if not rows:
         return (
             "The forecast model has no projections yet. "
@@ -329,7 +330,7 @@ async def _forecast(db: AsyncSession, f: Filters, q: str) -> str:
 
 
 async def _inventory(db: AsyncSession, f: Filters, q: str) -> str:
-    low = await inventory_levels(db, below_reorder_only=True)
+    low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
     if not low:
         return (
             "Good news — **no products are below their reorder level** right now. "
@@ -361,18 +362,10 @@ async def _inventory(db: AsyncSession, f: Filters, q: str) -> str:
 
 
 async def _anomalies(db: AsyncSession, f: Filters, q: str) -> str:
-    rows = (
-        (
-            await db.execute(
-                select(Anomaly)
-                .where(Anomaly.status == "open")
-                .order_by(Anomaly.detected_at.desc())
-                .limit(20)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(20)
+    if f.org_id is not None:
+        aq = aq.where(Anomaly.org_id == f.org_id)
+    rows = ((await db.execute(aq)).scalars().all())
     if not rows:
         return "No **open anomalies** detected in the current window — operations look stable. ✔"
     lines = [
@@ -463,7 +456,7 @@ async def _compare(db: AsyncSession, f: Filters, q: str) -> str:
     # those, not about whatever two months happen to be latest.
     named = _named_periods(q)
     if named:
-        return await _compare_periods(db, named)
+        return await _compare_periods(db, named, org_id=f.org_id)
 
     pnl = await monthly_pnl(db, f)
     if not pnl:
@@ -501,10 +494,10 @@ def _named_periods(question: str) -> list[ParsedPeriod] | None:
     return [left, right]
 
 
-async def _compare_periods(db: AsyncSession, periods: list[ParsedPeriod]) -> str:
+async def _compare_periods(db: AsyncSession, periods: list[ParsedPeriod], org_id=None) -> str:
     rows = []
     for period in periods:
-        f = Filters(date_from=period.start, date_to=period.end)
+        f = Filters(date_from=period.start, date_to=period.end, org_id=org_id)
         cards = await _kpi_map(db, f)
         rows.append(
             {
@@ -588,6 +581,40 @@ async def _thanks(db: AsyncSession, f: Filters, q: str) -> str:
     )
 
 
+async def _business(db: AsyncSession, f: Filters, q: str) -> str:
+    # Accurate identity — resolve org name from DB, never guess
+    org_id = f.org_id
+    try:
+        if org_id is not None:
+            from app.models.identity import Organization
+
+            org = await db.get(Organization, org_id)
+            if org:
+                return (
+                    f"Your business / workspace is **{org.name}**.\n\n"
+                    f"- **Workspace:** {org.name}\n"
+                    f"- **Org ID:** `{org.id}`\n"
+                    f"- **Your scope:** isolated — you only see this business's data.\n\n"
+                    "Ask me about its **revenue, expenses, forecasts, inventory, anomalies** — I'll pull live numbers for this workspace."
+                )
+        # Fallback: super-admin or no org
+        from app.models.identity import Organization
+        from sqlalchemy import select as _select
+
+        # If super-admin with no org, list accessible orgs hint
+        if org_id is None:
+            return (
+                "You're signed in as **Platform Super-Admin** (no single business). "
+                "You can see all workspaces via the org switcher.\n\n"
+                "If you expected a business name, sign in with a Business Admin / Manager / Analyst account for that workspace."
+            )
+        return "I couldn't find your business name — your account has no workspace assigned. Ask your admin for an invite or register a business."
+    except Exception:
+        logger.warning("_business handler failed", exc_info=True)
+        await _rollback(db)
+        return "Your business name is stored in your workspace settings. I couldn't read it just now — try again."
+
+
 async def _generic(db: AsyncSession, f: Filters) -> str:
     cards = await _kpi_map(db, f)
     rev = cards.get("revenue", {}).get("value")
@@ -608,24 +635,16 @@ async def _generic(db: AsyncSession, f: Filters) -> str:
         f"- **Expenses:** {npr(exp) if exp is not None else '—'}",
     ]
     try:
-        low = await inventory_levels(db, below_reorder_only=True)
+        low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
         if low:
             lines.append(f"- **Stock alerts:** {len(low)} product(s) below reorder level")
     except Exception:
         pass
     try:
-        open_anoms = (
-            (
-                await db.execute(
-                    select(Anomaly)
-                    .where(Anomaly.status == "open")
-                    .order_by(Anomaly.detected_at.desc())
-                    .limit(20)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(20)
+        if f.org_id is not None:
+            aq = aq.where(Anomaly.org_id == f.org_id)
+        open_anoms = ((await db.execute(aq)).scalars().all())
         if open_anoms:
             lines.append(f"- **Anomalies:** {len(open_anoms)} open alert(s) need review")
     except Exception:
@@ -663,6 +682,7 @@ _HANDLERS: dict[Intent, Any] = {
     Intent.CHANNELS: _channels,
     Intent.REGIONS: _regions,
     Intent.COMPARE: _compare,
+    Intent.BUSINESS: _business,
     Intent.GREETING: _greeting,
     Intent.HELP: _help,
     Intent.THANKS: _thanks,

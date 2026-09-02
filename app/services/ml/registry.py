@@ -27,6 +27,7 @@ async def train_target(
     target: str,
     horizon: int = DEFAULT_HORIZON,
     dimensions: dict[str, Any] | None = None,
+    org_id=None,
 ) -> MlModel | None:
     """Evaluate candidates, register the winner (if it beats the active model),
     and write its forward forecasts.
@@ -35,7 +36,7 @@ async def train_target(
     omit for the whole-business series — same target name, disjoint segment key.
     """
     dims = dimensions or {}
-    frame = await load_series(db, target, dims)
+    frame = await load_series(db, target, dims, org_id=org_id)
     if len(frame) < forecasting.HOLDOUT_DAYS * 2:
         logger.warning("not enough history for %s%s (%d rows)", target, dims, len(frame))
         return None
@@ -51,13 +52,12 @@ async def train_target(
     winner = min(candidates, key=lambda e: e.metrics[metric_key])
 
     # degradation guard: don't replace a better active model
-    active = (
-        await db.execute(
-            select(MlModel).where(
-                MlModel.target == target, MlModel.dimensions == dims, MlModel.is_active.is_(True)
-            )
-        )
-    ).scalar_one_or_none()
+    active_q = select(MlModel).where(
+        MlModel.target == target, MlModel.dimensions == dims, MlModel.is_active.is_(True)
+    )
+    if org_id is not None:
+        active_q = active_q.where(MlModel.org_id == org_id)
+    active = (await db.execute(active_q)).scalar_one_or_none()
     if (
         active
         and active.metrics
@@ -74,22 +74,18 @@ async def train_target(
         )
         model = active
     else:
-        version = (
-            (
-                await db.execute(
-                    select(func.coalesce(func.max(MlModel.version), 0)).where(
-                        MlModel.target == target,
-                        MlModel.dimensions == dims,
-                        MlModel.model_type == winner.model_name,
-                    )
-                )
-            ).scalar_one()
-        ) + 1
-        await db.execute(
-            update(MlModel)
-            .where(MlModel.target == target, MlModel.dimensions == dims)
-            .values(is_active=False)
+        version_q = select(func.coalesce(func.max(MlModel.version), 0)).where(
+            MlModel.target == target,
+            MlModel.dimensions == dims,
+            MlModel.model_type == winner.model_name,
         )
+        if org_id is not None:
+            version_q = version_q.where(MlModel.org_id == org_id)
+        version = ((await db.execute(version_q)).scalar_one()) + 1
+        upd = update(MlModel).where(MlModel.target == target, MlModel.dimensions == dims)
+        if org_id is not None:
+            upd = upd.where(MlModel.org_id == org_id)
+        await db.execute(upd.values(is_active=False))
         model = MlModel(
             model_type=winner.model_name,
             target=target,
@@ -104,6 +100,7 @@ async def train_target(
             },
             params=winner.params,
             is_active=True,
+            org_id=org_id,
         )
         db.add(model)
         await db.flush()
@@ -129,6 +126,7 @@ async def train_target(
                 yhat=round(float(row["yhat"]), 2),
                 yhat_lower=None if pd.isna(row["lo"]) else round(float(row["lo"]), 2),
                 yhat_upper=None if pd.isna(row["hi"]) else round(float(row["hi"]), 2),
+                org_id=org_id,
             )
         )
     await db.commit()
@@ -151,15 +149,15 @@ async def train_target(
 MAX_SEGMENTS_PER_TARGET = 5
 
 
-async def train_all(db: AsyncSession) -> list[MlModel]:
+async def train_all(db: AsyncSession, org_id=None) -> list[MlModel]:
     """Train every whole-business target, then the top segments of each."""
     models = []
     for target in FORECAST_TARGETS:
-        model = await train_target(db, target)
+        model = await train_target(db, target, org_id=org_id)
         if model:
             models.append(model)
-        for dims in (await discover_segments(db, target))[:MAX_SEGMENTS_PER_TARGET]:
-            seg_model = await train_target(db, target, dimensions=dims)
+        for dims in (await discover_segments(db, target, org_id=org_id))[:MAX_SEGMENTS_PER_TARGET]:
+            seg_model = await train_target(db, target, dimensions=dims, org_id=org_id)
             if seg_model:
                 models.append(seg_model)
     return models

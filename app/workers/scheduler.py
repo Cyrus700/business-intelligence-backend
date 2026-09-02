@@ -29,67 +29,148 @@ async def _run_scheduled_source(source_id: str) -> None:
     from app.services.etl.pipeline import run_source_pipeline
 
     async with get_session_factory()() as db:
+        source = await db.get(DataSource, source_id)
+        if source is None or source.status != "active":
+            return
+        # Advisory lock scoped by org_id + source_id so two orgs never block each other
+        lock_key = f"{source.org_id}:{source_id}" if source.org_id else source_id
         lock = (
             await db.execute(
-                text("SELECT pg_try_advisory_lock(hashtext(:key))"), {"key": source_id}
+                text("SELECT pg_try_advisory_lock(hashtext(:key))"), {"key": lock_key}
             )
         ).scalar()
         if not lock:
             logger.warning("source %s already running; skipping", source_id)
             return
         try:
-            source = await db.get(DataSource, source_id)
-            if source is None or source.status != "active":
-                return
-            result = await run_source_pipeline(db, source, trigger="schedule")
+            result = await run_source_pipeline(db, source, trigger="schedule", org_id=source.org_id)
             logger.info("scheduled pull for %s: %s rows loaded", source.name, result.rows_loaded)
         except Exception:
             logger.exception("scheduled pull failed for source %s", source_id)
         finally:
-            await db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), {"key": source_id})
+            await db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), {"key": lock_key})
 
 
 # ── Pure business logic (no worker awareness) — kept separate so tests can call them directly
-async def _weekly_retrain() -> None:
+async def _weekly_retrain(org_id=None) -> None:
     from app.services.ml.registry import train_all
+    from app.models import Organization
 
+    if org_id is not None:
+        async with get_session_factory()() as db:
+            await train_all(db, org_id=org_id)
+        return
     async with get_session_factory()() as db:
-        await train_all(db)
+        orgs = (await db.execute(select(Organization).where(Organization.is_legacy.is_(False)))).scalars().all()
+        # include legacy org as well for historical data
+        all_orgs = orgs or []
+        if not all_orgs:
+            await train_all(db)
+            return
+        for org in all_orgs:
+            async with get_session_factory()() as per_db:
+                try:
+                    await train_all(per_db, org_id=org.id)
+                except Exception:
+                    logger.exception("weekly retrain failed for org %s", org.id)
 
 
-async def _daily_anomaly_scan() -> None:
+async def _daily_anomaly_scan(org_id=None) -> None:
     from app.services.ml.anomaly import scan_all
 
+    if org_id is not None:
+        async with get_session_factory()() as db:
+            created = await scan_all(db, lookback_days=7, org_id=org_id)
+            logger.info("daily anomaly scan org %s: %d new", org_id, created)
+        return
+    from app.models import Organization
+
     async with get_session_factory()() as db:
-        created = await scan_all(db, lookback_days=7)
-        logger.info("daily anomaly scan: %d new", created)
+        orgs = (await db.execute(select(Organization))).scalars().all()
+        if not orgs:
+            async with get_session_factory()() as per_db:
+                created = await scan_all(per_db, lookback_days=7)
+                logger.info("daily anomaly scan: %d new", created)
+            return
+        for org in orgs:
+            async with get_session_factory()() as per_db:
+                try:
+                    created = await scan_all(per_db, lookback_days=7, org_id=org.id)
+                    logger.info("daily anomaly scan org %s: %d new", org.id, created)
+                except Exception:
+                    logger.exception("anomaly scan failed for org %s", org.id)
 
 
-async def _daily_drift_check() -> None:
+async def _daily_drift_check(org_id=None) -> None:
     from app.services.ml.drift import check_all
 
+    if org_id is not None:
+        async with get_session_factory()() as db:
+            results = await check_all(db, org_id=org_id)
+            triggered = sum(1 for r in results if r.triggered)
+            logger.info("daily drift check org %s: %d model(s) checked, %d retrained", org_id, len(results), triggered)
+        return
+    from app.models import Organization
+
     async with get_session_factory()() as db:
-        results = await check_all(db)
-        triggered = sum(1 for r in results if r.triggered)
-        logger.info("daily drift check: %d model(s) checked, %d retrained", len(results), triggered)
+        orgs = (await db.execute(select(Organization))).scalars().all()
+        if not orgs:
+            async with get_session_factory()() as per_db:
+                results = await check_all(per_db)
+                triggered = sum(1 for r in results if r.triggered)
+                logger.info("daily drift check: %d model(s) checked, %d retrained", len(results), triggered)
+            return
+        for org in orgs:
+            async with get_session_factory()() as per_db:
+                try:
+                    results = await check_all(per_db, org_id=org.id)
+                    triggered = sum(1 for r in results if r.triggered)
+                    logger.info("daily drift check org %s: %d model(s) checked, %d retrained", org.id, len(results), triggered)
+                except Exception:
+                    logger.exception("drift check failed for org %s", org.id)
 
 
-async def _nightly_insights_and_alerts() -> None:
+async def _nightly_insights_and_alerts(org_id=None) -> None:
     from app.services.alerts.engine import evaluate_alerts
     from app.services.insights.engine import generate_insights
     from app.services.ml.recommendations import persist_recommendations
 
+    if org_id is not None:
+        async with get_session_factory()() as db:
+            insights = await generate_insights(db, org_id=org_id)
+            notifications = await evaluate_alerts(db, org_id=org_id)
+            recs = await persist_recommendations(db, org_id=org_id)
+            logger.info(
+                "nightly org %s: %d insights, %d notifications, %d/%d recommendations (new/generated)",
+                org_id, insights, notifications, recs["new"], recs["generated"],
+            )
+        return
+    from app.models import Organization
+
     async with get_session_factory()() as db:
-        insights = await generate_insights(db)
-        notifications = await evaluate_alerts(db)
-        recs = await persist_recommendations(db)
-        logger.info(
-            "nightly: %d insights, %d notifications, %d/%d recommendations (new/generated)",
-            insights,
-            notifications,
-            recs["new"],
-            recs["generated"],
-        )
+        orgs = (await db.execute(select(Organization))).scalars().all()
+        if not orgs:
+            async with get_session_factory()() as per_db:
+                insights = await generate_insights(per_db)
+                notifications = await evaluate_alerts(per_db)
+                recs = await persist_recommendations(per_db)
+                logger.info(
+                    "nightly: %d insights, %d notifications, %d/%d recommendations (new/generated)",
+                    insights, notifications, recs["new"], recs["generated"],
+                )
+            return
+        for org in orgs:
+            async with get_session_factory()() as per_db:
+                try:
+                    insights = await generate_insights(per_db, org_id=org.id)
+                    notifications = await evaluate_alerts(per_db, org_id=org.id)
+                    recs = await persist_recommendations(per_db, org_id=org.id)
+                    logger.info(
+                        "nightly org %s: %d insights, %d notifications, %d/%d recommendations",
+                        org.id, insights, notifications, recs["new"], recs["generated"],
+                    )
+                except Exception:
+                    logger.exception("nightly job failed for org %s", org.id)
 
 
 # ── Worker-pool registrations — professional tracked execution (retries, metrics, durably logged)
@@ -127,41 +208,81 @@ async def _w_report_schedules(_payload: dict) -> None:
     await _run_due_report_schedules()
 
 
-async def _monthly_report() -> None:
+async def _monthly_report(org_id=None) -> None:
     from datetime import timedelta
 
-    from app.models import Report
+    from app.models import Organization, Report
     from app.services.reports import builder
     from app.services.storage import FileStorage, make_key
 
-    async with get_session_factory()() as db:
-        end = business_today().replace(day=1) - timedelta(days=1)
-        start = end.replace(day=1)
-        title = f"Monthly business summary — {start:%B %Y}"
-        payload = await builder.build_pdf(db, start, end, title)
-        stored = FileStorage().save(make_key(f"monthly-{start:%Y-%m}.pdf"), payload)
-        db.add(
-            Report(
-                report_type="monthly_summary",
-                period_start=start,
-                period_end=end,
-                format="pdf",
-                s3_key=stored,
+    async def _generate_for_org(oid=None):
+        async with get_session_factory()() as db:
+            end = business_today().replace(day=1) - timedelta(days=1)
+            start = end.replace(day=1)
+            title = f"Monthly business summary — {start:%B %Y}"
+            payload = await builder.build_pdf(db, start, end, title, org_id=oid)
+            stored = FileStorage().save(make_key(f"monthly-{start:%Y-%m}-{oid}.pdf") if oid else make_key(f"monthly-{start:%Y-%m}.pdf"), payload)
+            db.add(
+                Report(
+                    report_type="monthly_summary",
+                    period_start=start,
+                    period_end=end,
+                    format="pdf",
+                    s3_key=stored,
+                    org_id=oid,
+                )
             )
-        )
-        await db.commit()
-        logger.info("monthly report generated for %s", start.strftime("%Y-%m"))
+            await db.commit()
+            logger.info("monthly report generated for %s org %s", start.strftime("%Y-%m"), oid)
+
+    if org_id is not None:
+        await _generate_for_org(org_id)
+        return
+    async with get_session_factory()() as db:
+        orgs = (await db.execute(select(Organization))).scalars().all()
+        if not orgs:
+            await _generate_for_org(None)
+            return
+        for org in orgs:
+            try:
+                await _generate_for_org(org.id)
+            except Exception:
+                logger.exception("monthly report failed for org %s", org.id)
 
 
-async def _daily_quality_audit() -> None:
+async def _daily_quality_audit(org_id=None) -> None:
     from app.services.quality.engine import run_quality_audit
 
+    if org_id is not None:
+        async with get_session_factory()() as db:
+            run = await run_quality_audit(db, triggered_by="schedule", org_id=org_id)
+            if run is None:
+                logger.error("daily data-quality audit failed for org %s", org_id)
+            else:
+                logger.info("daily quality audit org %s: score=%s issues=%d", org_id, run.score, run.issues_found)
+        return
+    from app.models import Organization
+
     async with get_session_factory()() as db:
-        run = await run_quality_audit(db, triggered_by="schedule")
-        if run is None:
-            logger.error("daily data-quality audit failed")
-        else:
-            logger.info("daily quality audit: score=%s issues=%d", run.score, run.issues_found)
+        orgs = (await db.execute(select(Organization))).scalars().all()
+        if not orgs:
+            async with get_session_factory()() as per_db:
+                run = await run_quality_audit(per_db, triggered_by="schedule")
+                if run is None:
+                    logger.error("daily data-quality audit failed")
+                else:
+                    logger.info("daily quality audit: score=%s issues=%d", run.score, run.issues_found)
+            return
+        for org in orgs:
+            async with get_session_factory()() as per_db:
+                try:
+                    run = await run_quality_audit(per_db, triggered_by="schedule", org_id=org.id)
+                    if run is None:
+                        logger.error("daily data-quality audit failed for org %s", org.id)
+                    else:
+                        logger.info("daily quality audit org %s: score=%s issues=%d", org.id, run.score, run.issues_found)
+                except Exception:
+                    logger.exception("quality audit failed for org %s", org.id)
 
 
 async def _run_due_report_schedules() -> None:

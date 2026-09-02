@@ -21,6 +21,7 @@ class TokenClaims:
     email: str | None
     role: str | None  # application role from app_metadata, NOT Supabase's postgres role
     token_version: int | None = None  # "ver" claim — compared to profiles.token_version
+    org_id: UUID | None = None
     purpose: str | None = None
 
 
@@ -41,6 +42,7 @@ def sign_token(
     token_version: int = 0,
     *,
     purpose: str = "auth",
+    org_id: UUID | None = None,
     expiry_hours: int | None = None,
 ) -> str:
     """Create a signed JWT.
@@ -49,39 +51,51 @@ def sign_token(
     auth token cannot be replayed as a password-reset token and vice-versa.
     ``expiry_hours`` overrides the default from settings for special-purpose
     tokens (e.g. short-lived reset tokens).
+    ``org_id`` is embedded in app_metadata for tenant scoping (trusted but DB is authoritative).
     """
     settings = get_settings()
     secret = _jwt_secret()
     ttl = timedelta(hours=expiry_hours if expiry_hours is not None else settings.jwt_expiry_hours)
+    app_meta: dict[str, str] = {"role": role}
+    if org_id is not None:
+        app_meta["org_id"] = str(org_id)
     payload = {
         "sub": str(user_id),
         "email": email,
-        "app_metadata": {"role": role},
+        "app_metadata": app_meta,
         "aud": settings.jwt_audience,
         "exp": datetime.now(UTC) + ttl,
         "iat": datetime.now(UTC),
         "ver": token_version,
         "purpose": purpose,
     }
+    # Top-level org_id for RLS / external consumers (PostgREST style)
+    if org_id is not None:
+        payload["org_id"] = str(org_id)
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def sign_reset_token(user_id: UUID, email: str, role: str = "analyst", token_version: int = 0) -> str:
+def sign_reset_token(user_id: UUID, email: str, role: str = "analyst", token_version: int = 0, org_id: UUID | None = None) -> str:
     """Short-lived password-reset token (30 min by default, isolated purpose)."""
     settings = get_settings()
     ttl_min = settings.jwt_reset_expiry_minutes
     # Reuse sign_token but with minute granularity and purpose=reset
     secret = _jwt_secret()
+    app_meta: dict[str, str] = {"role": role}
+    if org_id is not None:
+        app_meta["org_id"] = str(org_id)
     payload = {
         "sub": str(user_id),
         "email": email,
-        "app_metadata": {"role": role},
+        "app_metadata": app_meta,
         "aud": settings.jwt_audience,
         "exp": datetime.now(UTC) + timedelta(minutes=ttl_min),
         "iat": datetime.now(UTC),
         "ver": token_version,
         "purpose": "reset",
     }
+    if org_id is not None:
+        payload["org_id"] = str(org_id)
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
@@ -92,13 +106,14 @@ def verify_token(token: str, *, expected_purpose: str | None = None) -> TokenCla
     Legacy tokens without a ``purpose`` claim are accepted only when
     ``expected_purpose`` is ``None`` or ``"auth"`` (backwards compat).
     """
+    # In dev/test we allow the fallback dev secret so local `uvicorn` works without SUPABASE_JWT_SECRET;
+    # in prod `get_settings()` already hard-fails if the secret is weak/missing.
     settings = get_settings()
-    if not settings.supabase_jwt_secret:
-        raise AuthError("Server auth is not configured")
+    secret = _jwt_secret()
     try:
         payload = jwt.decode(
             token,
-            settings.supabase_jwt_secret,
+            secret,
             algorithms=["HS256"],
             audience=settings.jwt_audience,
             leeway=LEEWAY_SECONDS,
@@ -126,11 +141,19 @@ def verify_token(token: str, *, expected_purpose: str | None = None) -> TokenCla
         raise AuthError("Invalid subject claim") from e
 
     app_metadata = payload.get("app_metadata") or {}
+    org_raw = app_metadata.get("org_id") or payload.get("org_id")
+    org_id: UUID | None = None
+    if org_raw:
+        try:
+            org_id = UUID(str(org_raw))
+        except ValueError:
+            org_id = None
     return TokenClaims(
         user_id=user_id,
         email=payload.get("email"),
         role=app_metadata.get("role"),
         token_version=payload.get("ver"),
+        org_id=org_id,
         purpose=purpose,
     )
 

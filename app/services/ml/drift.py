@@ -28,7 +28,7 @@ MIN_THRESHOLD_MAPE = 10.0
 
 
 async def check_drift(
-    db: AsyncSession, model: MlModel, window_days: int = WINDOW_DAYS
+    db: AsyncSession, model: MlModel, window_days: int = WINDOW_DAYS, org_id=None
 ) -> ModelDrift:
     """Score `model`'s stored forecasts against actuals for the last
     `window_days` and record (and possibly act on) the result."""
@@ -86,12 +86,15 @@ async def check_drift(
     return drift
 
 
-async def check_all(db: AsyncSession, window_days: int = WINDOW_DAYS) -> list[ModelDrift]:
-    models = (await db.execute(select(MlModel).where(MlModel.is_active.is_(True)))).scalars().all()
+async def check_all(db: AsyncSession, window_days: int = WINDOW_DAYS, org_id=None) -> list[ModelDrift]:
+    q = select(MlModel).where(MlModel.is_active.is_(True))
+    if org_id is not None:
+        q = q.where(MlModel.org_id == org_id)
+    models = (await db.execute(q)).scalars().all()
     results = []
     for model in models:
         try:
-            results.append(await check_drift(db, model, window_days))
+            results.append(await check_drift(db, model, window_days, org_id=org_id))
         except Exception:
             logger.exception("drift check failed for %s%s", model.target, model.dimensions or "")
     return results

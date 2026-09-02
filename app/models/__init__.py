@@ -8,7 +8,7 @@ from app.models.decision import (
     Report,
     ReportSchedule,
 )
-from app.models.identity import AuditLog, Organization, Profile
+from app.models.identity import AuditLog, Organization, OrganizationInvite, Profile
 from app.models.integration import DataSource, EtlJob, RawUpload
 from app.models.jobs import BackgroundJob
 from app.models.ml import Anomaly, AnomalyFeedback, Forecast, MlModel, ModelDrift
@@ -27,6 +27,7 @@ from app.models.warehouse import (
 __all__ = [
     "Base",
     "Organization",
+    "OrganizationInvite",
     "Profile",
     "AuditLog",
     "Role",

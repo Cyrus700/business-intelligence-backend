@@ -504,7 +504,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
     return found
 
 
-async def persist_recommendations(db: AsyncSession) -> dict[str, int]:
+async def persist_recommendations(db: AsyncSession, org_id=None) -> dict[str, int]:
     """Generate recommendations and store new ones as ``insights`` rows.
 
     Shared by the manual "Generate now" endpoint and the nightly scheduler job
@@ -520,13 +520,18 @@ async def persist_recommendations(db: AsyncSession) -> dict[str, int]:
     from app.models import Insight, Notification, Profile
 
     today = business_today()
-    recs = await generate_all_recommendations(db)
+    recs = await generate_all_recommendations(db, org_id=org_id)
     created = 0
     new_warnings: list[dict[str, Any]] = []
     for r in recs:
         # impact_basis is an explanation aid, not a stored column
         payload = {k: v for k, v in r.items() if k != "impact_basis"}
         payload.update(period_start=today, period_end=today)
+        if org_id is not None:
+            payload["org_id"] = org_id
+            # scope dedupe_key per org
+            if payload.get("dedupe_key"):
+                payload["dedupe_key"] = f"{org_id}:{payload['dedupe_key']}"
         stmt = (
             pg_insert(Insight)
             .values(**payload)
@@ -540,17 +545,10 @@ async def persist_recommendations(db: AsyncSession) -> dict[str, int]:
                 new_warnings.append(r)
 
     if new_warnings:
-        recipients = (
-            (
-                await db.execute(
-                    select(Profile).where(
-                        Profile.role.in_(["admin", "manager"]), Profile.is_active.is_(True)
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+        rec_q = select(Profile).where(Profile.role.in_(["admin", "manager"]), Profile.is_active.is_(True))
+        if org_id is not None:
+            rec_q = rec_q.where(Profile.org_id == org_id)
+        recipients = (await db.execute(rec_q)).scalars().all()
         title = (
             f"{len(new_warnings)} new recommendation(s) need attention"
             if len(new_warnings) > 1
@@ -562,14 +560,14 @@ async def persist_recommendations(db: AsyncSession) -> dict[str, int]:
             else "; ".join(w["title"] for w in new_warnings)
         )
         for user in recipients:
-            db.add(Notification(user_id=user.id, title=title, body=body))
+            db.add(Notification(user_id=user.id, title=title, body=body, org_id=org_id or user.org_id))
 
     await db.commit()
     return {"generated": len(recs), "new": created}
 
 
-async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]:
-    today = await _latest_data_date(db)
+async def generate_all_recommendations(db: AsyncSession, org_id=None) -> list[dict[str, Any]]:
+    today = await _latest_data_date(db, org_id=org_id)
     if today is None:
         today = business_today()
 
@@ -582,7 +580,14 @@ async def generate_all_recommendations(db: AsyncSession) -> list[dict[str, Any]]
         diagnostic_recommendations,
     ):
         try:
-            all_recs.extend(await generator(db, today))
+            # Generators that support org_id will filter; others will run globally (legacy)
+            import inspect as _ins
+
+            sig = _ins.signature(generator)
+            if "org_id" in sig.parameters:
+                all_recs.extend(await generator(db, today, org_id=org_id))
+            else:
+                all_recs.extend(await generator(db, today))
         except Exception:
             import logging
 
@@ -625,12 +630,20 @@ def _default_action_for(rec: dict[str, Any]) -> str:
     return "Review the reported variance and its underlying drivers"
 
 
-async def _latest_data_date(db: AsyncSession) -> date | None:
-    value = (
-        await db.execute(
-            text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
-        )
-    ).scalar_one()
+async def _latest_data_date(db: AsyncSession, org_id=None) -> date | None:
+    if org_id is not None:
+        value = (
+            await db.execute(
+                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue' AND org_id = :oid"),
+                {"oid": str(org_id)},
+            )
+        ).scalar_one()
+    else:
+        value = (
+            await db.execute(
+                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
+            )
+        ).scalar_one()
     return value
 
 

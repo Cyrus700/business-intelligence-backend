@@ -90,16 +90,20 @@ class OverviewOut(BaseModel):
 @router.get("/overview", response_model=OverviewOut)
 async def data_quality_overview(
     db: DbSession,
-    _: CurrentUser,
+    user: CurrentUser,
     limit: int = Query(30, ge=1, le=90),
 ) -> OverviewOut:
+    from app.api.deps import is_super_admin
+
+    org_filter_run = [] if is_super_admin(user) else [DataQualityRun.org_id == user.org_id]
+    org_filter_issue = [] if is_super_admin(user) else [DataQualityIssue.org_id == user.org_id]
     latest = (
-        await db.execute(select(DataQualityRun).order_by(DataQualityRun.created_at.desc()))
+        await db.execute(select(DataQualityRun).where(*org_filter_run).order_by(DataQualityRun.created_at.desc()))
     ).scalars().first()
 
     history = (
         await db.execute(
-            select(DataQualityRun).order_by(DataQualityRun.created_at.desc()).limit(limit)
+            select(DataQualityRun).where(*org_filter_run).order_by(DataQualityRun.created_at.desc()).limit(limit)
         )
     ).scalars().all()
 
@@ -107,7 +111,7 @@ async def data_quality_overview(
         (
             await db.execute(
                 select(DataQualityIssue.severity, func.count())
-                .where(DataQualityIssue.status != "resolved")
+                .where(DataQualityIssue.status != "resolved", *org_filter_issue)
                 .group_by(DataQualityIssue.severity)
             )
         ).all()
@@ -115,7 +119,7 @@ async def data_quality_overview(
     status_counts = dict(
         (
             await db.execute(
-                select(DataQualityIssue.status, func.count()).group_by(DataQualityIssue.status)
+                select(DataQualityIssue.status, func.count()).where(*org_filter_issue).group_by(DataQualityIssue.status)
             )
         ).all()
     )
@@ -123,7 +127,7 @@ async def data_quality_overview(
         (
             await db.execute(
                 select(DataQualityIssue.dimension, func.count())
-                .where(DataQualityIssue.status != "resolved")
+                .where(DataQualityIssue.status != "resolved", *org_filter_issue)
                 .group_by(DataQualityIssue.dimension)
             )
         ).all()
@@ -143,22 +147,21 @@ async def data_quality_overview(
 @router.get("/quality/history", response_model=list[RunOut])
 async def data_quality_history(
     db: DbSession,
-    _: CurrentUser,
+    user: CurrentUser,
     limit: int = Query(60, ge=1, le=200),
 ) -> list[DataQualityRun]:
-    return list(
-        (
-            await db.execute(
-                select(DataQualityRun).order_by(DataQualityRun.created_at.desc()).limit(limit)
-            )
-        ).scalars()
-    )
+    from app.api.deps import is_super_admin
+
+    q = select(DataQualityRun).order_by(DataQualityRun.created_at.desc()).limit(limit)
+    if not is_super_admin(user):
+        q = q.where(DataQualityRun.org_id == user.org_id)
+    return list((await db.execute(q)).scalars())
 
 
 @router.get("/issues", response_model=dict)
 async def data_quality_issues(
     db: DbSession,
-    _: CurrentUser,
+    user: CurrentUser,
     dimension: str | None = None,
     severity: str | None = None,
     status_filter: str | None = Query(None, alias="status"),
@@ -166,10 +169,13 @@ async def data_quality_issues(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> dict[str, Any]:
-    stmt = select(DataQualityIssue).order_by(
+    from app.api.deps import is_super_admin
+
+    org_clause = [] if is_super_admin(user) else [DataQualityIssue.org_id == user.org_id]
+    stmt = select(DataQualityIssue).where(*org_clause).order_by(
         DataQualityIssue.created_at.desc(), DataQualityIssue.row_count.desc()
     )
-    count_stmt = select(func.count()).select_from(DataQualityIssue)
+    count_stmt = select(func.count()).select_from(DataQualityIssue).where(*org_clause)
 
     if dimension:
         stmt = stmt.where(DataQualityIssue.dimension == dimension)
@@ -202,7 +208,7 @@ async def trigger_quality_audit(
     db: DbSession,
     user: CanRunQuality,
 ) -> DataQualityRun:
-    run = await run_quality_audit(db, triggered_by="manual")
+    run = await run_quality_audit(db, triggered_by="manual", org_id=user.org_id)
     if run is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Quality audit failed")
     return run
@@ -215,6 +221,12 @@ async def update_issue_status(
     db: DbSession,
     user: CanResolveQuality,
 ) -> DataQualityIssue:
+    from app.api.deps import is_super_admin
+
+    # Verify issue belongs to caller's org (unless super-admin)
+    issue_check = await db.get(DataQualityIssue, issue_id)
+    if issue_check and not is_super_admin(user) and issue_check.org_id != user.org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Issue not found")
     issue = await acknowledge_issue(db, issue_id, body.status, user.id)
     if issue is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Issue not found")

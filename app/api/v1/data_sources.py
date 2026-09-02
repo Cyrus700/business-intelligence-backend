@@ -45,10 +45,14 @@ async def create_source(body: DataSourceIn, db: DbSession, user: CurrentUser) ->
             validate_postgres_dsn(str(body.config.get("dsn") or ""))
         except ValueError as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-    existing = await db.execute(select(DataSource).where(DataSource.name == body.name))
+    oid = user_org_id(user)
+    # name uniqueness is per-org (uq_data_sources_name_org on (name, org_id))
+    if oid is None and not getattr(user, "is_super_admin", False):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Organization required")
+    existing = await db.execute(select(DataSource).where(DataSource.name == body.name, DataSource.org_id == oid))
     if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "A source with this name already exists")
-    source = DataSource(**body.model_dump(), org_id=user_org_id(user))
+        raise HTTPException(status.HTTP_409_CONFLICT, "A source with this name already exists in this organization")
+    source = DataSource(**body.model_dump(), org_id=oid)
     db.add(source)
     await db.commit()
     await db.refresh(source)

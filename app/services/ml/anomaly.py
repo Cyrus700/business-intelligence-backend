@@ -101,7 +101,7 @@ def detect_frame(frame: pd.DataFrame, season: str = "weekly") -> pd.DataFrame:
 EXPLANATION_BASELINE_DAYS = 28
 
 
-async def explain_contributors(db: AsyncSession, metric: str, day: date) -> dict[str, Any] | None:
+async def explain_contributors(db: AsyncSession, metric: str, day: date, org_id=None) -> dict[str, Any] | None:
     """Primary/secondary contributors for a flagged day vs a trailing baseline.
 
     For every dimension member, the flagged day's value is compared with the
@@ -115,9 +115,15 @@ async def explain_contributors(db: AsyncSession, metric: str, day: date) -> dict
             ("channel", SalesTransaction.channel),
             ("product", Product.name),
         )
-        source = SalesTransaction.__table__.outerjoin(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        # Join with org filter if needed
+        if org_id is not None:
+            source = SalesTransaction.__table__.outerjoin(
+                Product.__table__, (Product.id == SalesTransaction.product_id) & (Product.org_id == org_id)
+            )
+        else:
+            source = SalesTransaction.__table__.outerjoin(
+                Product.__table__, Product.id == SalesTransaction.product_id
+            )
         date_col, value_col = SalesTransaction.txn_date, SalesTransaction.total_amount
     elif metric == "expense_total":
         dimensions = (("category", Expense.category),)
@@ -128,11 +134,20 @@ async def explain_contributors(db: AsyncSession, metric: str, day: date) -> dict
 
     rows = {}
     for dim_name, col in dimensions:
+        base_where = [date_col.between(baseline_from, day - timedelta(days=1))]
+        day_where = [date_col == day]
+        if org_id is not None:
+            if metric == "revenue":
+                base_where.append(SalesTransaction.org_id == org_id)
+                day_where.append(SalesTransaction.org_id == org_id)
+            else:
+                base_where.append(Expense.org_id == org_id)
+                day_where.append(Expense.org_id == org_id)
         baseline_agg = (
             await db.execute(
                 select(col.label("key"), func.sum(value_col).label("total"))
                 .select_from(source)
-                .where(date_col.between(baseline_from, day - timedelta(days=1)))
+                .where(*base_where)
                 .group_by(col)
             )
         ).all()
@@ -141,7 +156,7 @@ async def explain_contributors(db: AsyncSession, metric: str, day: date) -> dict
             await db.execute(
                 select(col.label("key"), func.sum(value_col).label("total"))
                 .select_from(source)
-                .where(date_col == day)
+                .where(*day_where)
                 .group_by(col)
             )
         ).all()
@@ -204,10 +219,10 @@ async def explain_contributors(db: AsyncSession, metric: str, day: date) -> dict
     }
 
 
-async def scan_target(db: AsyncSession, target: str, lookback_days: int | None = None) -> int:
+async def scan_target(db: AsyncSession, target: str, lookback_days: int | None = None, org_id=None) -> int:
     """Detect anomalies for a target and persist new ones (deduped by metric+date)."""
     config = TARGET_CONFIG[target]
-    frame = await load_series(db, target)
+    frame = await load_series(db, target, org_id=org_id)
     if len(frame) < 60:
         return 0
     flagged = detect_frame(frame, config["season"])
@@ -218,9 +233,12 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
         return 0
 
     metric = config["metric"]
+    q = select(Anomaly).where(Anomaly.metric == metric)
+    if org_id is not None:
+        q = q.where(Anomaly.org_id == org_id)
     existing = {
         (a.metric, a.context.get("date"))
-        for a in (await db.execute(select(Anomaly).where(Anomaly.metric == metric))).scalars()
+        for a in (await db.execute(q)).scalars()
         if a.context
     }
     created = 0
@@ -241,7 +259,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
                 "isolation_forest": round(float(row["if_score"]), 4),
             },
         }
-        explanation = await explain_contributors(db, metric, dat)
+        explanation = await explain_contributors(db, metric, dat, org_id=org_id)
         db.add(
             Anomaly(
                 metric=metric,
@@ -253,6 +271,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
                 severity=row["severity"],
                 context=context,
                 explanation=explanation,
+                org_id=org_id,
             )
         )
         created += 1
@@ -261,8 +280,8 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
     return created
 
 
-async def scan_all(db: AsyncSession, lookback_days: int | None = None) -> int:
+async def scan_all(db: AsyncSession, lookback_days: int | None = None, org_id=None) -> int:
     total = 0
     for target in TARGET_CONFIG:
-        total += await scan_target(db, target, lookback_days)
+        total += await scan_target(db, target, lookback_days, org_id=org_id)
     return total

@@ -15,12 +15,20 @@ router = APIRouter(
 @router.get("", response_model=list[AuditLogOut])
 async def list_audit_logs(
     db: DbSession,
+    user: CurrentUser,
     action: str | None = None,
     since: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> list[AuditLogOut]:
+    from app.api.deps import is_super_admin
+
     stmt = select(AuditLog).order_by(AuditLog.created_at.desc())
+    if not is_super_admin(user):
+        # Scope to current org: only logs where actor is in same org
+        stmt = stmt.where(
+            AuditLog.user_id.in_(select(Profile.id).where(Profile.org_id == user.org_id))
+        )
     if action:
         stmt = stmt.where(AuditLog.action == action)
     if since:

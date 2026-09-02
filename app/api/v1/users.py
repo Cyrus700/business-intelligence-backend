@@ -40,9 +40,11 @@ async def _validate_role(db: DbSession, role: str) -> None:
 
 
 async def _org_scoped_stmt(db: DbSession, user: Profile) -> Any:
-    from app.api.deps import org_predicate, user_org_id
+    from app.api.deps import is_super_admin, org_predicate
 
-    return org_predicate(Profile.org_id, user_org_id(user))
+    if is_super_admin(user):
+        return None
+    return org_predicate(Profile.org_id, user.org_id)
 
 
 @router.get("")
@@ -53,9 +55,12 @@ async def list_users(
     page_size: int = Query(50, ge=1, le=200),
     search: str | None = None,
 ) -> dict:
-    from app.api.deps import org_predicate, user_org_id
+    from app.api.deps import is_super_admin, org_predicate
 
-    base = select(Profile).where(org_predicate(Profile.org_id, user_org_id(user)))
+    if is_super_admin(user):
+        base = select(Profile)
+    else:
+        base = select(Profile).where(org_predicate(Profile.org_id, user.org_id))
     if search:
         q = f"%{search}%"
         base = base.where(or_(Profile.email.ilike(q), Profile.full_name.ilike(q)))
@@ -78,12 +83,15 @@ async def list_users(
 
 @router.get("/{user_id}", response_model=ProfileOut)
 async def get_user(user_id: UUID, db: DbSession, user: CurrentUser) -> ProfileOut:
-    from app.api.deps import org_predicate, user_org_id
+    from app.api.deps import is_super_admin, org_predicate
 
-    scope = org_predicate(Profile.org_id, user_org_id(user))
-    profile = (
-        await db.execute(select(Profile).where(Profile.id == user_id, scope))
-    ).scalar_one_or_none()
+    if is_super_admin(user):
+        profile = await db.get(Profile, user_id)
+    else:
+        scope = org_predicate(Profile.org_id, user.org_id)
+        profile = (
+            await db.execute(select(Profile).where(Profile.id == user_id, scope))
+        ).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return ProfileOut.model_validate(profile)
@@ -94,7 +102,8 @@ async def create_user(
     body: UserCreate, db: DbSession, admin_api: AdminApi, request: Request, user: CurrentUser
 ) -> ProfileOut:
     await _validate_role(db, body.role)
-    existing = await db.execute(select(Profile).where(Profile.email == body.email))
+    normalized_body_email = body.email.strip().lower()
+    existing = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_body_email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists")
     try:
@@ -102,15 +111,23 @@ async def create_user(
     except SupabaseAdminError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
 
-    from app.api.deps import user_org_id
+    from app.api.deps import is_super_admin
+
+    # Enforce org scoping: never trust client-supplied org_id unless super_admin
+    if is_super_admin(user) and body.org_id is not None:
+        target_org = body.org_id
+    else:
+        target_org = user.org_id
+        if body.org_id is not None and body.org_id != target_org:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot create user in another organization")
 
     profile = Profile(
         id=user_id,
-        email=body.email,
+        email=normalized_body_email,
         full_name=body.full_name,
         role=body.role,
         department=body.department,
-        org_id=body.org_id or user_org_id(user),
+        org_id=target_org,
     )
     db.add(profile)
     await db.flush()
@@ -134,19 +151,28 @@ async def update_user(
     user_id: UUID, body: UserUpdate, db: DbSession, admin_api: AdminApi, request: Request,
     user: CurrentUser,
 ) -> ProfileOut:
-    from app.api.deps import org_predicate, user_org_id
+    from app.api.deps import is_super_admin, org_predicate
 
-    profile = (
-        await db.execute(
-            select(Profile).where(
-                Profile.id == user_id, org_predicate(Profile.org_id, user_org_id(user))
+    if is_super_admin(user):
+        profile = await db.get(Profile, user_id)
+    else:
+        profile = (
+            await db.execute(
+                select(Profile).where(
+                    Profile.id == user_id, org_predicate(Profile.org_id, user.org_id)
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
     changes = body.model_dump(exclude_unset=True)
+    # Prevent org hopping via PATCH unless super_admin
+    if "org_id" in changes and changes["org_id"] is not None:
+        if is_super_admin(user):
+            pass  # super_admin can move users
+        elif changes["org_id"] != user.org_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot move user to another organization")
     previous_role = profile.role
     role_changed = "role" in changes and changes["role"] != previous_role
     if role_changed:
