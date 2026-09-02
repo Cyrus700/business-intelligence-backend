@@ -26,9 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.database import get_session_factory  # noqa: E402
 from app.models import DataSource  # noqa: E402
-from app.services.etl.domains import transform_frame  # noqa: E402
-from app.services.etl.loader import load_sales, load_expenses, load_inventory  # noqa: E402
 from app.services.analytics.kpi_builder import rebuild_kpi_snapshots  # noqa: E402
+from app.services.etl.domains import transform_frame  # noqa: E402
+from app.services.etl.loader import load_expenses, load_inventory, load_sales  # noqa: E402
 from app.services.etl.refresh import refresh_derived  # noqa: E402
 
 OUTPUT = Path(__file__).resolve().parent.parent / "seeds" / "output"
@@ -45,9 +45,7 @@ async def main() -> None:
     max_date = date.min
     async with get_session_factory()() as db:
         for name, kind, domain, file_name, loader in SOURCES:
-            source = (
-                await db.execute(select(DataSource).where(DataSource.name == name))
-            ).scalar_one_or_none()
+            source = (await db.execute(select(DataSource).where(DataSource.name == name))).scalar_one_or_none()
             if source is None:
                 source = DataSource(name=name, kind=kind, target_domain=domain)
                 db.add(source)

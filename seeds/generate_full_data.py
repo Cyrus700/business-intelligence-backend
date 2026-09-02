@@ -139,8 +139,18 @@ def festival_boost(d: date) -> tuple[float, bool]:
 
 # Seasonal demand (Nepal: monsoon dip Jun-Aug, winter bump Nov-Jan, festival Q4).
 SEASON_MULT = {
-    1: 1.10, 2: 1.05, 3: 1.0, 4: 1.0, 5: 0.95, 6: 0.88,
-    7: 0.85, 8: 0.9, 9: 1.05, 10: 1.25, 11: 1.30, 12: 1.20,
+    1: 1.10,
+    2: 1.05,
+    3: 1.0,
+    4: 1.0,
+    5: 0.95,
+    6: 0.88,
+    7: 0.85,
+    8: 0.9,
+    9: 1.05,
+    10: 1.25,
+    11: 1.30,
+    12: 1.20,
 }
 
 # Injected ground-truth anomalies spread evenly across all 4 years.

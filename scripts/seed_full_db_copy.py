@@ -17,7 +17,7 @@ Usage:
 import asyncio
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -62,9 +62,7 @@ def _dedupe(records):
 
 
 async def _get_or_create_source(db, name, kind, domain):
-    src = (
-        await db.execute(select(DataSource).where(DataSource.name == name))
-    ).scalar_one_or_none()
+    src = (await db.execute(select(DataSource).where(DataSource.name == name))).scalar_one_or_none()
     if src is None:
         src = DataSource(name=name, kind=kind, target_domain=domain)
         db.add(src)
@@ -87,9 +85,16 @@ async def _upsert_products(db, records):
     wanted = {}
     for r in records:
         wanted.setdefault(r["sku"], r)
-    new = [Product(sku=r["sku"], name=r.get("product_name") or r["sku"],
-                   category=r.get("category"), unit_price=_f(r.get("unit_price")))
-           for sku, r in wanted.items() if sku not in existing]
+    new = [
+        Product(
+            sku=r["sku"],
+            name=r.get("product_name") or r["sku"],
+            category=r.get("category"),
+            unit_price=_f(r.get("unit_price")),
+        )
+        for sku, r in wanted.items()
+        if sku not in existing
+    ]
     if new:
         db.add_all(new)
         await db.flush()
@@ -103,8 +108,11 @@ async def _upsert_customers(db, records):
         nm = r.get("customer_name")
         if nm:
             wanted.setdefault(nm, r)
-    new = [Customer(name=nm, segment=r.get("segment"), city=r.get("city"), region=r.get("region"))
-           for nm, r in wanted.items() if nm not in existing]
+    new = [
+        Customer(name=nm, segment=r.get("segment"), city=r.get("city"), region=r.get("region"))
+        for nm, r in wanted.items()
+        if nm not in existing
+    ]
     if new:
         db.add_all(new)
         await db.flush()
@@ -118,7 +126,7 @@ async def main() -> None:
     pg_conn = await asyncpg.connect(pg_dsn)
 
     async with get_session_factory()() as db:
-        ingested = datetime.now(timezone.utc).replace(tzinfo=None)
+        ingested = datetime.now(UTC).replace(tzinfo=None)
 
         # ---- SALES ----
         name, kind, domain, file_name = SOURCES[0]
@@ -133,17 +141,38 @@ async def main() -> None:
         await pg_conn.execute("DELETE FROM sales_transactions WHERE source_id = $1", src.id)
         rows = [
             (
-                r["txn_date"], pmap.get(r["sku"]), cmap.get(r.get("customer_name") or ""),
-                int(r["quantity"]), _f(r["unit_price"]), _f(r["discount"]), _f(r["total_amount"]),
-                r.get("channel"), r.get("region"), r["row_hash"], src.id, ingested,
+                r["txn_date"],
+                pmap.get(r["sku"]),
+                cmap.get(r.get("customer_name") or ""),
+                int(r["quantity"]),
+                _f(r["unit_price"]),
+                _f(r["discount"]),
+                _f(r["total_amount"]),
+                r.get("channel"),
+                r.get("region"),
+                r["row_hash"],
+                src.id,
+                ingested,
             )
             for r in res.records
         ]
         await pg_conn.copy_records_to_table(
             "sales_transactions",
             records=rows,
-            columns=["txn_date", "product_id", "customer_id", "quantity", "unit_price",
-                     "discount", "total_amount", "channel", "region", "row_hash", "source_id", "ingested_at"],
+            columns=[
+                "txn_date",
+                "product_id",
+                "customer_id",
+                "quantity",
+                "unit_price",
+                "discount",
+                "total_amount",
+                "channel",
+                "region",
+                "row_hash",
+                "source_id",
+                "ingested_at",
+            ],
         )
         print(f"full_sales.csv   : {len(rows):>9,} COPY-loaded")
 
@@ -157,15 +186,30 @@ async def main() -> None:
         await pg_conn.execute("DELETE FROM expenses WHERE source_id = $1", src.id)
         rows = [
             (
-                r["expense_date"], r["category"], _f(r["amount"]), r.get("department"),
-                r.get("description"), r["row_hash"], src.id, ingested,
+                r["expense_date"],
+                r["category"],
+                _f(r["amount"]),
+                r.get("department"),
+                r.get("description"),
+                r["row_hash"],
+                src.id,
+                ingested,
             )
             for r in res.records
         ]
         await pg_conn.copy_records_to_table(
             "expenses",
             records=rows,
-            columns=["expense_date", "category", "amount", "department", "description", "row_hash", "source_id", "ingested_at"],
+            columns=[
+                "expense_date",
+                "category",
+                "amount",
+                "department",
+                "description",
+                "row_hash",
+                "source_id",
+                "ingested_at",
+            ],
         )
         print(f"full_expenses.csv : {len(rows):>9,} COPY-loaded")
 
@@ -179,20 +223,34 @@ async def main() -> None:
         await pg_conn.execute("DELETE FROM inventory_levels WHERE source_id = $1", src.id)
         rows = [
             (
-                r["snapshot_date"], pmap[r["sku"]], int(r["quantity_on_hand"]),
-                int(r["reorder_level"]), r.get("warehouse") or "main", src.id, ingested,
+                r["snapshot_date"],
+                pmap[r["sku"]],
+                int(r["quantity_on_hand"]),
+                int(r["reorder_level"]),
+                r.get("warehouse") or "main",
+                src.id,
+                ingested,
             )
             for r in res.records
         ]
         await pg_conn.copy_records_to_table(
             "inventory_levels",
             records=rows,
-            columns=["snapshot_date", "product_id", "quantity_on_hand", "reorder_level", "warehouse", "source_id", "ingested_at"],
+            columns=[
+                "snapshot_date",
+                "product_id",
+                "quantity_on_hand",
+                "reorder_level",
+                "warehouse",
+                "source_id",
+                "ingested_at",
+            ],
         )
         print(f"full_inventory.csv: {len(rows):>9,} COPY-loaded")
 
         # ---- Rebuild KPIs + refresh derived layer once ----
         from datetime import date as _d
+
         from app.services.analytics.kpi_builder import rebuild_kpi_snapshots
         from app.services.etl.refresh import refresh_derived
 
