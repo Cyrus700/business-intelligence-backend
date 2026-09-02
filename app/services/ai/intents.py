@@ -55,6 +55,22 @@ _KEYWORDS: dict[Intent, tuple[str, ...]] = {
         "tenants registered",
         "businesses are there",
         "business are there",
+        # list / show variants — must route to PLATFORM with detail=true
+        "list business",
+        "list businesses",
+        "list the businesses",
+        "list the business",
+        "list organization",
+        "list organizations",
+        "list all businesses",
+        "list all business",
+        "show business",
+        "show businesses",
+        "show all businesses",
+        "show organizations",
+        "display businesses",
+        "get businesses",
+        "fetch businesses",
         # status-specific (must also hit PLATFORM so filter can be extracted later)
         "how many approved",
         "how many pending",
@@ -79,6 +95,12 @@ _KEYWORDS: dict[Intent, tuple[str, ...]] = {
         "approved organization",
         "pending organization",
         "rejected organization",
+        "list approved",
+        "list pending",
+        "list rejected",
+        "show approved",
+        "show pending",
+        "show rejected",
         # common typos — keep detection precise even with misspelling
         "aprrved",
         "apprved",
@@ -93,6 +115,8 @@ _KEYWORDS: dict[Intent, tuple[str, ...]] = {
         "bussines",
         "busines",
         "orgnization",
+        "regisgtered",
+        "regisgterd",
     ),
     Intent.USERS: (
         "how many users",
@@ -228,20 +252,33 @@ _GREETING_RE = re.compile(
 
 
 def _is_platform_typo(q: str) -> bool:
-    """Catch PLATFORM with typos that exact keywords miss.
+    """Catch PLATFORM with typos / varied phrasing that exact keywords miss.
 
-    Handles: how many / total / count / number of + appro* / pend* / rejec*
-    even when misspelled (aprrved, rejeect, rejefct, pendng).
+    Handles: how many / list / show / total / count + business/organization
+    even when misspelled (aprrved, rejeect, bussiness, regisgtered).
     """
-    if any(p in q for p in ("how many", "how much", "count", "total", "number of", "are there", "registered")):
-        if re.search(r"approv|apprv|aprrv|pend|rejec|rejfe|bussin|orgniza", q):
-            return True
-        # bare status words with typo roots also count as platform
-        if re.search(r"\b(approv\w*|aprrv\w*|pend\w*|rejec\w*|rejfe\w*)\b", q):
+    # any business-like root + action
+    has_business = bool(re.search(r"business|bussin|organization|orgniza|workspace|tenant", q))
+    has_action = any(
+        p in q for p in ("how many", "how much", "count", "total", "number of", "are there", "registered", "regisg")
+    )
+    has_list = any(p in q for p in ("list", "show", "display", "get ", "fetch"))
+    if (has_action or has_list) and has_business:
+        return True
+    if has_business and re.search(r"approv|apprv|aprrv|pend|rej|bussin|orgniza|regisg", q):
+        return True
+    if any(p in q for p in ("how many", "count", "total", "number of")) and re.search(
+        r"approv|aprrv|pend|rejec|rejfe|bussin|orgniza|regisg", q
+    ):
+        return True
+    # bare status words with typo roots also count as platform
+    if re.search(r"\b(approv\w*|aprrv\w*|pend\w*|rej\w*|bussin\w*|regisg\w*)\b", q):
+        # limit to platform context: must have platform noun nearby or action word
+        if has_business or has_action or has_list:
             return True
     # fallback: any platform root + status root
-    if re.search(r"business|organization|organisation|workspace|tenant", q) and re.search(
-        r"approv|aprrv|pend|rejec|rejfe", q
+    if re.search(r"business|bussin|organization|orgniza|workspace|tenant", q) and re.search(
+        r"approv|aprrv|pend|rej", q
     ):
         return True
     return False

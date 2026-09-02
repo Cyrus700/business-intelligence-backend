@@ -366,14 +366,15 @@ async def answer_question(
         await _reset_transaction(db)
 
     # Last resort. Intent-aware: for count questions, never dump revenue/top-products.
-    return AnswerResult(reply=_snapshot_fallback(business_context, intent), source="local")
+    return AnswerResult(reply=_snapshot_fallback(business_context, intent, question), source="local")
 
 
-def _snapshot_fallback(business_context: str, intent: "Intent | None" = None) -> str:
-    """Last-resort live digest — intent-aware, never an apology dump.
+def _snapshot_fallback(business_context: str, intent: "Intent | None" = None, question: str | None = None) -> str:
+    """Last-resort live digest — intent-aware, LLM-friendly, never an apology dump.
 
     For PLATFORM/USERS/CATALOG we return ONLY the relevant live line, not the
     full KPI dump that makes 'how many business are there' inaccurate.
+    For list requests, we explicitly guide to retry for live table instead of truncating.
     """
     if not business_context.strip():
         return (
@@ -381,11 +382,19 @@ def _snapshot_fallback(business_context: str, intent: "Intent | None" = None) ->
             "moment. If this persists, check the **Data** page to confirm a source is connected. "
             "You can also ask 'what tables do you have?' to see the live catalog."
         )
-    # Intent-aware filter — for count questions, strip revenue/top-product noise
+    # Intent-aware filter — for count/list questions, strip revenue/top-product noise
     if intent in (Intent.PLATFORM, Intent.USERS):
+        wants_list = bool(question and any(w in question.lower() for w in ("list", "show", "display", "names", "which")))
+        # list intent should not be answered with count-only fallback; guide to retry
+        if wants_list:
+            return (
+                "Listing businesses requires a live query — please retry `list businesses` or `list approved businesses` and I'll return the live table (names, status, created). "
+                "Counts right now are live from the snapshot:\n"
+                + next((l.strip() for l in business_context.splitlines() if "Platform businesses registered:" in l), "")
+            )
         for line in business_context.splitlines():
             if "Platform businesses registered:" in line:
-                # Keep live counts only, precise
+                # Keep live counts only, precise — no revenue
                 return (
                     f"{line.strip()}\n\n"
                     "**Suggested action:** ask `how many approved` / `how many rejected` / `how many pending` or `list businesses` for names — all live."

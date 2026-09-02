@@ -19,8 +19,8 @@ COOLDOWN_SECONDS = 300  # how long a tripped provider is skipped (5 min)
 # Approximate list prices per 1M tokens (inputs, outputs) — used only for
 # cost *estimates* in the ops view; keep in sync with the configured models.
 PRICING_PER_1M = {
-    "llama-3.3-70b": (0.66, 0.79),
-    "llama-3.1-8b": (0.05, 0.08),
+    "openai/gpt-oss-120b": (0.15, 0.75),
+    "openai/gpt-oss-20b": (0.10, 0.50),
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-2.5-flash": (0.30, 2.50),
 }

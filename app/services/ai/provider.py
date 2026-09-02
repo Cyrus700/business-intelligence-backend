@@ -126,7 +126,7 @@ class GroqProvider(BaseAIProvider):
     def __init__(self) -> None:
         settings = get_settings()
         self.api_key = settings.groq_api_key
-        self.model = settings.groq_model or "llama-3.3-70b-versatile"
+        self.model = settings.groq_model or "openai/gpt-oss-120b"
 
     def model_id(self) -> str:
         return self.model
@@ -466,11 +466,16 @@ SYSTEM_PROMPT_DASHBOARD = (
     "1c. UNIVERSAL: For 'whats the update', 'summary', 'overview', or any vague/status question, "
     "call query_kpis + get_data_coverage + get_anomalies + get_inventory + get_platform_stats (if super-admin) "
     "and compose a concise live digest across all domains. For 'how many business/businesses/organizations' ALWAYS call "
-    "get_platform_stats (with status='approved' / 'rejected' / 'pending' when filter is present; handle typos aprrved/rejeect). "
+    "get_platform_stats (with status='approved' / 'rejected' / 'pending' when filter is present; handle typos aprrved/rejeect/regisgtered). "
     "For 'what tables/data do you have' ALWAYS call describe_catalog. For any question about "
     "a table you don't recognise, call describe_catalog first, then sample_table.\n"
+    "1c2. LIST intent: When user says LIST / SHOW / DISPLAY / GET / FETCH + business/organization ('list business', 'list the businesses', 'show all businesses', 'list approved businesses', 'how many approved' with list), "
+    "you MUST call get_platform_stats with detail=true (and status if present). Return the live table the tool gives you — do not summarize as just the count. "
+    "Examples: 'list business' → get_platform_stats(detail=true, limit=15); 'list approved businesses' → get_platform_stats(status='approved', detail=true, limit=15). "
+    "Always analyze the user's prompt for intent: COUNT vs LIST, and for status filter (approved/pending/rejected) with typo tolerance, then choose the accurate tool params.\n"
     "1d. PRECISION FOR COUNTS: For any count question (how many / total / count / number of business/approved/rejected/pending), "
-    "answer with that ONE number first (live, bold), then at most 3 bullet points of breakdown. NEVER add revenue/orders/top-products/expense categories unless the question explicitly asks for them. Keep count answers under 120 words.\n"
+    "answer with that ONE number first (live, bold), then at most 3 bullet points of breakdown. NEVER add revenue/orders/top-products/expense categories unless the question explicitly asks for them. Keep count answers under 120 words. "
+    "For LIST questions, use the table format.\n"
     "2. ANSWER THE ACTUAL QUESTION FIRST, in one sentence, before any list. Then add only "
     "the figures that bear on it — never a standard KPI dump unless the question is 'whats the update'/'overview'. Shape the reply to the "
     "question: a single number for a single-number question; a markdown table when "

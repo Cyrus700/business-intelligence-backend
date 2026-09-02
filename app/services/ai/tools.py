@@ -1241,22 +1241,27 @@ TOOLS: dict[str, AITool] = {
     "get_platform_stats": AITool(
         name="get_platform_stats",
         description=(
-            "LIVE COUNT of businesses (organizations) and users on the platform — use IMMEDIATELY "
-            "for 'how many business/businesses/organizations/tenants/workspaces are registered', "
-            "'how many users/members', 'business directory', 'show all businesses'. "
-            "Returns approved/pending/rejected breakdown and the newest registration. "
-            "Super-admin sees platform totals; business users see only their isolated workspace (one) — never leak other tenants."
+            "LIVE COUNT and LIVE LIST of businesses (organizations). Use IMMEDIATELY for any business count or list question. "
+            "Examples: 'how many business/businesses are registered' → call with no status; 'how many approved/rejected/pending' → set status accordingly (typos aprrved/rejeect/pendng still map to approved/rejected/pending); "
+            "'list business', 'list the businesses', 'show all businesses', 'list approved businesses', 'show pending businesses' → set detail=true and limit=15 to return the live table of names. "
+            "Supports typo-tolerant status: approved/rejected/pending/legacy/personal. "
+            "Super-admin sees platform totals + live table; business users see only their isolated workspace (one) — never leak other tenants. "
+            "Rule: if user says LIST/SHOW/DISPLAY/GET + business → detail=true; if says HOW MANY/COUNT/TOTAL + status → set status."
         ),
         parameters={
             "type": "object",
             "properties": {
                 "status": {
                     "type": "string",
-                    "enum": ["approved", "pending", "rejected"],
-                    "description": "Optionally filter business count to one status.",
+                    "enum": ["approved", "pending", "rejected", "legacy", "personal"],
+                    "description": "Optionally filter to one status. Pass approved/pending/rejected/legacy/personal when question specifies status (even with typos like aprrved→approved, rejeect→rejected).",
                 },
-                "detail": {"type": "boolean", "default": False, "description": "Include latest business names."},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "default": 10},
+                "detail": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Set true when user wants to LIST/SHOW/DISPLAY businesses or see names. For 'list business', 'show all businesses', 'list approved businesses' → true.",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "default": 15},
             },
         },
         handler=_platform_overview,
