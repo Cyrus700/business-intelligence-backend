@@ -16,6 +16,10 @@ class Intent(StrEnum):
     REGIONS = "regions"
     COMPARE = "compare"
     BUSINESS = "business"
+    PLATFORM = "platform"
+    USERS = "users"
+    CATALOG = "catalog"
+    UPDATE = "update"
     HELP = "help"
     GREETING = "greeting"
     THANKS = "thanks"
@@ -24,6 +28,90 @@ class Intent(StrEnum):
 
 
 _KEYWORDS: dict[Intent, tuple[str, ...]] = {
+    # Platform counting must be checked BEFORE generic business identity — otherwise
+    # "how many businesses" hits the BUSINESS phrase and never reaches PLATFORM.
+    Intent.PLATFORM: (
+        "how many business",
+        "how many businesses",
+        "how many organization",
+        "how many organisations",
+        "number of business",
+        "number of businesses",
+        "number of organization",
+        "total business",
+        "total businesses",
+        "total organization",
+        "total organisations",
+        "count business",
+        "count organization",
+        "businesses registered",
+        "business registered",
+        "organizations registered",
+        "registered business",
+        "registered organization",
+        "business count",
+        "organization count",
+        "workspaces registered",
+        "tenants registered",
+        "businesses are there",
+        "business are there",
+    ),
+    Intent.USERS: (
+        "how many users",
+        "number of users",
+        "total users",
+        "count users",
+        "users registered",
+        "user count",
+        "how many members",
+        "team size",
+    ),
+    Intent.CATALOG: (
+        "what tables",
+        "what data",
+        "available data",
+        "data catalog",
+        "schema",
+        "columns",
+        "what fields",
+        "what datasets",
+        "data sources available",
+        "database tables",
+        "show tables",
+        "list tables",
+        "what kind of data",
+        "what information do you have",
+    ),
+    Intent.UPDATE: (
+        "whats the update",
+        "what is the update",
+        "what is update",
+        "give update",
+        "daily update",
+        "weekly update",
+        "monthly update",
+        "status update",
+        "current status",
+        "overall status",
+        "how are we doing",
+        "how is business",
+        "business update",
+        "summary",
+        "overview",
+        "brief me",
+        "briefing",
+        "report update",
+        "what happened",
+        "what changed",
+        "recent changes",
+        "latest update",
+        "today update",
+        "whats new",
+        "what is new",
+        "any update",
+        "give me update",
+        "update please",
+    ),
     Intent.BUSINESS: (
         "business name",
         "company name",

@@ -546,8 +546,219 @@ async def _thanks(db: AsyncSession, f: Filters, q: str) -> str:
     )
 
 
+async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
+    """Live platform stats — how many businesses / users are registered."""
+    # Detect whether this is a platform counting question already handled here
+    # so the handler can be reused from _business as well.
+    try:
+        from sqlalchemy import func as _func
+        from sqlalchemy import select as _select
+
+        from app.models.identity import Organization, Profile
+
+        is_super = f.org_id is None
+        # For super-admin (org_id None) we count the whole platform live.
+        # For isolated users we still answer precisely: they have exactly one
+        # workspace and we explain the isolation rather than leaking others.
+        if is_super:
+            org_total = (await db.execute(_select(_func.count()).select_from(Organization))).scalar() or 0
+            approved = (
+                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "approved"))
+            ).scalar() or 0
+            pending = (
+                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "pending"))
+            ).scalar() or 0
+            rejected = (
+                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "rejected"))
+            ).scalar() or 0
+            # Personal vs business workspaces
+            personal = (
+                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))
+            ).scalar() or 0
+            legacy = (
+                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))
+            ).scalar() or 0
+            users_total = (await db.execute(_select(_func.count()).select_from(Profile))).scalar() or 0
+            active_users = (
+                await db.execute(_select(_func.count()).select_from(Profile).where(Profile.is_active.is_(True)))
+            ).scalar() or 0
+            # List latest orgs
+            rows = (
+                await db.execute(_select(Organization).order_by(Organization.created_at.desc()).limit(8))
+            ).scalars().all()
+            lines = [
+                f"### Businesses — Platform Total: **{org_total}** registered",
+                "",
+                f"- **Total workspaces (businesses):** {org_total}",
+                f"  - Approved: {approved} · Pending: {pending} · Rejected: {rejected}",
+                f"  - Personal workspaces: {personal} · Legacy: {legacy}",
+                f"- **Users on platform:** {users_total} (active: {active_users})",
+                "",
+            ]
+            if rows:
+                lines.append("| Business | Status | Personal | Created |")
+                lines.append("|---|---|---|---|")
+                for o in rows:
+                    created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
+                    pers = "yes" if getattr(o, "is_personal", False) else "no"
+                    lines.append(f"| {o.name} | {o.status} | {pers} | {created} |")
+                if org_total > len(rows):
+                    lines.append(f"\n…and {org_total - len(rows)} more. Open **Businesses** or **Admin Center** for the full directory.")
+            lines.append("")
+            lines.append("**Suggested action:** open **Businesses** to approve pending workspaces or **Users** to manage members — these counts are live from the database right now.")
+            return "\n".join(lines)
+        # Isolated user — they asked "how many businesses are there?" The
+        # truthful answer is one (their own), plus isolation explanation.
+        ql = q.lower()
+        wants_users = any(k in ql for k in ("users", "members"))
+        if wants_users:
+            from sqlalchemy import func as _func2
+            from sqlalchemy import select as _select2
+
+            from app.models.identity import Profile as _P
+
+            org_users = (
+                await db.execute(_select2(_func2.count()).select_from(_P).where(_P.org_id == f.org_id))
+            ).scalar() or 0
+            org = await db.get(Organization, f.org_id) if f.org_id else None
+            name = org.name if org else "your workspace"
+            return (
+                f"There are **{org_users}** user(s) in **{name}** (your isolated workspace).\n\n"
+                f"- **Your scope:** isolated — you only see this business's data.\n"
+                f"- **Platform total:** not visible from a business account. A Platform Super-Admin can see all {org_users and '' or ''}workspaces.\n\n"
+                "**Suggested action:** open **Users** to see everyone in your workspace."
+            )
+        # Business count for isolated user
+        org = await db.get(Organization, f.org_id) if f.org_id else None
+        if org:
+            return (
+                f"You're in **{org.name}** — your isolated workspace.\n\n"
+                f"- **Workspaces you can see:** 1 (this one — data is strictly per-business).\n"
+                f"- **Org ID:** `{org.id}` · status: {getattr(org, 'status', 'approved')} · "
+                f"{'personal workspace' if getattr(org, 'is_personal', False) else 'business workspace'}\n"
+                f"- **Platform total:** as a business user you only see your own business. "
+                f"A Super-Admin sees the full directory via **Admin Center**.\n\n"
+                f"**Suggested action:** ask about **{org.name}**'s revenue, expenses, forecasts, or inventory — I'll pull live numbers for this workspace."
+            )
+        return (
+            "I couldn't find your business name — your account has no workspace assigned. Ask your admin for an invite or register a business.\n\n"
+            "For privacy, business counts are only visible to Platform Super-Admins."
+        )
+    except Exception:
+        logger.warning("_platform handler failed", exc_info=True)
+        await _rollback(db)
+        return "I couldn't count businesses just now — please try again. If this persists, check **Admin → Businesses** for the live list."
+
+
+async def _users_handler(db: AsyncSession, f: Filters, q: str) -> str:
+    # Delegate to platform handler — same live counting logic
+    return await _platform(db, f, q)
+
+
+async def _catalog_handler(db: AsyncSession, f: Filters, q: str) -> str:
+    """Live data dictionary — what tables/datasets are available right now."""
+    try:
+        from sqlalchemy import text as _text
+
+        # Dynamic discovery: ask postgres what tables actually exist right now
+        tables = (
+            await db.execute(
+                _text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public' AND table_type='BASE TABLE' "
+                    "AND table_name NOT LIKE 'alembic%' ORDER BY table_name"
+                )
+            )
+        ).scalars().all()
+
+        # Friendly descriptions for the warehouse; unknown tables get a generic line
+        descriptions = {
+            "organizations": "Businesses / workspaces (tenants)",
+            "profiles": "Users / members (with org_id isolation)",
+            "sales_transactions": "Sales fact — one row per line-item sale",
+            "expenses": "Expenses fact",
+            "inventory_levels": "Inventory snapshots",
+            "products": "Product dimension (per-org SKU)",
+            "customers": "Customer dimension",
+            "kpi_snapshots": "Pre-aggregated KPIs (per business-day)",
+            "kpi_definitions": "KPI metadata / targets",
+            "ml_models": "Forecast models (per org, per target)",
+            "forecasts": "Forecast projections",
+            "anomalies": "Anomaly alerts",
+            "insights": "Generated insights / recommendations",
+            "alert_rules": "Alert rules",
+            "notifications": "Notifications",
+            "reports": "Generated reports",
+            "data_sources": "Data sources / ETL origins",
+            "raw_uploads": "Raw upload history",
+            "etl_jobs": "ETL job runs",
+            "roles": "Roles catalog",
+            "permissions": "Permissions catalog",
+            "role_permissions": "Role ↔ permission matrix",
+            "audit_logs": "Audit trail",
+            "ai_conversations": "AI chat conversations (per org)",
+            "ai_messages": "AI chat messages (per org)",
+        }
+
+        lines = [
+            "### Data Catalog — live, right now",
+            "",
+            "Everything below is a **real table in your database** at this moment. "
+            "New tables appear here automatically — no code change needed.",
+            "",
+            f"- **Total tables:** {len(tables)} in schema `public`",
+            "",
+            "| Table | What it holds | Rows you can see* |",
+            "|---|---|---|",
+        ]
+        for t in tables:
+            # Row count scoped to caller — realtime, no cache
+            count = None
+            try:
+                has_org = (
+                    await db.execute(
+                        _text(
+                            "SELECT 1 FROM information_schema.columns "
+                            "WHERE table_schema='public' AND table_name=:t AND column_name='org_id' LIMIT 1"
+                        ),
+                        {"t": t},
+                    )
+                ).scalar()
+                if has_org and f.org_id is not None:
+                    count = (
+                        await db.execute(_text(f'SELECT COUNT(*) FROM "{t}" WHERE org_id = :oid'), {"oid": str(f.org_id)})
+                    ).scalar()
+                else:
+                    # super-admin sees full platform count; isolated user sees their slice if column exists else global count
+                    if has_org and f.org_id is None:
+                        count = (await db.execute(_text(f'SELECT COUNT(*) FROM "{t}"'))).scalar()
+                    elif not has_org:
+                        count = (await db.execute(_text(f'SELECT COUNT(*) FROM "{t}"'))).scalar()
+                    else:
+                        count = 0
+            except Exception:
+                count = "—"
+            desc = descriptions.get(t, "—")
+            lines.append(f"| `{t}` | {desc} | {count} |")
+        lines += [
+            "",
+            "* Row counts are **live** and scoped to you: a business user sees only their org's rows where `org_id` exists; a Super-Admin sees the platform total.",
+            "",
+            "**Suggested action:** ask me directly about any table — e.g. *“how many rows in sales_transactions for last 30 days?”*, *“sample 5 products”*, or *“how many businesses are registered?”* — I'll query it live.",
+        ]
+        return "\n".join(lines)
+    except Exception:
+        logger.warning("_catalog handler failed", exc_info=True)
+        await _rollback(db)
+        return "I couldn't read the data catalog just now — please try again. The **Data** page lists your connected sources."
+
+
 async def _business(db: AsyncSession, f: Filters, q: str) -> str:
-    # Accurate identity — resolve org name from DB, never guess
+    # If the question is really a count/listing, delegate to the platform handler
+    ql = q.lower()
+    if any(k in ql for k in ("how many", "count", "total", "number of", "registered", "list", "directory", "all business", "all organization", "are there")):
+        return await _platform(db, f, q)
+    # Otherwise accurate single-workspace identity — resolve org name from DB, never guess
     org_id = f.org_id
     try:
         if org_id is not None:
@@ -580,46 +791,163 @@ async def _business(db: AsyncSession, f: Filters, q: str) -> str:
         return "Your business name is stored in your workspace settings. I couldn't read it just now — try again."
 
 
-async def _generic(db: AsyncSession, f: Filters) -> str:
-    cards = await _kpi_map(db, f)
-    rev = cards.get("revenue", {}).get("value")
-    exp = cards.get("expense_total", {}).get("value")
-    if rev is None and exp is None:
-        return (
-            "I couldn't match that question to a specific metric — but here's a live overview:\n\n"
-            "The **Revenue** and **Expenses** KPIs at the top of your dashboard, the "
-            "**Forecast** panel, **Low Stock** and **Anomaly Alerts** panels are all "
-            "interactive. Ask me about any of them and I'll pull the actual numbers."
-        )
+async def _update_handler(db: AsyncSession, f: Filters, q: str) -> str:
+    """Live 'what's the update' — comprehensive snapshot for ANY vague/status question.
 
-    period = _period_label(f)
-    lines = [
-        f"Here's where the business stands for **{period}**:",
-        "",
-        f"- **Revenue:** {npr(rev) if rev is not None else '—'}",
-        f"- **Expenses:** {npr(exp) if exp is not None else '—'}",
-    ]
+    This is the universal fallback: it answers 'whats the update', 'summary',
+    'overview', and any UNKNOWN phrasing with a precise, live, scannable digest
+    across ALL domains so no question ever gets a generic apology.
+    """
     try:
-        low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
-        if low:
-            lines.append(f"- **Stock alerts:** {len(low)} product(s) below reorder level")
+        from sqlalchemy import func as _func
+        from sqlalchemy import select as _sel
+        from sqlalchemy import text as _text
+
+        from app.models.identity import Organization
+
+        # Use the window already resolved (last 30 days with data) for KPIs
+        cards = await _kpi_map(db, f)
+        period_label = _period_label(f)
+        coverage = None
+        try:
+            coverage = await data_coverage(db, org_id=f.org_id)
+        except Exception:
+            pass
+
+        # Platform counts (live, scoped)
+        platform_line = ""
+        try:
+            if f.org_id is None:
+                total_orgs = (await db.execute(_sel(_func.count()).select_from(Organization))).scalar() or 0
+                platform_line = f"- **Businesses registered:** {total_orgs} (live platform total)"
+            else:
+                org = await db.get(Organization, f.org_id) if f.org_id else None
+                if org:
+                    platform_line = f"- **Workspace:** {org.name} — isolated, 1 business you can see"
+        except Exception:
+            pass
+
+        lines = [
+            f"### Live Update — {period_label}",
+            "",
+            f"Here's the precise picture **right now** ({business_today().isoformat()}), all numbers live from your warehouse:",
+            "",
+        ]
+        if platform_line:
+            lines.append(platform_line)
+        if coverage and coverage.get("first_date"):
+            lines.append(f"- **Data freshness:** {coverage['first_date']} → {coverage['last_date']} ({coverage['days_behind']} day(s) behind today), last upload {coverage['last_ingested_at']:%Y-%m-%d %H:%M} " if coverage.get("last_ingested_at") else f"- **Warehouse:** {coverage['first_date']} → {coverage['last_date']}")
+        # KPIs with change
+        for metric in ("revenue", "orders", "avg_order_value", "gross_margin", "expense_total"):
+            c = cards.get(metric)
+            if not c or c.get("value") is None:
+                continue
+            change = c.get("change_pct")
+            trend = f" ({change:+.1f}% vs previous period)" if change is not None else ""
+            label = metric.replace("_", " ").title()
+            lines.append(f"- **{label}:** {npr(c['value'])}{trend}")
+
+        # Top products (live)
+        try:
+            prods = await sales_by_dimension(db, f, "product")
+            if prods:
+                lines.append("")
+                lines.append(f"**Top products ({period_label}):**")
+                for p in prods[:3]:
+                    lines.append(f"- {p['key']}: {npr(p['revenue'])} ({p['share_pct']}% share, {p['orders']} orders)")
+        except Exception:
+            pass
+
+        # Expense categories
+        try:
+            exps = await expenses_by_category(db, f)
+            if exps:
+                lines.append("")
+                lines.append("**Spend by category:**")
+                for e in exps[:3]:
+                    lines.append(f"- {e['key']}: {npr(e['revenue'])} ({e['share_pct']}% of expenses)")
+        except Exception:
+            pass
+
+        # Inventory
+        try:
+            low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
+            if low:
+                lines.append(f"\n- **Inventory:** {len(low)} product(s) below reorder — e.g. {', '.join((r['product'] or r['sku']) for r in low[:3])}")
+            else:
+                lines.append("\n- **Inventory:** all SKUs above reorder level — healthy")
+        except Exception:
+            pass
+
+        # Anomalies
+        try:
+            aq = _sel(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(5)
+            if f.org_id is not None:
+                aq = aq.where(Anomaly.org_id == f.org_id)
+            anoms = (await db.execute(aq)).scalars().all()
+            if anoms:
+                latest = ", ".join(f"{a.metric.replace('_',' ')} {npr(a.observed_value)}" for a in anoms[:2])
+                lines.append(f"- **Anomalies:** {len(anoms)} open — latest: {latest}")
+            else:
+                lines.append("- **Anomalies:** none open — stable")
+        except Exception:
+            pass
+
+        # Forecast snapshot
+        try:
+            mq = _sel(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+            if f.org_id is not None:
+                mq = mq.where(MlModel.org_id == f.org_id)
+            model = (await db.execute(mq.order_by(MlModel.trained_at.desc()))).scalar_one_or_none()
+            if model:
+                fq = _sel(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(14)
+                if f.org_id is not None:
+                    fq = fq.where(Forecast.org_id == f.org_id)
+                fc = (await db.execute(fq)).scalars().all()
+                if fc:
+                    total = sum(float(r.yhat) for r in fc)
+                    lines.append(f"- **Forecast (next {len(fc)} days):** {npr(total)} total (~{npr(total/len(fc))}/day, {model.model_type} v{model.version})")
+        except Exception:
+            pass
+
+        # Catalog hint for discoverability
+        try:
+            tbl_cnt = (await db.execute(_text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name NOT LIKE 'alembic%'"))).scalar() or 0
+            lines.append(f"\n- **Data catalog:** {tbl_cnt} live tables — ask 'what tables do you have?' or 'sample <table>' to explore any new data instantly")
+        except Exception:
+            pass
+
+        lines += ["", "**Suggested action:** ask me anything specific — *'revenue yesterday'*, *'how many businesses are registered?'*, *'sample inventory_levels'* — every answer is live, precise, and scoped to you."]
+        return "\n".join(lines)
     except Exception:
-        pass
+        logger.warning("_update_handler failed", exc_info=True)
+        await _rollback(db)
+        return await _generic_fallback(db, f)
+
+
+async def _generic_fallback(db: AsyncSession, f: Filters) -> str:
+    """Minimal live fallback when _update_handler hits an error — never an apology dump."""
     try:
-        aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(20)
-        if f.org_id is not None:
-            aq = aq.where(Anomaly.org_id == f.org_id)
-        open_anoms = (await db.execute(aq)).scalars().all()
-        if open_anoms:
-            lines.append(f"- **Anomalies:** {len(open_anoms)} open alert(s) need review")
+        cards = await _kpi_map(db, f)
+        period = _period_label(f)
+        rev = cards.get("revenue", {}).get("value")
+        exp = cards.get("expense_total", {}).get("value")
+        lines = [f"### Live Snapshot — {period}", ""]
+        if rev is not None:
+            lines.append(f"- **Revenue:** {npr(rev)}")
+        if exp is not None:
+            lines.append(f"- **Expenses:** {npr(exp)}")
+        if not lines[1:]:
+            lines.append("- No KPI data loaded yet — connect a data source on the **Data** page")
+        lines += ["", "Ask me about **revenue, expenses, products, inventory, anomalies, forecasts, or any table** — I query every table live."]
+        return "\n".join(lines)
     except Exception:
-        pass
-    lines += [
-        "",
-        "To go deeper, ask about **forecasts**, **inventory**, **anomalies**, "
-        "**top products**, or **expense categories**.",
-    ]
-    return "\n".join(lines)
+        return "I couldn't read live data just now — please try again. The **Data** page shows your sources and freshness."
+
+
+async def _generic(db: AsyncSession, f: Filters) -> str:
+    # Universal: every UNKNOWN phrasing now gets the full live digest, not a 2-line stub
+    return await _update_handler(db, f, "")
 
 
 def _no_data(what: str, period: str | None = None) -> str:
@@ -648,8 +976,13 @@ _HANDLERS: dict[Intent, Any] = {
     Intent.REGIONS: _regions,
     Intent.COMPARE: _compare,
     Intent.BUSINESS: _business,
+    Intent.PLATFORM: _platform,
+    Intent.USERS: _users_handler,
+    Intent.CATALOG: _catalog_handler,
+    Intent.UPDATE: _update_handler,
     Intent.GREETING: _greeting,
     Intent.HELP: _help,
     Intent.THANKS: _thanks,
     Intent.CAPABILITIES: _help,
+    Intent.UNKNOWN: _update_handler,
 }

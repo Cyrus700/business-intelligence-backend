@@ -72,6 +72,19 @@ async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DA
                 lines.append(f"- Business / workspace id: {org_id} (name not found)")
         elif user is not None and getattr(user, "is_super_admin", False):
             lines.append("- Business / workspace: Platform Super-Admin (sees all organizations)")
+            # Live platform totals so even a snapshot fallback answers counting questions precisely
+            try:
+                from sqlalchemy import func as _func
+                from sqlalchemy import select as _sel
+
+                from app.models.identity import Organization as _Org
+
+                total_orgs = (await db.execute(_sel(_func.count()).select_from(_Org))).scalar() or 0
+                approved = (await db.execute(_sel(_func.count()).select_from(_Org).where(_Org.status == "approved"))).scalar() or 0
+                pending = (await db.execute(_sel(_func.count()).select_from(_Org).where(_Org.status == "pending"))).scalar() or 0
+                lines.append(f"- Platform businesses registered: **{total_orgs}** (approved {approved}, pending {pending}) — live right now")
+            except Exception:
+                pass
         if user is not None:
             lines.append(
                 f"- Signed-in user: {getattr(user, 'email', 'unknown')} · role {getattr(user, 'role', 'unknown')}"

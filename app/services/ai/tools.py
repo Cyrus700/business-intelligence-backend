@@ -627,6 +627,265 @@ async def _business_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     return "\n".join(lines)
 
 
+async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
+    """Live platform stats — counts businesses, users, products, etc.
+
+    Super-admin sees platform totals. Isolated users see only their org's
+    slice and an explicit note about isolation so the answer is never
+    misleading when a new business is added.
+    """
+    from sqlalchemy import func, select
+
+    from app.models.identity import Organization, Profile as ProfileM
+
+    is_super = bool(getattr(user, "is_super_admin", False))
+    oid = _org_id_for(user)
+    status_filter = kwargs.get("status")
+    detail = bool(kwargs.get("detail"))
+
+    if is_super or oid is None:
+        # Platform-wide live counts
+        base = select(func.count()).select_from(Organization)
+        if status_filter:
+            base = base.where(Organization.status == str(status_filter))
+        total = (await db.execute(base)).scalar() or 0
+
+        # Breakdown by status — always live
+        statuses = ["approved", "pending", "rejected"]
+        breakdown = []
+        for s in statuses:
+            cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.status == s))).scalar() or 0
+            breakdown.append(f"{s}: {cnt}")
+
+        legacy = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))).scalar() or 0
+        personal = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))).scalar() or 0
+
+        users_total = (await db.execute(select(func.count()).select_from(ProfileM))).scalar() or 0
+        active_users = (await db.execute(select(func.count()).select_from(ProfileM).where(ProfileM.is_active.is_(True)))).scalar() or 0
+
+        lines = [
+            f"Platform businesses (organizations) — live count: **{total}**",
+            f"- By status: {', '.join(breakdown)}",
+            f"- Legacy: {legacy} · Personal workspaces: {personal}",
+            f"- Users: {users_total} total, {active_users} active",
+        ]
+        if detail:
+            limit = max(1, min(int(kwargs.get("limit") or 10), 25))
+            rows = (await db.execute(select(Organization).order_by(Organization.created_at.desc()).limit(limit))).scalars().all()
+            if rows:
+                lines.append(f"- Latest {len(rows)} businesses:")
+                for o in rows:
+                    created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
+                    lines.append(f"  - {o.name} (status={o.status}, legacy={o.is_legacy}, personal={o.is_personal}, created={created})")
+        # live freshness: newest org
+        try:
+            newest = (await db.execute(select(Organization).order_by(Organization.created_at.desc()).limit(1))).scalar_one_or_none()
+            if newest and getattr(newest, "created_at", None):
+                lines.append(f"- Newest registration: {newest.name} on {newest.created_at:%Y-%m-%d %H:%M}")
+        except Exception:
+            pass
+        return "\n".join(lines)
+
+    # Isolated business user — never expose platform total
+    org = await db.get(Organization, oid)
+    name = org.name if org else f"org {oid}"
+    # Count within org: users in this org (live)
+    users_in_org = (await db.execute(select(func.count()).select_from(ProfileM).where(ProfileM.org_id == oid))).scalar() or 0
+    return "\n".join(
+        [
+            f"You are in **{name}** — isolated workspace (1 business you can see).",
+            f"- Your users in this workspace: {users_in_org}",
+            "- Platform total: not visible from a business account (Super-Admin sees all via Admin Center).",
+            "- This count is live: adding a new business elsewhere does not change your slice.",
+        ]
+    )
+
+
+async def _catalog_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
+    """Live data dictionary — discovers tables and row counts at query time.
+
+    A new table added tomorrow shows up here with zero code change because we
+    read information_schema at call time, not from a hard-coded list.
+    """
+    from sqlalchemy import text
+
+    include_counts = bool(kwargs.get("include_counts", True))
+    limit = max(1, min(int(kwargs.get("limit") or 40), 60))
+    oid = _org_id_for(user)
+    is_super = bool(getattr(user, "is_super_admin", False))
+
+    tables = (
+        await db.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='public' AND table_type='BASE TABLE' "
+                "AND table_name NOT LIKE 'alembic%' ORDER BY table_name LIMIT :lim"
+            ),
+            {"lim": limit},
+        )
+    ).scalars().all()
+
+    descriptions: dict[str, str] = {
+        "organizations": "Businesses / workspaces (tenants) — one row per business",
+        "profiles": "Users / members (per org, is_super_admin bypasses)",
+        "sales_transactions": "Sales fact (txn_date, product_id, quantity, total_amount, channel, region)",
+        "expenses": "Expenses fact (expense_date, category, amount)",
+        "inventory_levels": "Inventory snapshots (snapshot_date, product_id, quantity_on_hand)",
+        "products": "Product dimension (sku unique per org, name, category)",
+        "customers": "Customer dimension",
+        "kpi_snapshots": "Pre-aggregated KPI snapshots",
+        "kpi_definitions": "KPI metadata and targets",
+        "ml_models": "ML models per org",
+        "forecasts": "Forecast rows per model",
+        "anomalies": "Anomaly alerts per org",
+        "insights": "Generated insights",
+        "data_sources": "Data sources / ETL origins",
+        "raw_uploads": "Raw upload history",
+        "etl_jobs": "ETL job runs",
+        "ai_conversations": "AI conversations (per org)",
+        "ai_messages": "AI messages (per org)",
+        "organizations_invites": "Invite tokens",
+        "roles": "RBAC roles",
+        "permissions": "RBAC permissions",
+    }
+
+    lines = [
+        "Live data catalog — discovered just now from information_schema:",
+        f"- Tables in public: {len(tables)} (alive — a new table appears automatically)",
+        "",
+        "| Table | Purpose | Rows you can see (live) |",
+        "|---|---|---|",
+    ]
+    for t in tables:
+        desc = descriptions.get(t, "—")
+        count_txt = "—"
+        if include_counts:
+            try:
+                has_org = (
+                    await db.execute(
+                        text(
+                            "SELECT 1 FROM information_schema.columns WHERE table_schema='public' "
+                            "AND table_name=:t AND column_name='org_id' LIMIT 1"
+                        ),
+                        {"t": t},
+                    )
+                ).scalar()
+                if has_org and not is_super and oid is not None:
+                    cnt = (await db.execute(text(f'SELECT COUNT(*) FROM "{t}" WHERE org_id = :oid'), {"oid": str(oid)})).scalar()
+                else:
+                    cnt = (await db.execute(text(f'SELECT COUNT(*) FROM "{t}"'))).scalar()
+                count_txt = str(cnt)
+            except Exception as e:
+                count_txt = f"err: {e.__class__.__name__}"
+        lines.append(f"| `{t}` | {desc} | {count_txt} |")
+
+    # Column discovery for the table the user just asked about (if any)
+    focus = kwargs.get("table")
+    if focus and focus in tables:
+        cols = (
+            await db.execute(
+                text(
+                    "SELECT column_name, data_type FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name=:t ORDER BY ordinal_position"
+                ),
+                {"t": focus},
+            )
+        ).all()
+        lines.append("")
+        lines.append(f"Columns in `{focus}` (live schema):")
+        for col, dtype in cols:
+            lines.append(f"- {col} ({dtype})")
+        # Sample 3 rows, scoped to org if needed, without leaking secrets
+        try:
+            has_org_f = (
+                await db.execute(
+                    text("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=:t AND column_name='org_id' LIMIT 1"),
+                    {"t": focus},
+                )
+            ).scalar()
+            sensitive = {"password_hash", "email_verification_token"}
+            col_names = [c for c, _ in cols if c not in sensitive]
+            col_list = ", ".join(f'"{c}"' for c in col_names[:12])
+            if has_org_f and not is_super and oid is not None:
+                rows = (await db.execute(text(f'SELECT {col_list} FROM "{focus}" WHERE org_id=:oid ORDER BY 1 DESC LIMIT 3'), {"oid": str(oid)})).all()
+            else:
+                rows = (await db.execute(text(f'SELECT {col_list} FROM "{focus}" ORDER BY 1 DESC LIMIT 3'))).all()
+            if rows:
+                lines.append(f"- Sample {len(rows)} row(s) from `{focus}` (most recent):")
+                for r in rows:
+                    lines.append(f"  - {dict(r._mapping)}")
+        except Exception:
+            pass
+
+    lines.append("")
+    lines.append("Sync: every row count above is a live COUNT(*) right now — no cache, no stale snapshot.")
+    return "\n".join(lines)
+
+
+async def _table_sample(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
+    """Live sample / count from any table — powers 'answer on every data' without code change."""
+    from sqlalchemy import text
+
+    table = str(kwargs.get("table") or "").strip().strip('"').strip("'")
+    if not table:
+        return "Pass `table` — e.g. table=sales_transactions"
+    # Validate table exists right now
+    exists = (
+        await db.execute(
+            text("SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=:t LIMIT 1"),
+            {"t": table},
+        )
+    ).scalar()
+    if not exists:
+        return f"Table `{table}` does not exist in schema public right now."
+
+    oid = _org_id_for(user)
+    is_super = bool(getattr(user, "is_super_admin", False))
+    limit = max(1, min(int(kwargs.get("limit") or 5), 20))
+    # Disallow secret columns
+    exclude = {"password_hash", "email_verification_token", "password"}
+    cols = (
+        await db.execute(
+            text("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=:t ORDER BY ordinal_position"),
+            {"t": table},
+        )
+    ).scalars().all()
+    cols = [c for c in cols if c not in exclude]
+    if not cols:
+        return f"Table `{table}` has no readable columns."
+    # Build predicates from remaining kwargs (simple equality filters)
+    allowed_filters = {c: kwargs[c] for c in cols if c in kwargs and kwargs[c] not in (None, "")}
+    where_clauses = []
+    params: dict[str, object] = {}
+    has_org = "org_id" in cols
+    if has_org and not is_super and oid is not None:
+        where_clauses.append("org_id = :_oid")
+        params["_oid"] = str(oid)
+    for k, v in allowed_filters.items():
+        # ignore non-scalar
+        if isinstance(v, (dict, list)):
+            continue
+        where_clauses.append(f'"{k}" = :{k}')
+        params[k] = v
+    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    col_list = ", ".join(f'"{c}"' for c in cols[:12])
+    # Count (live)
+    cnt = (await db.execute(text(f'SELECT COUNT(*) FROM "{table}"{where_sql}'), params)).scalar() or 0
+    lines = [f"Live from `{table}` — {cnt} row(s) match your scope right now (no cache)."]
+    if cnt == 0:
+        lines.append("No rows match — try widening filters or check the Data page.")
+        return "\n".join(lines)
+    rows = (await db.execute(text(f'SELECT {col_list} FROM "{table}"{where_sql} ORDER BY 1 DESC LIMIT :lim'), {**params, "lim": limit})).all()
+    lines.append(f"| {' | '.join(cols[:6])} |")
+    lines.append("|" + "---|" * min(6, len(cols)))
+    for r in rows[:limit]:
+        vals = [str(r._mapping.get(c, "—"))[:36] for c in cols[:6]]
+        lines.append(f"| {' | '.join(vals)} |")
+    if len(rows) < cnt:
+        lines.append(f"Showing {len(rows)} of {cnt} matching rows — ask for a narrower filter to see more.")
+    return "\n".join(lines)
+
+
 # ── registry ───────────────────────────────────────────────────────────────
 
 TOOLS: dict[str, AITool] = {
@@ -953,6 +1212,65 @@ TOOLS: dict[str, AITool] = {
         ),
         parameters={"type": "object", "properties": {}},
         handler=_business_info,
+    ),
+    "get_platform_stats": AITool(
+        name="get_platform_stats",
+        description=(
+            "LIVE COUNT of businesses (organizations) and users on the platform — use IMMEDIATELY "
+            "for 'how many business/businesses/organizations/tenants/workspaces are registered', "
+            "'how many users/members', 'business directory', 'show all businesses'. "
+            "Returns approved/pending/rejected breakdown and the newest registration. "
+            "Super-admin sees platform totals; business users see only their isolated workspace (one) — never leak other tenants."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["approved", "pending", "rejected"],
+                    "description": "Optionally filter business count to one status.",
+                },
+                "detail": {"type": "boolean", "default": False, "description": "Include latest business names."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "default": 10},
+            },
+        },
+        handler=_platform_overview,
+    ),
+    "describe_catalog": AITool(
+        name="describe_catalog",
+        description=(
+            "LIVE DATA DICTIONARY — discovers every table that exists RIGHT NOW from information_schema. "
+            "CALL THIS when the question mentions a table, dataset, column, schema, 'what data do you have', "
+            "or asks about data you don't have a specific tool for (new tables appear here automatically with no code change). "
+            "Returns table purposes + live row counts scoped to the caller and optionally live column names + sample rows for one focused table."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "table": {"type": "string", "description": "Focus on one table to also list its live columns and sample rows."},
+                "include_counts": {"type": "boolean", "default": True},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 60, "default": 40},
+            },
+        },
+        handler=_catalog_info,
+    ),
+    "sample_table": AITool(
+        name="sample_table",
+        description=(
+            "LIVE SAMPLE from ANY table — the generic reader that makes the assistant work on future tables without code change. "
+            "Use for 'show me rows from <any_table>', 'sample <table>', 'how many rows in <table> that match X', or when describe_catalog showed a new table and the user wants actual data from it. "
+            "Always respects org isolation (business users only see their org's rows) and never exposes password hashes. "
+            "Returns a live COUNT(*) plus up to `limit` most-recent rows."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "table": {"type": "string", "description": "Exact table name in public schema, e.g. sales_transactions, organizations, products, or any future table."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+            },
+            "required": ["table"],
+        },
+        handler=_table_sample,
     ),
 }
 

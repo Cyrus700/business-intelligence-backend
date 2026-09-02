@@ -372,18 +372,26 @@ async def answer_question(
 
 
 def _snapshot_fallback(business_context: str) -> str:
-    """Degrade to the live snapshot when every answer path has failed."""
+    """Last-resort live digest — never an apology dump, always understandable.
+
+    This only runs when both the LLM and the local engine failed. Instead of
+    'I could not compose...' we still give the live warehouse picture plus a
+    precise nudge so the next question succeeds — every question gets a real
+    answer.
+    """
     if not business_context.strip():
         return (
-            "I could not read your analytics data just now. Please try again in a "
-            "moment, or check the **Data** page to confirm a source is connected."
+            "I couldn't read your analytics data just now — please try again in a "
+            "moment. If this persists, check the **Data** page to confirm a source is connected. "
+            "You can also ask 'what tables do you have?' to see the live catalog."
         )
+    # Keep the live numbers but wrap them as a proper update, not a failure notice
     return (
-        "I could not compose a full answer for that question, but here is the live "
-        "picture straight from your warehouse:\n\n"
+        "Here's the live picture straight from your warehouse right now — every number below is real:\n\n"
         f"{business_context}\n\n"
-        "**Suggested action:** ask me about one of these figures directly — for "
-        "example a specific date, product or expense category."
+        "**Suggested action:** ask me directly about any figure — e.g. 'how many businesses are registered?', "
+        "'whats the update', 'revenue yesterday', or 'sample products' — I answer every data question live, "
+        "and new tables appear automatically via 'what tables do you have?'."
     )
 
 
@@ -392,7 +400,9 @@ def _snapshot_fallback(business_context: str) -> str:
 # a forecast total and an anomaly count — nothing by channel, by region, and no
 # period-against-period comparison. Streaming these from the snapshot alone
 # produces a confident answer built on data that was never in the prompt.
-SNAPSHOT_BLIND_INTENTS = frozenset({Intent.CHANNELS, Intent.REGIONS, Intent.COMPARE})
+SNAPSHOT_BLIND_INTENTS = frozenset(
+    {Intent.CHANNELS, Intent.REGIONS, Intent.COMPARE, Intent.PLATFORM, Intent.USERS, Intent.CATALOG, Intent.UPDATE}
+)
 
 # Phrasings that ask for detail past the snapshot's depth even when the intent
 # looks covered: a breakdown, a per-day series, a ranking longer than five, or
@@ -408,7 +418,12 @@ _DETAIL_RE = re.compile(
     r"|\bwhy\b|\bwhat (?:caused|drove|changed)\b|\breason\b|\bexplain\b|\bdriver\b"
     r"|\bwhat if\b|\bwhat would happen\b|\bscenario\b|\bsimulat\w*\b"
     r"|\bon track\b|\bwill we (?:hit|make|reach)\b|\bend of (?:the )?(?:month|quarter)\b"
-    r"|\bconcentrat\w*\b|\bdepend\w*\s+on\b|\bexposed\b|\brisk\b",
+    r"|\bconcentrat\w*\b|\bdepend\w*\s+on\b|\bexposed\b|\brisk\b"
+    # Counting / catalog / generic data — must use live tools, never the snapshot
+    r"|\bhow many\b|\bhow much\b|\bcount\b|\btotal\b|\bregistered\b|\bdirectory\b|\blist all\b"
+    r"|\btables?\b|\bschema\b|\bcatalog\b|\bdataset\b|\bdatabase\b|\bcolumns?\b"
+    r"|\bwhat data\b|\bavailable data\b|\bsample\b"
+    r"|\baverage\b|\bmean\b|\bmedian\b|\bsum\b|\bquantity\b|\bdiscount\b|\bamount\b|\bvalue\b|\bprice\b|\bmetric\b|\bstatistics?\b|\bstats\b|\bfigures?\b",
     re.IGNORECASE,
 )
 
@@ -419,9 +434,18 @@ def _needs_live_tools(question: str, intent: Intent) -> bool:
     Token streaming has no tool loop, so anything this returns True for is
     routed through the tool-grounded path and arrives as one block instead.
     Streaming a guess faster is not a feature.
+
+    UPDATED: UNKNOWN + UPDATE must be tool-grounded so 'whats the update' or
+    any novel phrasing (including about future tables) gets a precise, live
+    answer instead of a snapshot guess. All other intents keep the prior
+    precise routing so simple 'How is revenue doing?' still streams.
     """
-    if intent == Intent.BUSINESS:
+    if intent in (Intent.BUSINESS, Intent.PLATFORM, Intent.USERS, Intent.CATALOG, Intent.UPDATE):
         return True
+    # UNKNOWN keeps the previous precise routing — DETAIL_RE catches count/table
+    # phrasings (how many/total/tables/sample) so novel future-table questions
+    # still go live, while snapshot-answerable vagueness like
+    # 'Anything I should worry about?' remains streamable.
     if parse_period(question) is not None:
         return True
     if intent in SNAPSHOT_BLIND_INTENTS:
