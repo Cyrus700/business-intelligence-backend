@@ -162,6 +162,9 @@ async def _run_tool_loop(
     """
     providers = await _healthy_providers()
     if not providers:
+        # Silence here is how a bad model id or a revoked key turns into the
+        # canned snapshot fallback for every question — say so in the log.
+        logger.warning("no healthy AI provider; answering without the LLM (check keys / model id / circuits)")
         return "", 0, []
 
     # Try each healthy provider in turn: a mid-loop failure on one shouldn't
