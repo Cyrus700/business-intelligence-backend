@@ -7,7 +7,8 @@ import bcrypt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, require_role
 from app.core.config import get_settings
@@ -27,6 +28,57 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 def _google_redirect_uri() -> str:
     s = get_settings()
     return s.google_redirect_uri or f"{s.frontend_url}/api/v1/auth/google/callback"
+
+
+def _slugify(name: str) -> str:
+    import re
+
+    s = re.sub(r"[^a-z0-9]+", "-", name.strip().lower())
+    return (re.sub(r"-{2,}", "-", s).strip("-") or "org")[:64]
+
+
+async def create_personal_org(db: AsyncSession, email: str, full_name: str | None) -> Organization:
+    """Create the private workspace behind a self-serve account.
+
+    A personal account is its own tenant: the person who signs up owns the org,
+    so there is no business to vet and nobody to approve them — the workspace is
+    created ``approved`` and they are its admin. Their data is isolated by the
+    same ``org_id`` scoping every other tenant uses.
+
+    Org names and slugs are unique platform-wide, so a collision (two "Sairash"
+    signups) gets a random suffix rather than a 409 the user cannot act on.
+    """
+    label = (full_name or "").strip() or email.split("@", 1)[0]
+    base_name = f"{label}'s workspace"[:120]
+    base_slug = _slugify(label) or "workspace"
+
+    name, slug = base_name, base_slug
+    for attempt in range(6):
+        taken = (
+            await db.execute(
+                select(Organization).where(
+                    (func.lower(Organization.name) == name.lower()) | (Organization.slug == slug)
+                )
+            )
+        ).first()
+        if taken is None:
+            break
+        suffix = secrets.token_hex(3)
+        name = f"{base_name[:110]} ({suffix})"
+        slug = f"{base_slug[:56]}-{suffix}"
+        if attempt == 5:  # pragma: no cover - astronomically unlikely
+            raise HTTPException(500, "Could not allocate a workspace name, please try again")
+
+    org = Organization(
+        name=name,
+        slug=slug,
+        is_personal=True,
+        status="approved",
+        approved_at=datetime.now(UTC).replace(tzinfo=None),
+    )
+    db.add(org)
+    await db.flush()
+    return org
 
 
 @router.get("/google/login")
@@ -117,9 +169,8 @@ async def google_callback(
             await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_google_email))
         ).scalar_one_or_none()
 
-    # ADMIN_EMAIL from env is the source of truth — any Google login matching it becomes admin
-    admin_email = (s.admin_email or "").strip().lower()
-    is_admin_login = bool(admin_email and normalized_google_email == admin_email)
+    # ADMIN_EMAIL from env is the source of truth — any login matching it becomes admin
+    is_admin_login = s.is_admin_email(normalized_google_email)
 
     # Extract invite_token from state if present (state format: random:invite_token)
     invite_token_from_state: str | None = None
@@ -142,35 +193,23 @@ async def google_callback(
                     if inv.email is not None:
                         inv.accepted_at = datetime.now(UTC).replace(tzinfo=None)
                         inv.accepted_by = profile_id
+        personal = False
         if org_id is None:
-            # Fallback: legacy org or block (strict multi-tenant)
-            if get_settings().is_dev:
-                legacy_org = (
-                    await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
-                ).scalar_one_or_none()
-                org_id = legacy_org.id if legacy_org else None
-                # In prod without invite, Google users must register business first
-                if org_id is None and not is_admin_login:
-                    raise HTTPException(
-                        403,
-                        "No organization found for this Google account. Please register your business at /register-business or request an invite, then try again. If you were invited, use the invite link that contains your token.",
-                    )
+            # No invite: the operator lands in the legacy org, everyone else
+            # gets a personal workspace they own — same as password signup.
+            # Turning first-time Google users away with "register a business
+            # first" was the dead end here.
+            legacy_org = (
+                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
+            ).scalar_one_or_none()
+            if is_admin_login and legacy_org is not None:
+                org_id = legacy_org.id
             else:
-                if not is_admin_login:
-                    raise HTTPException(
-                        403,
-                        "No organization found for this Google account. Please register your business at /register-business or request an invite.",
-                    )
-                legacy_org = (
-                    await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
-                ).scalar_one_or_none()
-                org_id = legacy_org.id if legacy_org else None
-        # Platform super-admin if ADMIN_EMAIL; otherwise use invited role if present
-        role_for_new = (
-            "admin"
-            if is_admin_login
-            else (invited_role if org_id is not None and "invited_role" in locals() and invited_role else "analyst")
-        )
+                org_id = (await create_personal_org(db, normalized_google_email, name)).id
+                personal = True
+        # Platform super-admin if ADMIN_EMAIL; personal workspaces are owned by
+        # their signer-up; otherwise the invited role applies.
+        role_for_new = "admin" if (is_admin_login or personal) else (invited_role or "analyst")
         profile = Profile(
             id=profile_id,
             email=normalized_google_email,
@@ -179,6 +218,9 @@ async def google_callback(
             is_active=True,
             org_id=org_id,
             is_super_admin=is_admin_login,
+            # Google already proved the address belongs to them.
+            email_verified=True,
+            email_verified_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db.add(profile)
         await db.commit()
@@ -342,6 +384,24 @@ class OrganizationPendingOut(OrganizationOut):
     contact_name: str | None = None
 
 
+class OrganizationWithContactOut(OrganizationOut):
+    """Enriched org row for Business management (paginated table + detail view)."""
+
+    contact_email: str | None = None
+    contact_name: str | None = None
+    contact_email_verified: bool | None = None
+    member_count: int = 0
+
+
+class PaginatedOrganizationsOut(BaseModel):
+    items: list[OrganizationWithContactOut]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+    counts: dict[str, int]
+
+
 @router.post("/register-org", response_model=RegisterOrgOut, status_code=201)
 async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: BackgroundTasks) -> RegisterOrgOut:
     """Register a new business: creates Organization (pending) + admin Profile (inactive until verified & approved)."""
@@ -385,8 +445,7 @@ async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: B
         slug = f"{base_slug[:58]}-{secrets.token_hex(3)}"
 
     s_cfg = get_settings()
-    admin_email = (s_cfg.admin_email or "").strip().lower()
-    is_admin_email = bool(admin_email and body.email.strip().lower() == admin_email)
+    is_admin_email = s_cfg.is_admin_email(body.email)
     # Test / CI auto-approve to keep existing tests green; dev & prod require System Admin approval
     auto_approve = bool(s_cfg.env in ("test", "ci") or is_admin_email)
 
@@ -569,17 +628,136 @@ async def list_pending_organizations(db: DbSession, user: CurrentUser) -> list[O
     return out
 
 
-@router.get("/admin/organizations", response_model=list[OrganizationOut])
+@router.get("/admin/organizations", response_model=PaginatedOrganizationsOut)
 async def admin_list_all_organizations(
-    db: DbSession, user: CurrentUser, status: str | None = Query(None, pattern="^(pending|approved|rejected)$")
-) -> list[OrganizationOut]:
+    db: DbSession,
+    user: CurrentUser,
+    status: str | None = Query(None, pattern="^(pending|approved|rejected)$"),
+    search: str | None = Query(None, max_length=120),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+) -> PaginatedOrganizationsOut:
+    """Paginated Business management — super_admin only.
+
+    Supports filtering by status, free-text search on name/slug, and pagination.
+    Returns enriched rows with business contact and member count, plus status counts.
+    """
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")
-    q = select(Organization).order_by(Organization.created_at.desc())
+
+    # Base filter (search)
+    base = select(Organization)
+    filters: list = []
     if status:
-        q = q.where(Organization.status == status)
+        filters.append(Organization.status == status)
+    if search:
+        s = f"%{search.strip()}%"
+        filters.append(or_(Organization.name.ilike(s), Organization.slug.ilike(s)))
+    if filters:
+        base = base.where(*filters)
+
+    # Total matching current filters
+    count_q = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_q)).scalar_one() or 0
+
+    # Status breakdown for the current search (ignoring the status filter itself, but keeping search)
+    counts: dict[str, int] = {"pending": 0, "approved": 0, "rejected": 0, "total": 0}
+    for st in ("pending", "approved", "rejected"):
+        q = select(func.count()).select_from(Organization).where(Organization.status == st)
+        if search:
+            s2 = f"%{search.strip()}%"
+            q = q.where(or_(Organization.name.ilike(s2), Organization.slug.ilike(s2)))
+        cnt = (await db.execute(q)).scalar_one() or 0
+        counts[st] = int(cnt)
+    counts["total"] = sum(counts[k] for k in ("pending", "approved", "rejected"))
+
+    # Paginated rows
+    pages = max(1, (total + page_size - 1) // page_size) if total else 1
+    # Clamp page
+    if page > pages:
+        page = pages
+    offset = (page - 1) * page_size
+    q = base.order_by(Organization.created_at.desc()).offset(offset).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
-    return [OrganizationOut.model_validate(r) for r in rows]
+
+    # Enrich with contact + member count (batch queries)
+    org_ids = [o.id for o in rows]
+    member_counts: dict[UUID, int] = {}
+    contacts: dict[UUID, Profile | None] = {}
+    if org_ids:
+        # member counts per org
+        mc_rows = (
+            await db.execute(
+                select(Profile.org_id, func.count()).where(Profile.org_id.in_(org_ids)).group_by(Profile.org_id)
+            )
+        ).all()
+        member_counts = {oid: int(cnt) for oid, cnt in mc_rows}
+        # contacts: prefer admin role, else earliest profile
+        all_profiles = (
+            await db.execute(
+                select(Profile).where(Profile.org_id.in_(org_ids)).order_by(Profile.created_at)
+            )
+        ).scalars().all()
+        # group by org
+        from collections import defaultdict
+
+        grouped_profiles: dict[UUID, list[Profile]] = defaultdict(list)
+        for p in all_profiles:
+            if p.org_id:
+                grouped_profiles[p.org_id].append(p)
+        for oid in org_ids:
+            plist = grouped_profiles.get(oid, [])
+            if not plist:
+                contacts[oid] = None
+            else:
+                admin = next((x for x in plist if x.role == "admin"), None)
+                contacts[oid] = admin or plist[0]
+
+    items: list[OrganizationWithContactOut] = []
+    for org in rows:
+        base_out = OrganizationWithContactOut.model_validate(org)
+        contact = contacts.get(org.id)
+        base_out.contact_email = contact.email if contact else None
+        base_out.contact_name = contact.full_name if contact else None
+        base_out.contact_email_verified = getattr(contact, "email_verified", None) if contact else None
+        base_out.member_count = member_counts.get(org.id, 0)
+        items.append(base_out)
+
+    return PaginatedOrganizationsOut(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+        counts=counts,
+    )
+
+
+@router.get("/admin/organizations/{org_id}", response_model=OrganizationWithContactOut)
+async def admin_get_organization(
+    org_id: UUID, db: DbSession, user: CurrentUser
+) -> OrganizationWithContactOut:
+    """Detail view for a single business (System Admin only)."""
+    if not getattr(user, "is_super_admin", False):
+        raise HTTPException(403, "System Admin privileges required")
+    org = await db.get(Organization, org_id)
+    if org is None:
+        raise HTTPException(404, "Organization not found")
+    out = OrganizationWithContactOut.model_validate(org)
+    # contact
+    admin = (
+        await db.execute(select(Profile).where(Profile.org_id == org.id, Profile.role == "admin").limit(1))
+    ).scalar_one_or_none()
+    if not admin:
+        admin = (await db.execute(select(Profile).where(Profile.org_id == org.id).limit(1))).scalar_one_or_none()
+    out.contact_email = admin.email if admin else None
+    out.contact_name = admin.full_name if admin else None
+    out.contact_email_verified = getattr(admin, "email_verified", None) if admin else None
+    cnt = (
+        await db.execute(select(func.count()).select_from(Profile).where(Profile.org_id == org.id))
+    ).scalar_one() or 0
+    out.member_count = int(cnt)
+    return out
 
 
 @router.post("/admin/organizations/{org_id}/approve", response_model=OrganizationOut)
@@ -689,6 +867,10 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
         )
 
     normalized_login = body.email.strip().lower()
+    # An operator address is an operator whichever button they used to sign in.
+    # Their org's approval state and email-verification state are irrelevant:
+    # they are the person who approves organizations in the first place.
+    is_operator = get_settings().is_admin_email(normalized_login)
     result = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_login))
     profile = result.scalar_one_or_none()
     # Use generic error to avoid account enumeration (same message for not-found vs wrong password)
@@ -705,7 +887,7 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
         raise generic_auth_failed
     # Business approval & email verification checks (business-based isolation)
     org = await db.get(Organization, profile.org_id) if profile.org_id else None
-    if org and org.status == "pending" and not profile.is_super_admin:
+    if org and org.status == "pending" and not (profile.is_super_admin or is_operator):
         await db.flush()
         audit("auth.login_failed", profile.id)
         await db.commit()
@@ -713,14 +895,14 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
             403,
             "Your business is pending System Admin approval. Please verify your email and wait for approval. You'll receive an email once approved.",
         )
-    if org and org.status == "rejected" and not profile.is_super_admin:
+    if org and org.status == "rejected" and not (profile.is_super_admin or is_operator):
         await db.flush()
         audit("auth.login_failed", profile.id)
         await db.commit()
         raise HTTPException(
             403, f"Your business was rejected: {org.rejection_reason or 'Contact support for details.'}"
         )
-    if not getattr(profile, "email_verified", True) and not profile.is_super_admin:
+    if not getattr(profile, "email_verified", True) and not (profile.is_super_admin or is_operator):
         await db.flush()
         audit("auth.login_failed", profile.id)
         await db.commit()
@@ -741,8 +923,20 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
         await db.commit()
         raise generic_auth_failed
 
+    # Promotion happens only after the password checked out. Google logins have
+    # always done this; doing it here too means ADMIN_EMAIL is what decides who
+    # operates the platform, not which sign-in button they happened to press.
+    if is_operator and not (profile.is_super_admin and profile.role == "admin"):
+        profile.role = "admin"
+        profile.is_super_admin = True
+        # Any session minted before the promotion is retired immediately.
+        profile.token_version = (profile.token_version or 0) + 1
+        audit("auth.operator_promoted", profile.id)
+        logger.info("login promoted %s to System Admin via ADMIN_EMAIL", profile.email)
+
     audit("auth.login", profile.id)
     await db.commit()
+    await db.refresh(profile)
     org = await db.get(Organization, profile.org_id) if profile.org_id else None
     token = sign_token(
         profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
@@ -756,10 +950,15 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
 
 @router.post("/signup", response_model=AuthOut, status_code=201)
 async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTasks) -> AuthOut:
-    """Signup via invite token (preferred) or legacy fallback.
+    """Create an account, with or without an invite.
 
-    With invite_token: validates token, joins that org with invite's role.
-    Without token: requires org context — blocked in strict multi-tenant mode unless ADMIN_EMAIL.
+    With ``invite_token``: joins that organization with the role the invite
+    carries — the team-onboarding path.
+
+    Without one: a **personal account**. The signer-up gets their own approved
+    workspace and is its admin, so they can connect sources, upload files and
+    analyse their own data immediately. No invite to chase, nobody to approve
+    them, and no access to any other tenant's data.
     """
     normalized_signup_email = body.email.strip().lower()
     existing = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_signup_email))
@@ -774,8 +973,7 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
         raise HTTPException(422, "Password is too common")
 
     s = get_settings()
-    admin_email = (s.admin_email or "").strip().lower()
-    is_admin_email = bool(admin_email and body.email.strip().lower() == admin_email)
+    is_admin_email = s.is_admin_email(normalized_signup_email)
 
     org_id: UUID | None = None
     assigned_role = "analyst"
@@ -803,44 +1001,24 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
             # Fallback to analyst if role was deleted
             assigned_role = "analyst"
     else:
-        # No invite: only ADMIN_EMAIL or dev/test legacy mode may signup without invite (for initial seeding / tests)
-        # In production, this path is intentionally blocked to enforce invite-only onboarding.
+        # No invite: this is a personal account. It gets its own approved
+        # workspace and full rights inside it — a single person has nobody to
+        # request an invite from, and needs to upload and analyse their own data
+        # on the spot. Tenant isolation is unchanged: they only ever see the org
+        # created here.
         if is_admin_email:
-            # Auto-attach admin to legacy org if exists else require register-org
+            # The platform operator joins the legacy org when there is one, so
+            # they land on the shared seed data rather than an empty workspace.
             legacy = (
                 await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
             ).scalar_one_or_none()
-            org_id = legacy.id if legacy else None
-            assigned_role = "admin"
-        elif get_settings().is_dev:
-            # Dev/test fallback: allow legacy org assignment so existing tests/seed scripts keep working
-            legacy = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
-            ).scalar_one_or_none()
-            if legacy is None:
-                # No legacy yet (fresh DB before migration); create ephemeral org for this signup
-                # But in test mode, conftest will have created legacy via migration; fallback to first org
-                first_org = (await db.execute(select(Organization).limit(1))).scalar_one_or_none()
-                if first_org:
-                    legacy = first_org
-                else:
-                    # Create minimal legacy on the fly (will be reused)
-                    legacy = Organization(name="Legacy — Dev", slug="legacy-dev", is_legacy=True)
-                    db.add(legacy)
-                    await db.flush()
-            org_id = legacy.id
-            assigned_role = "analyst"
-        else:
-            raise HTTPException(
-                422,
-                "Invite token required — ask your organization admin for an invite, or register a new business via POST /auth/register-org",
-            )
-        # Keep admin privilege even without org? But post-migration org is required, so if no legacy, error
+            if legacy is not None:
+                org_id = legacy.id
+                assigned_role = "admin"
         if org_id is None:
-            raise HTTPException(
-                422,
-                "Organization context missing — please register your business first via POST /auth/register-org",
-            )
+            personal_org = await create_personal_org(db, normalized_signup_email, body.full_name)
+            org_id = personal_org.id
+            assigned_role = "admin"
 
     # Final role override: ADMIN_EMAIL always gets admin + super_admin
     if is_admin_email:
@@ -849,6 +1027,12 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
     profile_id = uuid5(NAMESPACE_URL, f"email://{normalized_signup_email}")
     pw_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt(rounds=12)).decode()
 
+    # Signup has no verification-token flow of its own (POST /auth/verify-email
+    # only serves business registration), and login rejects unverified
+    # profiles — so leaving this false locked every signup out of their account
+    # the moment their first token expired. An invite is proof enough that the
+    # address is real; a personal account is proof of nothing but is also not
+    # holding anyone else's data.
     profile = Profile(
         id=profile_id,
         email=normalized_signup_email,
@@ -858,6 +1042,8 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
         is_active=True,
         org_id=org_id,
         is_super_admin=is_admin_email,
+        email_verified=True,
+        email_verified_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(profile)
     # Mark invite accepted — only for personal invites; open (email=None) invites stay reusable

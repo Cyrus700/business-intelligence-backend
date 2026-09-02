@@ -1,9 +1,10 @@
 """Public landing-page content endpoints (no auth required)."""
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.api.deps import DbSession
-from app.services.analytics.landing_live import build_live_metrics
+from app.services.analytics.landing_live import CACHE_TTL_SECONDS, build_live_metrics
 
 router = APIRouter(prefix="/landing", tags=["landing"])
 
@@ -131,16 +132,25 @@ LANDING_DATA = {
 }
 
 
+# Marketing copy is static, so let the CDN/browser hold it for an hour.
+_CONTENT_CACHE = "public, max-age=3600, stale-while-revalidate=86400"
+_LIVE_CACHE = (
+    f"public, max-age={CACHE_TTL_SECONDS}, stale-while-revalidate={CACHE_TTL_SECONDS * 5}"
+)
+
+
 @router.get("")
 async def get_landing_data():
-    return LANDING_DATA
+    return JSONResponse(LANDING_DATA, headers={"Cache-Control": _CONTENT_CACHE})
 
 
 @router.get("/live")
 async def get_landing_live(db: DbSession):
-    """Real warehouse figures behind the landing page.
+    """Platform figures behind the landing page.
 
-    Public and unauthenticated, so it returns aggregates only — see the module
-    docstring in services/analytics/landing_live.py before adding fields.
+    Public and unauthenticated, so it returns plumbing counters only — see the
+    module docstring in services/analytics/landing_live.py before adding fields.
     """
-    return await build_live_metrics(db)
+    return JSONResponse(
+        await build_live_metrics(db), headers={"Cache-Control": _LIVE_CACHE}
+    )

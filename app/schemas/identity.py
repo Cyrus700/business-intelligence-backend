@@ -32,6 +32,7 @@ class OrganizationOut(BaseModel):
     name: str
     slug: str | None = None
     is_legacy: bool = False
+    is_personal: bool = False
     status: str = "pending"
     approved_at: datetime | None = None
     approved_by: UUID | None = None

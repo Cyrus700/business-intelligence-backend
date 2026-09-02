@@ -24,6 +24,10 @@ class Organization(Base, TimestampMixin):
     # Optional slug/code for human-friendly invites (e.g. "acme-2026")
     slug: Mapped[str | None] = mapped_column(unique=True)
     is_legacy: Mapped[bool] = mapped_column(default=False)
+    # A personal workspace: one self-serve user who is their own admin. Created
+    # by POST /auth/signup without an invite, and approved on the spot — there
+    # is no business to vet and no one else to let in.
+    is_personal: Mapped[bool] = mapped_column(default=False)
     # Approval workflow (system admin must approve new businesses)
     status: Mapped[str] = mapped_column(default="pending")  # pending | approved | rejected
     approved_at: Mapped[datetime | None]

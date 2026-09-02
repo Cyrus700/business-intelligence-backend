@@ -80,7 +80,10 @@ class Settings(BaseSettings):
     google_client_secret: str = Field(default="")
     google_redirect_uri: str = Field(default="http://localhost:8000/api/v1/auth/google/callback")
 
-    admin_email: str = Field(default="admin@example.com")
+    admin_email: str = Field(
+        default="admin@example.com",
+        description="Comma-separated platform operator addresses — each one is a System Admin however they sign in",
+    )
     admin_password: str = Field(default="")
 
     groq_api_key: str = Field(default="")
@@ -194,6 +197,22 @@ class Settings(BaseSettings):
     @property
     def frontend_url(self) -> str:
         return self.cors_origins[0] if self.cors_origins else "http://localhost:3000"
+
+    @property
+    def admin_emails(self) -> list[str]:
+        """Every configured operator address, normalised for comparison."""
+        return [e.strip().lower() for e in self.admin_email.split(",") if e.strip()]
+
+    def is_admin_email(self, email: str | None) -> bool:
+        """Is this address a platform operator?
+
+        Sign-in method is irrelevant: the same answer applies to Google OAuth,
+        password login and signup, so an operator does not lose System Admin by
+        using their password instead of the Google button.
+        """
+        if not email:
+            return False
+        return email.strip().lower() in self.admin_emails
 
     def masked_summary(self) -> dict[str, str]:
         """Safe-to-log summary — secrets are masked."""
