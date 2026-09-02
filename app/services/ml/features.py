@@ -151,6 +151,9 @@ async def load_series(
         return frame
     frame["ds"] = pd.to_datetime(frame["ds"])
     frame["y"] = frame["y"].astype(float)
+    # Collapse duplicate snapshot dates (e.g. re-uploads / re-computed KPIs) — keep last value per day
+    if frame.duplicated(subset=["ds"]).any():
+        frame = frame.sort_values("ds").groupby("ds", as_index=False).last()
     full = pd.DataFrame({"ds": pd.date_range(frame["ds"].min(), frame["ds"].max(), freq="D")})
     frame = full.merge(frame, on="ds", how="left").fillna({"y": 0.0})
     frame["festival"] = festival_flags(frame["ds"])

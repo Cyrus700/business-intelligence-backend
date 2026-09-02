@@ -1,81 +1,123 @@
 [
   {
-    "date": "2023-09-14",
+    "date": "2022-09-14",
     "metric": "revenue",
     "kind": "spike",
     "factor": 3.2
   },
   {
-    "date": "2023-12-05",
+    "date": "2022-12-05",
     "metric": "revenue",
     "kind": "drop",
     "factor": 0.15
   },
   {
-    "date": "2024-01-21",
+    "date": "2023-01-21",
     "metric": "revenue",
     "kind": "spike",
     "factor": 2.8
   },
   {
-    "date": "2024-03-08",
+    "date": "2023-03-08",
     "metric": "expense_total",
     "kind": "spike",
     "factor": 4.0
   },
   {
-    "date": "2024-05-30",
+    "date": "2023-05-30",
     "metric": "revenue",
     "kind": "drop",
     "factor": 0.2
   },
   {
-    "date": "2024-07-19",
+    "date": "2023-07-19",
     "metric": "revenue",
     "kind": "spike",
     "factor": 3.5
   },
   {
-    "date": "2024-09-02",
+    "date": "2023-09-02",
     "metric": "expense_total",
     "kind": "spike",
     "factor": 3.5
   },
   {
-    "date": "2024-12-14",
+    "date": "2023-12-14",
     "metric": "revenue",
     "kind": "drop",
     "factor": 0.18
   },
   {
-    "date": "2025-02-11",
+    "date": "2024-02-11",
     "metric": "revenue",
     "kind": "spike",
     "factor": 3.0
   },
   {
-    "date": "2025-04-25",
+    "date": "2024-04-25",
     "metric": "expense_total",
     "kind": "spike",
     "factor": 4.5
   },
   {
-    "date": "2025-06-07",
+    "date": "2024-06-07",
     "metric": "revenue",
     "kind": "drop",
     "factor": 0.22
   },
   {
-    "date": "2025-08-16",
+    "date": "2024-08-16",
     "metric": "revenue",
     "kind": "spike",
     "factor": 2.9
   },
   {
-    "date": "2025-11-29",
+    "date": "2024-11-29",
     "metric": "revenue",
     "kind": "drop",
     "factor": 0.2
+  },
+  {
+    "date": "2025-01-09",
+    "metric": "revenue",
+    "kind": "spike",
+    "factor": 3.4
+  },
+  {
+    "date": "2025-02-27",
+    "metric": "expense_total",
+    "kind": "spike",
+    "factor": 3.8
+  },
+  {
+    "date": "2025-04-17",
+    "metric": "revenue",
+    "kind": "drop",
+    "factor": 0.17
+  },
+  {
+    "date": "2025-05-23",
+    "metric": "revenue",
+    "kind": "spike",
+    "factor": 3.1
+  },
+  {
+    "date": "2025-06-19",
+    "metric": "revenue",
+    "kind": "spike",
+    "factor": 2.7
+  },
+  {
+    "date": "2025-07-14",
+    "metric": "revenue",
+    "kind": "spike",
+    "factor": 2.9
+  },
+  {
+    "date": "2025-07-28",
+    "metric": "expense_total",
+    "kind": "spike",
+    "factor": 3.6
   },
   {
     "date": "2026-01-09",

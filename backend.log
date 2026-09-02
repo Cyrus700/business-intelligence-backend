@@ -1,786 +1,198 @@
-{"ts": "2026-07-28T01:51:50.834+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:51:50.867+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:51:50.899+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:51:50.908+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
-{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
-{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
-{"ts": "2026-07-28T01:51:51.934+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
-{"ts": "2026-07-28T01:51:51.949+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
-{"ts": "2026-07-28T01:51:51.950+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
-{"ts": "2026-07-28T01:52:33.733+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12481 - \"GET /api/v1/health HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:53:38.662+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7217 - \"GET /api/v1/health HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:53:56.438+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6223 - \"GET /api/v1/analytics/summary HTTP/1.1\" 404"}
-{"ts": "2026-07-28T01:53:59.145+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4500 - \"POST /api/v1/auth/login HTTP/1.1\" 401"}
- {"ts": "2026-07-28T01:55:10.343+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4245 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:12.650+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4247 - \"GET /api/v1/analytics/summary HTTP/1.1\" 404"}
-{"ts": "2026-07-28T01:55:14.855+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4249 - \"GET /api/v1/analytics/kpi-cards HTTP/1.1\" 404"}
-{"ts": "2026-07-28T01:55:17.066+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:11937 - \"GET /api/v1/analytics/sales-forecast HTTP/1.1\" 404"}
-{"ts": "2026-07-28T01:55:19.295+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7488 - \"GET /api/v1/analytics/anomalies HTTP/1.1\" 404"}
-{"ts": "2026-07-28T01:55:21.914+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7490 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:30.022+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1431 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:32.432+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1433 - \"GET /openapi.json HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:41.161+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5316 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:44.024+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5318 - \"GET /api/v1/kpis/summary HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:44.250+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
- {"ts": "2026-07-28T01:55:48.767+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:48.770+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:48.770+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:48.771+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:49.616+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:49.618+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:49.618+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:49.619+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:49.620+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
-{"ts": "2026-07-28T01:55:49.620+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
-{"ts": "2026-07-28T01:55:49.737+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
-{"ts": "2026-07-28T01:55:51.284+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:51.285+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:51.286+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:51.287+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-07-28T01:55:52.167+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:52.169+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:52.170+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:52.171+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
-{"ts": "2026-07-28T01:55:52.171+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
-{"ts": "2026-07-28T01:55:52.172+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
-{"ts": "2026-07-28T01:55:52.604+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6226 - \"GET /api/v1/kpis/timeseries HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:55.124+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4442 - \"GET /api/v1/sales/by-category HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:55:57.660+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4444 - \"GET /api/v1/sales/by-channel HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:00.270+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2413 - \"GET /api/v1/sales/by-product HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:02.839+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2415 - \"GET /api/v1/sales/by-region HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:05.621+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2419 - \"GET /api/v1/sales/transactions HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:08.396+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2421 - \"GET /api/v1/finance/pnl HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:10.905+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9738 - \"GET /api/v1/finance/expenses-by-category HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:13.876+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9740 - \"GET /api/v1/inventory/levels HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:16.983+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9742 - \"GET /api/v1/forecasts HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:19.517+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9745 - \"GET /api/v1/anomalies HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:22.042+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9747 - \"GET /api/v1/insights HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:24.751+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9749 - \"GET /api/v1/trends HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:26.952+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9751 - \"GET /api/v1/health HTTP/1.1\" 200"}
-{"ts": "2026-07-28T01:56:29.425+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9753 - \"GET /api/v1/health/db HTTP/1.1\" 200"}
-{"ts": "2026-07-28T19:46:57.882+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_daily_anomaly_scan (trigger: cron[month='*', day='*', day_of_week='*', hour='1', minute='30'], next run at: 2026-07-30 01:30:00 +0545)\" was missed by 0:01:57.808871"}
-{"ts": "2026-07-29T01:38:40.334+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_nightly_insights_and_alerts (trigger: cron[month='*', day='*', day_of_week='*', hour='3', minute='0'], next run at: 2026-07-30 03:00:00 +0545)\" was missed by 4:23:40.333991"}
-{"ts": "2026-07-30T00:51:36.356+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_daily_anomaly_scan (trigger: cron[month='*', day='*', day_of_week='*', hour='1', minute='30'], next run at: 2026-07-31 01:30:00 +0545)\" was missed by 5:06:36.336399"}
-{"ts": "2026-07-30T00:51:36.388+00:00", "level": "WARNING", "logger": "apscheduler.executors.default", "message": "Run time of job \"_nightly_insights_and_alerts (trigger: cron[month='*', day='*', day_of_week='*', hour='3', minute='0'], next run at: 2026-07-31 03:00:00 +0545)\" was missed by 3:36:36.388408"}
-INFO:     Will watch for changes in these directories: ['/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend']
-Traceback (most recent call last):
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/bin/uvicorn", line 10, in <module>
-    sys.exit(main())
-             ^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/click/core.py", line 1569, in __call__
-    return self.main(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/click/core.py", line 1490, in main
-    rv = self.invoke(ctx)
-         ^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/click/core.py", line 1353, in invoke
-    return ctx.invoke(self.callback, **ctx.params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/click/core.py", line 907, in invoke
-    return callback(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/main.py", line 441, in main
-    run(
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/main.py", line 609, in run
-    config.load_app()
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/config.py", line 415, in load_app
-    return import_from_string(self.app)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.12/3.12.13_2/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py", line 90, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
-  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
-  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/main.py", line 7, in <module>
-    from app.api.v1.router import api_router
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/router.py", line 3, in <module>
-    from app.api.v1 import (
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/users.py", line 26, in <module>
-    async def _org_scoped_stmt(db: DbSession, user: Profile) -> Any:
-                                                                ^^^
-NameError: name 'Any' is not defined. Did you mean: 'any'?
-INFO:     Will watch for changes in these directories: ['/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend']
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [98772] using WatchFiles
-INFO:     Started server process [98945]
-INFO:     Waiting for application startup.
-{"ts": "2026-08-09T11:26:37.744+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-08-09T11:26:37.748+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-08-09T11:26:37.753+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-08-09T11:26:37.759+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
-{"ts": "2026-08-09T11:26:40.203+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_weekly_retrain\" to job store \"default\""}
-{"ts": "2026-08-09T11:26:40.204+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_daily_anomaly_scan\" to job store \"default\""}
-{"ts": "2026-08-09T11:26:40.204+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_nightly_insights_and_alerts\" to job store \"default\""}
-{"ts": "2026-08-09T11:26:40.204+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_monthly_report\" to job store \"default\""}
-{"ts": "2026-08-09T11:26:40.204+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
-{"ts": "2026-08-09T11:26:40.204+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started with 4 source job(s)"}
-INFO:     Application startup complete.
-{"ts": "2026-08-09T11:26:42.409+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:64556 - \"GET /api/v1/health HTTP/1.1\" 200"}
-{"ts": "2026-08-09T11:27:36.661+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:64787 - \"POST /api/v1/uploads HTTP/1.1\" 500"}
-ERROR:    Exception in ASGI application
-  + Exception Group Traceback (most recent call last):
-  |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 85, in create_collapsing_task_group
-  |     async with anyio.create_task_group() as tg:
-  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
-  |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 811, in __aexit__
-  |     raise BaseExceptionGroup(
-  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-  +-+---------------- 1 ----------------
-    | Traceback (most recent call last):
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
-    |     result = await app(  # type: ignore[func-returns-value]
-    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
-    |     return await self.app(scope, receive, send)
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
-    |     await super().__call__(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
-    |     await self.middleware_stack(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    |     await self.app(scope, receive, _send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
-    |     await self.app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 83, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 28, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/audit.py", line 24, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    |     await app(scope, receive, sender)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    |     await self.app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
-    |     await self.middleware_stack(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2683, in app
-    |     await route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    |     await self.original_router.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    |     await included_router._handle_selected(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1764, in _handle_selected
-    |     await route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    |     await self.original_router.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    |     await included_router._handle_selected(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1773, in _handle_selected
-    |     await original_route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1264, in handle
-    |     await app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 150, in app
-    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    |     await app(scope, receive, sender)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 136, in app
-    |     response = await f(request)
-    |                ^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 690, in app
-    |     raw_response = await run_endpoint_function(
-    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 344, in run_endpoint_function
-    |     return await dependant.call(**values)
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/uploads.py", line 68, in upload_file
-    |     upload = RawUpload(
-    |              ^^^^^^^^^^
-    |   File "<string>", line 4, in __init__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 596, in _initialize_instance
-    |     with util.safe_reraise():
-    |          ^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
-    |     raise exc_value.with_traceback(exc_tb)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 594, in _initialize_instance
-    |     manager.original_init(*mixed[1:], **kwargs)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py", line 2179, in _declarative_constructor
-    |     raise TypeError(
-    | TypeError: 'org_id' is an invalid keyword argument for RawUpload
-    +------------------------------------
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
-    result = await app(  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
-    await super().__call__(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    await self.app(scope, receive, _send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 83, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 28, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/audit.py", line 24, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2683, in app
-    await route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1764, in _handle_selected
-    await route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1773, in _handle_selected
-    await original_route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1264, in handle
-    await app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 150, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 136, in app
-    response = await f(request)
-               ^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 690, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 344, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/uploads.py", line 68, in upload_file
-    upload = RawUpload(
-             ^^^^^^^^^^
-  File "<string>", line 4, in __init__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 596, in _initialize_instance
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
-    raise exc_value.with_traceback(exc_tb)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 594, in _initialize_instance
-    manager.original_init(*mixed[1:], **kwargs)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py", line 2179, in _declarative_constructor
-    raise TypeError(
-TypeError: 'org_id' is an invalid keyword argument for RawUpload
-{"ts": "2026-08-09T11:27:37.173+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:64791 - \"POST /api/v1/uploads HTTP/1.1\" 500"}
-ERROR:    Exception in ASGI application
-  + Exception Group Traceback (most recent call last):
-  |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 85, in create_collapsing_task_group
-  |     async with anyio.create_task_group() as tg:
-  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
-  |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 811, in __aexit__
-  |     raise BaseExceptionGroup(
-  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-  +-+---------------- 1 ----------------
-    | Traceback (most recent call last):
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
-    |     result = await app(  # type: ignore[func-returns-value]
-    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
-    |     return await self.app(scope, receive, send)
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
-    |     await super().__call__(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
-    |     await self.middleware_stack(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    |     await self.app(scope, receive, _send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
-    |     await self.app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 83, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 28, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/audit.py", line 24, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    |     await app(scope, receive, sender)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    |     await self.app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
-    |     await self.middleware_stack(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2683, in app
-    |     await route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    |     await self.original_router.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    |     await included_router._handle_selected(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1764, in _handle_selected
-    |     await route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    |     await self.original_router.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    |     await included_router._handle_selected(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1773, in _handle_selected
-    |     await original_route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1264, in handle
-    |     await app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 150, in app
-    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    |     await app(scope, receive, sender)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 136, in app
-    |     response = await f(request)
-    |                ^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 690, in app
-    |     raw_response = await run_endpoint_function(
-    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 344, in run_endpoint_function
-    |     return await dependant.call(**values)
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/uploads.py", line 68, in upload_file
-    |     upload = RawUpload(
-    |              ^^^^^^^^^^
-    |   File "<string>", line 4, in __init__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 596, in _initialize_instance
-    |     with util.safe_reraise():
-    |          ^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
-    |     raise exc_value.with_traceback(exc_tb)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 594, in _initialize_instance
-    |     manager.original_init(*mixed[1:], **kwargs)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py", line 2179, in _declarative_constructor
-    |     raise TypeError(
-    | TypeError: 'org_id' is an invalid keyword argument for RawUpload
-    +------------------------------------
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
-    result = await app(  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
-    await super().__call__(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    await self.app(scope, receive, _send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 83, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 28, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/audit.py", line 24, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2683, in app
-    await route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1764, in _handle_selected
-    await route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1773, in _handle_selected
-    await original_route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1264, in handle
-    await app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 150, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 136, in app
-    response = await f(request)
-               ^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 690, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 344, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/uploads.py", line 68, in upload_file
-    upload = RawUpload(
-             ^^^^^^^^^^
-  File "<string>", line 4, in __init__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 596, in _initialize_instance
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
-    raise exc_value.with_traceback(exc_tb)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 594, in _initialize_instance
-    manager.original_init(*mixed[1:], **kwargs)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py", line 2179, in _declarative_constructor
-    raise TypeError(
-TypeError: 'org_id' is an invalid keyword argument for RawUpload
-{"ts": "2026-08-09T11:27:49.450+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:64855 - \"POST /api/v1/uploads HTTP/1.1\" 500"}
-ERROR:    Exception in ASGI application
-  + Exception Group Traceback (most recent call last):
-  |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 85, in create_collapsing_task_group
-  |     async with anyio.create_task_group() as tg:
-  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
-  |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 811, in __aexit__
-  |     raise BaseExceptionGroup(
-  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-  +-+---------------- 1 ----------------
-    | Traceback (most recent call last):
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
-    |     result = await app(  # type: ignore[func-returns-value]
-    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
-    |     return await self.app(scope, receive, send)
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
-    |     await super().__call__(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
-    |     await self.middleware_stack(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    |     await self.app(scope, receive, _send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
-    |     await self.app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 83, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 28, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    |     response = await self.dispatch_func(request, call_next)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/audit.py", line 24, in dispatch
-    |     response = await call_next(request)
-    |                ^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    |     await self.app(scope, receive_or_disconnect, send_no_error)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    |     await app(scope, receive, sender)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    |     await self.app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
-    |     await self.middleware_stack(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2683, in app
-    |     await route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    |     await self.original_router.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    |     await included_router._handle_selected(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1764, in _handle_selected
-    |     await route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    |     await self.original_router.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    |     await included_router._handle_selected(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1773, in _handle_selected
-    |     await original_route.handle(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1264, in handle
-    |     await app(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 150, in app
-    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    |     raise exc
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    |     await app(scope, receive, sender)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 136, in app
-    |     response = await f(request)
-    |                ^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 690, in app
-    |     raw_response = await run_endpoint_function(
-    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 344, in run_endpoint_function
-    |     return await dependant.call(**values)
-    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/uploads.py", line 68, in upload_file
-    |     upload = RawUpload(
-    |              ^^^^^^^^^^
-    |   File "<string>", line 4, in __init__
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 596, in _initialize_instance
-    |     with util.safe_reraise():
-    |          ^^^^^^^^^^^^^^^^^^^
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
-    |     raise exc_value.with_traceback(exc_tb)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 594, in _initialize_instance
-    |     manager.original_init(*mixed[1:], **kwargs)
-    |   File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py", line 2179, in _declarative_constructor
-    |     raise TypeError(
-    | TypeError: 'org_id' is an invalid keyword argument for RawUpload
-    +------------------------------------
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
-    result = await app(  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
-    await super().__call__(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    await self.app(scope, receive, _send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 83, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/hardening.py", line 28, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
-    response = await self.dispatch_func(request, call_next)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/core/audit.py", line 24, in dispatch
-    response = await call_next(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
-    raise app_exc from app_exc.__cause__ or app_exc.__context__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
-    await self.app(scope, receive_or_disconnect, send_no_error)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2683, in app
-    await route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1764, in _handle_selected
-    await route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1753, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2738, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1773, in _handle_selected
-    await original_route.handle(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1264, in handle
-    await app(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 150, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 136, in app
-    response = await f(request)
-               ^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 690, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 344, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/app/api/v1/uploads.py", line 68, in upload_file
-    upload = RawUpload(
-             ^^^^^^^^^^
-  File "<string>", line 4, in __init__
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 596, in _initialize_instance
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
-    raise exc_value.with_traceback(exc_tb)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py", line 594, in _initialize_instance
-    manager.original_init(*mixed[1:], **kwargs)
-  File "/Users/ashokbhattarai/Desktop/Perosnal/Sairash/business-intelligence-backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py", line 2179, in _declarative_constructor
-    raise TypeError(
-TypeError: 'org_id' is an invalid keyword argument for RawUpload
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-{"ts": "2026-08-09T11:28:21.035+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler has been shut down"}
-INFO:     Application shutdown complete.
-INFO:     Finished server process [98945]
-INFO:     Stopping reloader process [98772]
+{"ts": "2026-09-02T06:48:33.100+00:00", "level": "INFO", "logger": "app.services.reports.queue", "message": "report claim loop started"}
+{"ts": "2026-09-02T06:48:33.103+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:33.104+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:33.106+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:33.107+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:33.108+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:33.109+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:33.110+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts"}
+{"ts": "2026-09-02T06:48:35.354+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_ml_retrain\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.357+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_anomaly_scan\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.361+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_drift_check\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.365+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_insights_alerts\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.369+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_quality_audit\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.372+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_monthly_report\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.376+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Added job \"_tick_report_schedules\" to job store \"default\""}
+{"ts": "2026-09-02T06:48:35.463+00:00", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Scheduler started"}
+{"ts": "2026-09-02T06:48:35.469+00:00", "level": "INFO", "logger": "app.workers.scheduler", "message": "scheduler started (pool=DESKTOP-NOA1M3B-52c5c9 concurrency=4) with 7 cron job(s) + 0 source pull(s)"}
+{"ts": "2026-09-02T06:49:07.586+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3022 - \"OPTIONS /api/v1/health/system HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:07.611+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4913 - \"OPTIONS /api/v1/auth/admin/pending-organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:07.612+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2538 - \"OPTIONS /api/v1/ai/usage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:09.028+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6729 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:09.210+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10192 - \"GET /api/v1/auth/admin/pending-organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:09.581+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2122 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:09.594+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2538 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:09.785+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3022 - \"GET /api/v1/health/system HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:49:09.837+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4913 - \"GET /api/v1/ai/usage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:27.518+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7832 - \"OPTIONS /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:28.622+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7832 - \"POST /api/v1/auth/login HTTP/1.1\" 403"}
+{"ts": "2026-09-02T06:50:37.740+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10874 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:37.957+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3070 - \"GET /api/v1/auth/admin/pending-organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:38.310+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10874 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:38.473+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2997 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:38.735+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14329 - \"GET /api/v1/health/system HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:38.779+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10126 - \"GET /api/v1/ai/usage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:39.291+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10126 - \"OPTIONS /api/v1/auth/admin/organizations/95eebd51-4ead-4428-89ac-428a25f4e149/approve HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:41.084+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14329 - \"POST /api/v1/auth/admin/organizations/95eebd51-4ead-4428-89ac-428a25f4e149/approve HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:41.433+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14329 - \"GET /api/v1/auth/admin/pending-organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:45.297+00:00", "level": "INFO", "logger": "app.services.email.service", "message": "email sent to sairashbudhathoki07@gmail.com \u2014 Sairash BI \u2014 Your business 'Sky Print' is approved \u2713", "request_id": "147cfd5500e64367"}
+{"ts": "2026-09-02T06:50:46.460+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.010+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.012+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.373+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.379+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.411+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.413+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/watermark HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.415+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.417+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/kpis/summary?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.419+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.422+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.425+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.428+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.430+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/sales/by-channel?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.433+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/forecasts?target=revenue_daily&horizon=30 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.434+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"OPTIONS /api/v1/kpis/timeseries?metric=revenue&from=2026-06-30&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.439+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.471+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/sales/transactions?from=2026-08-04&to=2026-09-02&page=1&page_size=6 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.475+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/inventory/levels?below_reorder=true HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.477+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/anomalies?status=open&page_size=50 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.480+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"OPTIONS /api/v1/recommendations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.731+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2339 - \"OPTIONS /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:47.884+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"GET /api/v1/watermark HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.043+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.172+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5106 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.174+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6533 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.222+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2339 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.463+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.654+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"GET /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 404"}
+{"ts": "2026-09-02T06:50:48.657+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.803+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5106 - \"GET /api/v1/sales/by-channel?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:48.805+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2339 - \"GET /api/v1/kpis/timeseries?metric=revenue&from=2026-06-30&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:49.119+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6533 - \"GET /api/v1/forecasts?target=revenue_daily&horizon=30 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:49.122+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6835 - \"GET /api/v1/kpis/summary?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:49.132+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6835 - \"GET /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 404"}
+{"ts": "2026-09-02T06:50:49.312+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14980 - \"GET /api/v1/inventory/levels?below_reorder=true HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:49.479+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5106 - \"GET /api/v1/anomalies?status=open&page_size=50 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:49.527+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4967 - \"GET /api/v1/sales/transactions?from=2026-08-04&to=2026-09-02&page=1&page_size=6 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:50.322+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6533 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:50:51.834+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2339 - \"GET /api/v1/recommendations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:02.701+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3356 - \"GET /api/v1/watermark HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:02.713+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10310 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:02.797+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7246 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:03.350+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10310 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:03.396+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7246 - \"GET /api/v1/sales/by-channel?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:03.403+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3356 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:03.409+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7246 - \"GET /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 404"}
+{"ts": "2026-09-02T06:51:03.508+00:00", "level": "ERROR", "logger": "app.main", "message": "unhandled exception on GET /api/v1/forecasts", "exc": "  + Exception Group Traceback (most recent call last):\n  |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_utils.py\", line 85, in create_collapsing_task_group\n  |     async with anyio.create_task_group() as tg:\n  |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\anyio\\_backends\\_asyncio.py\", line 811, in __aexit__\n  |     raise BaseExceptionGroup(\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\errors.py\", line 164, in __call__\n    |     await self.app(scope, receive, _send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\request_context.py\", line 44, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 96, in __call__\n    |     await self.simple_response(scope, receive, send, request_headers=headers)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 154, in simple_response\n    |     await self.app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 96, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 31, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\audit.py\", line 25, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py\", line 63, in __call__\n    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    |     raise exc\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    |     await app(scope, receive, sender)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\middleware\\asyncexitstack.py\", line 18, in __call__\n    |     await self.app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\routing.py\", line 660, in __call__\n    |     await self.middleware_stack(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2683, in app\n    |     await route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    |     await self.original_router.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    |     await included_router._handle_selected(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1764, in _handle_selected\n    |     await route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    |     await self.original_router.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    |     await included_router._handle_selected(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1773, in _handle_selected\n    |     await original_route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1264, in handle\n    |     await app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 150, in app\n    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    |     raise exc\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    |     await app(scope, receive, sender)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 136, in app\n    |     response = await f(request)\n    |                ^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 690, in app\n    |     raw_response = await run_endpoint_function(\n    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 344, in run_endpoint_function\n    |     return await dependant.call(**values)\n    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\api\\v1\\ml.py\", line 207, in get_forecast\n    |     preds = forecaster.predict(pd.Series(future))\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\services\\ml\\forecasting.py\", line 59, in predict\n    |     value = float(history.get(ref, history.iloc[-7:].mean()))\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    | TypeError: float() argument must be a string or a real number, not 'Series'\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\request_context.py\", line 44, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 96, in __call__\n    await self.simple_response(scope, receive, send, request_headers=headers)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 154, in simple_response\n    await self.app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 96, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 31, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\audit.py\", line 25, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\middleware\\asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\routing.py\", line 660, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2683, in app\n    await route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1764, in _handle_selected\n    await route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1773, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1264, in handle\n    await app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 150, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 136, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 690, in app\n    raw_response = await run_endpoint_function(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 344, in run_endpoint_function\n    return await dependant.call(**values)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\api\\v1\\ml.py\", line 207, in get_forecast\n    preds = forecaster.predict(pd.Series(future))\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\services\\ml\\forecasting.py\", line 59, in predict\n    value = float(history.get(ref, history.iloc[-7:].mean()))\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: float() argument must be a string or a real number, not 'Series'"}
+{"ts": "2026-09-02T06:51:03.633+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:8468 - \"GET /api/v1/forecasts?target=revenue_daily&horizon=30 HTTP/1.1\" 500"}
+{"ts": "2026-09-02T06:51:03.981+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4215 - \"GET /api/v1/kpis/summary?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:04.006+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10310 - \"GET /api/v1/kpis/timeseries?metric=revenue&from=2026-06-30&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:04.015+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10310 - \"GET /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 404"}
+{"ts": "2026-09-02T06:51:04.118+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3356 - \"GET /api/v1/sales/transactions?from=2026-08-04&to=2026-09-02&page=1&page_size=6 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:04.154+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7246 - \"GET /api/v1/inventory/levels?below_reorder=true HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:04.293+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7408 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:04.397+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10310 - \"GET /api/v1/anomalies?status=open&page_size=50 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:05.295+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4215 - \"GET /api/v1/recommendations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:06.846+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13798 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:11.688+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13798 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:20.866+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:8019 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:20.883+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1302 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:20.936+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7086 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:20.938+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6701 - \"GET /api/v1/watermark HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:20.967+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3470 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.398+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:8019 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.442+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1302 - \"GET /api/v1/sales/by-channel?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.629+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7086 - \"GET /api/v1/forecasts?target=revenue_daily&horizon=30 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.640+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6701 - \"GET /api/v1/kpis/timeseries?metric=revenue&from=2026-06-30&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.666+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3470 - \"GET /api/v1/sales/transactions?from=2026-08-04&to=2026-09-02&page=1&page_size=6 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.727+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7740 - \"GET /api/v1/kpis/summary?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.771+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:8019 - \"GET /api/v1/inventory/levels?below_reorder=true HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:21.810+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1302 - \"GET /api/v1/anomalies?status=open&page_size=50 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:22.009+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7086 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:35.015+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7794 - \"OPTIONS /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:37.020+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7794 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:37.034+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7794 - \"OPTIONS /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:51:37.594+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7794 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:02.616+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4138 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:02.929+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14703 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:34.485+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6120 - \"GET /api/v1/health HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:34.970+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9394 - \"OPTIONS /api/v1/auth/invite HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:37.360+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9394 - \"POST /api/v1/auth/invite HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:37.704+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:11469 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:37.764+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9394 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:45.532+00:00", "level": "INFO", "logger": "app.services.email.service", "message": "email sent to medor62595@prorises.com \u2014 Sairash BI \u2014 You've been invited to join Sky Print as Manager", "request_id": "344d627764b24948"}
+{"ts": "2026-09-02T06:52:56.938+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"OPTIONS /api/v1/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:57.205+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"GET /api/v1/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:57.663+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:57.930+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7535 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.246+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.248+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7535 - \"GET /api/v1/watermark HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.377+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9841 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.391+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10914 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.399+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13694 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.414+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13694 - \"GET /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 404"}
+{"ts": "2026-09-02T06:52:58.791+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.841+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7535 - \"GET /api/v1/sales/by-channel?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:58.942+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10593 - \"GET /api/v1/kpis/summary?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.063+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10914 - \"GET /api/v1/kpis/timeseries?metric=revenue&from=2026-06-30&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.189+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9841 - \"GET /api/v1/forecasts?target=revenue_daily&horizon=30 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.347+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"GET /api/v1/inventory/levels?below_reorder=true HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.357+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12936 - \"GET /api/v1/ai/insights?scope=dashboard HTTP/1.1\" 404"}
+{"ts": "2026-09-02T06:52:59.417+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13694 - \"GET /api/v1/sales/transactions?from=2026-08-04&to=2026-09-02&page=1&page_size=6 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.457+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7535 - \"GET /api/v1/anomalies?status=open&page_size=50 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.564+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10914 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:52:59.969+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9841 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:53:01.797+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10593 - \"GET /api/v1/recommendations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.117+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14536 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.149+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6512 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.156+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2049 - \"GET /api/v1/watermark HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.446+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9393 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.747+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14536 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.789+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2049 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=expense_total&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:05.829+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6512 - \"GET /api/v1/kpis/timeseries?from=2026-08-04&to=2026-09-02&metric=revenue&granularity=day HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.007+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13327 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.027+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9054 - \"GET /api/v1/kpis/summary?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.113+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2049 - \"GET /api/v1/kpis/timeseries?metric=revenue&from=2026-06-30&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.151+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9393 - \"GET /api/v1/sales/by-channel?from=2026-08-04&to=2026-09-02 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.182+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14536 - \"GET /api/v1/forecasts?target=revenue_daily&horizon=30 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.298+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6512 - \"GET /api/v1/sales/transactions?from=2026-08-04&to=2026-09-02&page=1&page_size=6 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.361+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:13327 - \"GET /api/v1/inventory/levels?below_reorder=true HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.368+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9054 - \"GET /api/v1/anomalies?status=open&page_size=50 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.418+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:2049 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:06.665+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9393 - \"GET /api/v1/data-coverage HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:10.724+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9393 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:11.249+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9393 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:44.540+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4588 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:45.359+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6973 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:54:45.552+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:5344 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:55:06.487+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10291 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:55:45.205+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9918 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:55:46.595+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9918 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:55:46.739+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14815 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:56:07.674+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7259 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:56:45.704+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7782 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:56:47.428+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7782 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:56:47.553+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:10824 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:57:08.491+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3876 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:57:20.551+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14627 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:57:20.900+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14627 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:57:46.404+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:11804 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:57:47.922+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:11804 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:58:09.406+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:4860 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:58:27.376+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:12514 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:58:46.864+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6773 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:58:48.809+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6773 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:59:34.480+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:9567 - \"GET /api/v1/auth/organizations HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:59:34.680+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1600 - \"GET /api/v1/rbac/me HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:59:34.836+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:1153 - \"GET /api/v1/users?page=1&page_size=20 HTTP/1.1\" 200"}
+{"ts": "2026-09-02T06:59:35.076+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:6228 - \"GET /api/v1/auth/invites HTTP/1.1\" 200"}
+{"ts": "2026-09-02T07:00:38.638+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14266 - \"OPTIONS /api/v1/auth/signup HTTP/1.1\" 200"}
+{"ts": "2026-09-02T07:00:40.679+00:00", "level": "ERROR", "logger": "app.main", "message": "unhandled exception on POST /api/v1/auth/signup", "exc": "***redacted exception***"}
+{"ts": "2026-09-02T07:00:40.856+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:14266 - \"POST /api/v1/auth/signup HTTP/1.1\" 500"}
+ {"ts": "2026-09-02T07:03:17.617+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3217 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-09-02T07:03:19.071+00:00", "level": "ERROR", "logger": "app.main", "message": "unhandled exception on GET /api/v1/forecasts", "exc": "  + Exception Group Traceback (most recent call last):\n  |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_utils.py\", line 85, in create_collapsing_task_group\n  |     async with anyio.create_task_group() as tg:\n  |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\anyio\\_backends\\_asyncio.py\", line 811, in __aexit__\n  |     raise BaseExceptionGroup(\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\errors.py\", line 164, in __call__\n    |     await self.app(scope, receive, _send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\request_context.py\", line 44, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 88, in __call__\n    |     await self.app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 96, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 31, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\audit.py\", line 25, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py\", line 63, in __call__\n    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    |     raise exc\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    |     await app(scope, receive, sender)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\middleware\\asyncexitstack.py\", line 18, in __call__\n    |     await self.app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\routing.py\", line 660, in __call__\n    |     await self.middleware_stack(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2683, in app\n    |     await route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    |     await self.original_router.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    |     await included_router._handle_selected(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1764, in _handle_selected\n    |     await route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    |     await self.original_router.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    |     await included_router._handle_selected(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1773, in _handle_selected\n    |     await original_route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1264, in handle\n    |     await app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 150, in app\n    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    |     raise exc\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    |     await app(scope, receive, sender)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 136, in app\n    |     response = await f(request)\n    |                ^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 690, in app\n    |     raw_response = await run_endpoint_function(\n    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 344, in run_endpoint_function\n    |     return await dependant.call(**values)\n    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\api\\v1\\ml.py\", line 207, in get_forecast\n    |     preds = forecaster.predict(pd.Series(future))\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\services\\ml\\forecasting.py\", line 59, in predict\n    |     if isinstance(history, pd.DataFrame):\n    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^\n    | TypeError: float() argument must be a string or a real number, not 'Series'\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\request_context.py\", line 44, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 88, in __call__\n    await self.app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 96, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 31, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\audit.py\", line 25, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\middleware\\asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\routing.py\", line 660, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2683, in app\n    await route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1764, in _handle_selected\n    await route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1773, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1264, in handle\n    await app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 150, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 136, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 690, in app\n    raw_response = await run_endpoint_function(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 344, in run_endpoint_function\n    return await dependant.call(**values)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\api\\v1\\ml.py\", line 207, in get_forecast\n    preds = forecaster.predict(pd.Series(future))\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\services\\ml\\forecasting.py\", line 59, in predict\n    if isinstance(history, pd.DataFrame):\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: float() argument must be a string or a real number, not 'Series'"}
+{"ts": "2026-09-02T07:03:19.082+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:3217 - \"GET /api/v1/forecasts?horizon=7 HTTP/1.1\" 500"}
+{"ts": "2026-09-02T07:03:26.813+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7300 - \"POST /api/v1/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-09-02T07:03:28.611+00:00", "level": "ERROR", "logger": "app.main", "message": "unhandled exception on GET /api/v1/forecasts", "exc": "  + Exception Group Traceback (most recent call last):\n  |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_utils.py\", line 85, in create_collapsing_task_group\n  |     async with anyio.create_task_group() as tg:\n  |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\anyio\\_backends\\_asyncio.py\", line 811, in __aexit__\n  |     raise BaseExceptionGroup(\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\errors.py\", line 164, in __call__\n    |     await self.app(scope, receive, _send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\request_context.py\", line 44, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 88, in __call__\n    |     await self.app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 96, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 31, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\audit.py\", line 25, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py\", line 63, in __call__\n    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    |     raise exc\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    |     await app(scope, receive, sender)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\middleware\\asyncexitstack.py\", line 18, in __call__\n    |     await self.app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\routing.py\", line 660, in __call__\n    |     await self.middleware_stack(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2683, in app\n    |     await route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    |     await self.original_router.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    |     await included_router._handle_selected(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1764, in _handle_selected\n    |     await route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    |     await self.original_router.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    |     await included_router._handle_selected(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1773, in _handle_selected\n    |     await original_route.handle(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1264, in handle\n    |     await app(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 150, in app\n    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    |     raise exc\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    |     await app(scope, receive, sender)\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 136, in app\n    |     response = await f(request)\n    |                ^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 690, in app\n    |     raw_response = await run_endpoint_function(\n    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 344, in run_endpoint_function\n    |     return await dependant.call(**values)\n    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\api\\v1\\ml.py\", line 207, in get_forecast\n    |     preds = forecaster.predict(pd.Series(future))\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\services\\ml\\forecasting.py\", line 59, in predict\n    |     if isinstance(history, pd.DataFrame):\n    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^\n    | TypeError: float() argument must be a string or a real number, not 'Series'\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\errors.py\", line 164, in __call__\n    await self.app(scope, receive, _send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\request_context.py\", line 44, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\cors.py\", line 88, in __call__\n    await self.app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 96, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\hardening.py\", line 31, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\core\\audit.py\", line 25, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py\", line 63, in __call__\n    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\middleware\\asyncexitstack.py\", line 18, in __call__\n    await self.app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\routing.py\", line 660, in __call__\n    await self.middleware_stack(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2683, in app\n    await route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1764, in _handle_selected\n    await route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1753, in handle\n    await self.original_router.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 2738, in handle\n    await included_router._handle_selected(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1773, in _handle_selected\n    await original_route.handle(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 1264, in handle\n    await app(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 150, in app\n    await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 53, in wrapped_app\n    raise exc\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\starlette\\_exception_handler.py\", line 42, in wrapped_app\n    await app(scope, receive, sender)\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 136, in app\n    response = await f(request)\n               ^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 690, in app\n    raw_response = await run_endpoint_function(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py\", line 344, in run_endpoint_function\n    return await dependant.call(**values)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\api\\v1\\ml.py\", line 207, in get_forecast\n    preds = forecaster.predict(pd.Series(future))\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend\\app\\services\\ml\\forecasting.py\", line 59, in predict\n    if isinstance(history, pd.DataFrame):\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: float() argument must be a string or a real number, not 'Series'"}
+{"ts": "2026-09-02T07:03:28.618+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:7300 - \"GET /api/v1/forecasts?horizon=7 HTTP/1.1\" 500"}
+{"ts": "2026-09-02T07:03:41.244+00:00", "level": "INFO", "logger": "uvicorn.access", "message": "127.0.0.1:8228 - \"GET /api/v1/health HTTP/1.1\" 200"}

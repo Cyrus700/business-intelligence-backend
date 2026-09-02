@@ -1,24 +1,906 @@
 INFO:     Will watch for changes in these directories: ['D:\\LBEF Sem-VI\\FYP\\business-intelligence-backend']
+D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\config.py:154: UserWarning: SUPABASE_JWT_SECRET is weak (min 32 chars). — ok in dev, will fail in prod
+  warnings.warn(msg + " — ok in dev, will fail in prod")
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [29276] using WatchFiles
-INFO:     Started server process [39300]
+INFO:     Started reloader process [33020] using WatchFiles
+D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\config.py:154: UserWarning: SUPABASE_JWT_SECRET is weak (min 32 chars). — ok in dev, will fail in prod
+  warnings.warn(msg + " — ok in dev, will fail in prod")
+INFO:     Started server process [17168]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'scripts\_hash_passwords.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for connections to close. (CTRL+C to force quit)
-INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [39300]
-WARNING:  WatchFiles detected changes in 'scripts\_hash_passwords.py'. Reloading...
-INFO:     Started server process [24920]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [24920]
-INFO:     Started server process [37172]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
+ERROR:    Exception in ASGI application
+  + Exception Group Traceback (most recent call last):
+  |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_utils.py", line 85, in create_collapsing_task_group
+  |     async with anyio.create_task_group() as tg:
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 811, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    |     result = await app(  # type: ignore[func-returns-value]
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    |     return await self.app(scope, receive, send)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 96, in __call__
+    |     await self.simple_response(scope, receive, send, request_headers=headers)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 154, in simple_response
+    |     await self.app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    |     await route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    |     await self.original_router.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    |     await included_router._handle_selected(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    |     await route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    |     await self.original_router.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    |     await included_router._handle_selected(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    |     await original_route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    |     await app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\ml.py", line 207, in get_forecast
+    |     preds = forecaster.predict(pd.Series(future))
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\services\ml\forecasting.py", line 59, in predict
+    |     value = float(history.get(ref, history.iloc[-7:].mean()))
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | TypeError: float() argument must be a string or a real number, not 'Series'
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 96, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 154, in simple_response
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    await app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\ml.py", line 207, in get_forecast
+    preds = forecaster.predict(pd.Series(future))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\services\ml\forecasting.py", line 59, in predict
+    value = float(history.get(ref, history.iloc[-7:].mean()))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: float() argument must be a string or a real number, not 'Series'
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 550, in _prepare_and_execute
+    self._rows = deque(await prepared_stmt.fetch(*parameters))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\asyncpg\prepared_stmt.py", line 177, in fetch
+    data = await self.__bind_execute(args, 0, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\asyncpg\prepared_stmt.py", line 268, in __bind_execute
+    data, status, _ = await self.__do_execute(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\asyncpg\prepared_stmt.py", line 257, in __do_execute
+    return await executor(protocol)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 205, in bind_execute
+asyncpg.exceptions.ForeignKeyViolationError: insert or update on table "organization_invites" violates foreign key constraint "fk_organization_invites_accepted_by_profiles"
+DETAIL:  Key (accepted_by)=(b6ed53bd-f5d9-5973-82c7-4d7281133853) is not present in table "profiles".
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.IntegrityError: <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "organization_invites" violates foreign key constraint "fk_organization_invites_accepted_by_profiles"
+DETAIL:  Key (accepted_by)=(b6ed53bd-f5d9-5973-82c7-4d7281133853) is not present in table "profiles".
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 96, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 154, in simple_response
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    await app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\auth.py", line 812, in signup
+    await db.commit()
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 999, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2035, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1316, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1290, in _prepare_impl
+    self.session.flush()
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4353, in flush
+    self._flush(objects)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4488, in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4449, in _flush
+    flush_context.execute()
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 465, in execute
+    rec.execute(self)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 641, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 86, in save_obj
+    _emit_update_statements(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 913, in _emit_update_statements
+    c = connection.execute(
+        ^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1421, in execute
+    return meth(
+           ^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1643, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1848, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1988, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2365, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.IntegrityError: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "organization_invites" violates foreign key constraint "fk_organization_invites_accepted_by_profiles"
+DETAIL:  Key (accepted_by)=(b6ed53bd-f5d9-5973-82c7-4d7281133853) is not present in table "profiles".
+[SQL: UPDATE organization_invites SET accepted_at=$1::TIMESTAMP WITHOUT TIME ZONE, accepted_by=$2::UUID, updated_at=now() WHERE organization_invites.id = $3::UUID]
+[parameters: (datetime.datetime(2026, 9, 2, 7, 0, 40, 499517), UUID('b6ed53bd-f5d9-5973-82c7-4d7281133853'), UUID('0e218d2e-e4c6-4289-b344-91d64be087bd'))]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+WARNING:  WatchFiles detected changes in 'app\services\ml\forecasting.py'. Reloading...
+ERROR:    Exception in ASGI application
+  + Exception Group Traceback (most recent call last):
+  |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_utils.py", line 85, in create_collapsing_task_group
+  |     async with anyio.create_task_group() as tg:
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 811, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    |     result = await app(  # type: ignore[func-returns-value]
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    |     return await self.app(scope, receive, send)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    |     await route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    |     await self.original_router.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    |     await included_router._handle_selected(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    |     await route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    |     await self.original_router.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    |     await included_router._handle_selected(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    |     await original_route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    |     await app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\ml.py", line 207, in get_forecast
+    |     preds = forecaster.predict(pd.Series(future))
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\services\ml\forecasting.py", line 59, in predict
+    |     if isinstance(history, pd.DataFrame):
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | TypeError: float() argument must be a string or a real number, not 'Series'
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    await app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\ml.py", line 207, in get_forecast
+    preds = forecaster.predict(pd.Series(future))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\services\ml\forecasting.py", line 59, in predict
+    if isinstance(history, pd.DataFrame):
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: float() argument must be a string or a real number, not 'Series'
+ERROR:    Exception in ASGI application
+  + Exception Group Traceback (most recent call last):
+  |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_utils.py", line 85, in create_collapsing_task_group
+  |     async with anyio.create_task_group() as tg:
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 811, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    |     result = await app(  # type: ignore[func-returns-value]
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    |     return await self.app(scope, receive, send)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    |     await route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    |     await self.original_router.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    |     await included_router._handle_selected(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    |     await route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    |     await self.original_router.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    |     await included_router._handle_selected(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    |     await original_route.handle(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    |     await app(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\ml.py", line 207, in get_forecast
+    |     preds = forecaster.predict(pd.Series(future))
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\services\ml\forecasting.py", line 59, in predict
+    |     if isinstance(history, pd.DataFrame):
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | TypeError: float() argument must be a string or a real number, not 'Series'
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\request_context.py", line 44, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 96, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\hardening.py", line 31, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\core\audit.py", line 25, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2683, in app
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1764, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1753, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 2738, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1773, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 1264, in handle
+    await app(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 150, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 136, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 690, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\.venv\Lib\site-packages\fastapi\routing.py", line 344, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\api\v1\ml.py", line 207, in get_forecast
+    preds = forecaster.predict(pd.Series(future))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\LBEF Sem-VI\FYP\business-intelligence-backend\app\services\ml\forecasting.py", line 59, in predict
+    if isinstance(history, pd.DataFrame):
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: float() argument must be a string or a real number, not 'Series'
