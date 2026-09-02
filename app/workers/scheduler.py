@@ -224,6 +224,11 @@ async def _w_report_schedules(_payload: dict) -> None:
     await _run_due_report_schedules()
 
 
+@worker_pool.register("ai_retention_flush")
+async def _w_ai_retention_flush(_payload: dict) -> None:
+    await _daily_ai_retention_flush()
+
+
 async def _monthly_report(org_id=None) -> None:
     from datetime import timedelta
 
@@ -303,6 +308,21 @@ async def _daily_quality_audit(org_id=None) -> None:
                         )
                 except Exception:
                     logger.exception("quality audit failed for org %s", org.id)
+
+
+async def _daily_ai_retention_flush() -> None:
+    """Auto-flush AI history older than retention_days (admin-configurable)."""
+    from app.services.ai.retention import flush_expired_conversations
+
+    async with get_session_factory()() as db:
+        try:
+            deleted = await flush_expired_conversations(db)
+            await db.commit()
+            if deleted:
+                logger.info("ai retention flush deleted %d conversations", deleted)
+        except Exception:
+            logger.exception("ai retention flush failed")
+            await db.rollback()
 
 
 async def _run_due_report_schedules() -> None:
@@ -436,6 +456,10 @@ async def _tick_report_schedules() -> None:
     await worker_pool.submit_and_wait("report_schedules")
 
 
+async def _tick_ai_retention_flush() -> None:
+    await worker_pool.submit_and_wait("ai_retention_flush")
+
+
 async def _tick_source_pull(source_id: str) -> None:
     await worker_pool.submit_and_wait("source_pull", {"source_id": source_id})
 
@@ -468,6 +492,8 @@ async def start_scheduler() -> AsyncIOScheduler:
     _scheduler.add_job(_tick_quality_audit, CronTrigger.from_crontab("0 2 * * *"), id="quality-audit")
     _scheduler.add_job(_tick_monthly_report, CronTrigger.from_crontab("0 4 1 * *"), id="monthly-report")
     _scheduler.add_job(_tick_report_schedules, CronTrigger.from_crontab("0 5 * * *"), id="report-schedules")
+    # Auto-flush AI history daily at 02:15 Asia/Kathmandu (20:30 UTC) — respects admin retention_days
+    _scheduler.add_job(_tick_ai_retention_flush, CronTrigger.from_crontab("15 2 * * *"), id="ai-retention-flush")
     async with get_session_factory()() as db:
         sources = (
             (

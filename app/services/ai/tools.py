@@ -1305,19 +1305,70 @@ TOOLS: dict[str, AITool] = {
 }
 
 
-def tool_declarations() -> list[dict[str, Any]]:
-    """Provider-agnostic function-tool declarations (Groq/Gemini compatible)."""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-            },
-        }
-        for tool in TOOLS.values()
-    ]
+# Declaring all 19 tools costs ~4.6k tokens before the question is even asked,
+# which on Groq's 8k-token-per-minute free tier leaves no room for the system
+# prompt and live snapshot — every call comes back 413 and the user gets the
+# deterministic fallback instead of an answer. Sending only the tools an intent
+# can plausibly use keeps the request inside the budget without narrowing what
+# the assistant can actually do.
+_INTENT_TOOLS: dict[str, tuple[str, ...]] = {
+    "revenue": ("query_kpis", "query_sales", "query_timeseries", "explain_change", "revenue_bridge"),
+    "expenses": ("query_kpis", "query_expenses", "query_timeseries", "explain_change"),
+    "profit": ("query_kpis", "query_sales", "query_expenses", "revenue_bridge"),
+    "forecast": ("get_forecast", "project_period_end", "query_kpis", "simulate_scenario"),
+    "inventory": ("get_inventory", "query_kpis", "sample_table"),
+    "anomalies": ("get_anomalies", "query_timeseries", "explain_change"),
+    "products": ("query_sales", "analyse_concentration", "query_kpis"),
+    "channels": ("query_sales", "query_timeseries", "analyse_concentration"),
+    "regions": ("query_sales", "query_timeseries", "analyse_concentration"),
+    "compare": ("query_kpis", "query_timeseries", "explain_change", "revenue_bridge"),
+    "business": ("get_business_info", "query_kpis", "get_platform_stats"),
+    "platform": ("get_platform_stats", "get_business_info", "describe_catalog", "sample_table"),
+    "users": ("get_platform_stats", "get_business_info"),
+    "catalog": ("describe_catalog", "sample_table", "get_data_coverage"),
+    "update": ("query_kpis", "get_anomalies", "get_recommendations", "get_forecast"),
+}
+
+# Cheap and near-always useful: orientation tools that stop the model guessing
+# at a date range or a table name it was never told about.
+_CORE_TOOLS: tuple[str, ...] = ("get_data_coverage",)
+
+# UNKNOWN and anything unmapped: a broad but bounded default.
+_DEFAULT_TOOLS: tuple[str, ...] = (
+    "query_kpis",
+    "query_sales",
+    "query_expenses",
+    "query_timeseries",
+    "get_platform_stats",
+    "describe_catalog",
+    "sample_table",
+)
+
+
+def _declare(tool: "Tool") -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+        },
+    }
+
+
+def tool_declarations(intent: str | None = None) -> list[dict[str, Any]]:
+    """Provider-agnostic function-tool declarations (Groq/Gemini compatible).
+
+    Scoped to ``intent`` when one is given so the request stays inside the
+    provider's per-minute token budget; pass ``None`` for the full set.
+    """
+    if intent is None:
+        return [_declare(t) for t in TOOLS.values()]
+    names = _INTENT_TOOLS.get(str(intent), _DEFAULT_TOOLS) + _CORE_TOOLS
+    # dict.fromkeys de-duplicates while holding the declared order stable, which
+    # keeps the prompt byte-identical between calls and cache-friendly.
+    picked = [TOOLS[n] for n in dict.fromkeys(names) if n in TOOLS]
+    return [_declare(t) for t in picked]
 
 
 MAX_TOOL_RESULT_CHARS = 4000

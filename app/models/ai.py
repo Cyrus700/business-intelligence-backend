@@ -51,3 +51,23 @@ class Message(Base):
         Index("ix_messages_org_id", "org_id"),
         # Index for loading conversation messages in order
     )
+
+
+class AiRetentionSetting(Base):
+    """Global AI history retention — auto-flush TTL controlled by system admin."""
+
+    __tablename__ = "ai_retention_settings"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    retention_days: Mapped[int] = mapped_column(default=30)
+    # Nullable — global setting, optionally scoped to org in future
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("retention_days >= 0 AND retention_days <= 365", name="ck_retention_valid_days"),
+        # 0 = never auto-flush (keep forever); 7=week 30=month etc.
+    )

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -187,6 +188,8 @@ async def get_conversation_messages(
     conv_id: uuid.UUID,
     db: DbSession,
     user: CurrentUser,
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> list[MessageOut]:
     conv = await db.get(Conversation, conv_id)
     if not conv or conv.user_id != user.id:
@@ -194,10 +197,16 @@ async def get_conversation_messages(
 
     from sqlalchemy import select as sa_select
 
+    # Capped history: default 200, supports pagination for large threads.
+    # Order by created_at asc so UI shows chronological flow.
     rows = (
         (
             await db.execute(
-                sa_select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at, Message.id)
+                sa_select(Message)
+                .where(Message.conversation_id == conv_id)
+                .order_by(Message.created_at, Message.id)
+                .offset(offset)
+                .limit(limit)
             )
         )
         .scalars()
@@ -212,6 +221,103 @@ async def get_conversation_messages(
         )
         for m in rows
     ]
+
+
+@router.delete("/conversations")
+async def flush_conversations(
+    db: DbSession,
+    user: CurrentUser,
+) -> dict[str, int]:
+    """Flush all conversations for the current user (history clear)."""
+    from sqlalchemy import select as sa_select
+
+    rows = (await db.execute(sa_select(Conversation).where(Conversation.user_id == user.id))).scalars().all()
+    count = len(rows)
+    for c in rows:
+        await db.delete(c)
+    await db.commit()
+    return {"deleted": count}
+
+
+@router.delete("/conversations/{conv_id}")
+async def delete_conversation(
+    conv_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> dict[str, str]:
+    """Delete one conversation (and its messages via FK cascade)."""
+    conv = await db.get(Conversation, conv_id)
+    if not conv or conv.user_id != user.id:
+        raise HTTPException(404, "Conversation not found")
+    await db.delete(conv)
+    await db.commit()
+    return {"status": "deleted", "id": str(conv_id)}
+
+
+class RetentionOut(BaseModel):
+    retention_days: int
+    updated_at: str | None = None
+    updated_by: str | None = None
+    choices: list[int] = []
+    is_disabled: bool = False
+
+
+class RetentionIn(BaseModel):
+    retention_days: int
+
+
+@router.get("/retention", response_model=RetentionOut)
+async def get_retention(
+    db: DbSession,
+    user: CurrentUser,
+) -> RetentionOut:
+    """Current AI history auto-flush TTL (any authenticated user may read)."""
+    from app.services.ai.retention import retention_status
+
+    s = await retention_status(db)
+    return RetentionOut(**s)
+
+
+@router.put("/retention", response_model=RetentionOut)
+async def put_retention(
+    body: RetentionIn,
+    db: DbSession,
+    user: CurrentUser,
+) -> RetentionOut:
+    """Set AI history retention — system admin only (week/month dynamic)."""
+    from app.api.deps import require_role
+
+    # super-admin or admin role check — use same guard as /admin/*
+    if not getattr(user, "is_super_admin", False) and user.role != "admin":
+        # fallback to role check via deps simulation
+        # we cannot call Depends here, so manual check:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Only system admin may change retention")
+    from app.services.ai.retention import retention_status, set_retention_days
+
+    await set_retention_days(db, body.retention_days, updated_by=user.id)
+    await db.commit()
+    s = await retention_status(db)
+    return RetentionOut(**s)
+
+
+@router.post("/retention/flush")
+async def trigger_retention_flush(
+    db: DbSession,
+    user: CurrentUser,
+) -> dict[str, int]:
+    """Manually trigger auto-flush (admin only) — useful after changing retention."""
+    if not getattr(user, "is_super_admin", False) and user.role != "admin":
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Only system admin may trigger flush")
+    from app.services.ai.retention import flush_expired_conversations, get_retention_days
+
+    deleted = await flush_expired_conversations(db)
+    await db.commit()
+    days = await get_retention_days(db)
+    return {"deleted": deleted, "retention_days": days}
 
 
 class ProviderStatus(BaseModel):
@@ -272,21 +378,16 @@ async def ai_analyze(
         page=(body.data_context or {}).get("page") if body.data_context else None,
         user=user,
     )
-    suggestions = _generate_suggestions(body.question)
+    # Follow-ups are written against the answer the user just got, so they lead
+    # somewhere the data can actually go; the keyword list is only the net for
+    # when the provider is down.
+    suggestions = await _followup_suggestions(body.question, result.reply)
 
-    # Collect sources used by the tool loop
-    sources = list(dict.fromkeys(result.tool_calls)) if result.tool_calls else []
-    metrics = []
-    if "revenue" in body.question.lower():
-        metrics.append("revenue")
-    if "expense" in body.question.lower() or "cost" in body.question.lower():
-        metrics.append("expenses")
-    if "forecast" in body.question.lower():
-        metrics.append("forecasts")
-    if "anomal" in body.question.lower():
-        metrics.append("anomalies")
-    if "inventory" in body.question.lower() or "stock" in body.question.lower():
-        metrics.append("inventory_levels")
+    # The tools the answer was actually built from — not the round count, which
+    # is what used to be handed to dict.fromkeys() here and raised TypeError the
+    # moment a tool ran.
+    sources = list(dict.fromkeys(result.tools_used))
+    metrics = _metrics_from_sources(sources, body.question)
 
     return AnalyzeResponse(
         answer=result.reply,
@@ -387,6 +488,96 @@ async def ai_insights(
                 )
 
     return insights
+
+
+# Which warehouse metrics each tool actually reads. Derived from the tools the
+# answer used, this reports what the analysis touched — the previous version
+# sniffed the question text, so "how did we do?" listed nothing and a question
+# merely containing the word "revenue" claimed a revenue source it never read.
+_TOOL_METRICS: dict[str, tuple[str, ...]] = {
+    "query_kpis": ("revenue", "expenses", "profit"),
+    "query_sales": ("revenue", "products"),
+    "query_expenses": ("expenses",),
+    "query_timeseries": ("revenue",),
+    "get_forecast": ("forecasts",),
+    "project_period_end": ("forecasts", "revenue"),
+    "simulate_scenario": ("forecasts", "revenue"),
+    "explain_change": ("revenue", "expenses"),
+    "revenue_bridge": ("revenue",),
+    "analyse_concentration": ("revenue", "products"),
+    "get_anomalies": ("anomalies",),
+    "get_inventory": ("inventory_levels",),
+    "get_recommendations": ("recommendations",),
+    "get_platform_stats": ("organizations",),
+    "get_business_info": ("organizations",),
+    "describe_catalog": ("catalog",),
+    "sample_table": ("catalog",),
+    "get_data_coverage": ("catalog",),
+    "search_past_insights": ("insights",),
+}
+
+
+def _metrics_from_sources(sources: list[str], question: str) -> list[str]:
+    """Metrics the analysis genuinely read, in first-touched order."""
+    metrics: list[str] = []
+    for name in sources:
+        metrics.extend(_TOOL_METRICS.get(name, ()))
+    if metrics:
+        return list(dict.fromkeys(metrics))
+    # No tool ran (snapshot-only answer): fall back to naming what was asked
+    # about rather than claiming nothing was consulted.
+    q = question.lower()
+    guessed = [
+        m
+        for m, words in (
+            ("revenue", ("revenue", "sales")),
+            ("expenses", ("expense", "cost")),
+            ("forecasts", ("forecast", "predict")),
+            ("anomalies", ("anomal",)),
+            ("inventory_levels", ("inventory", "stock")),
+        )
+        if any(w in q for w in words)
+    ]
+    return guessed
+
+
+_SUGGESTION_PROMPT = (
+    "You suggest the next question a business user should ask their analytics "
+    "assistant. Given their question and the answer they received, write exactly "
+    "3 short follow-up questions that dig into what the answer actually says — "
+    "name the specific businesses, products, categories, periods or numbers that "
+    "appeared in it. Each must be answerable from sales, expense, inventory, "
+    "forecast, anomaly or organisation data. Reply with only the 3 questions, one "
+    "per line, no numbering, no preamble."
+)
+
+
+async def _followup_suggestions(question: str, answer: str) -> list[str]:
+    """Follow-ups written against this answer, with a static net beneath.
+
+    A fixed keyword list cannot suggest 'why is Sky Print still pending?' after
+    a business listing — it can only offer the same three revenue questions to
+    everyone. When the provider is unavailable the static list still runs, so a
+    failure here costs relevance, never the response.
+    """
+    from app.services.ai.provider import get_ai_response
+
+    try:
+        raw = await get_ai_response(
+            [AIMessage(role="user", content=f"Question: {question}\n\nAnswer given:\n{answer[:1500]}")],
+            system_prompt=_SUGGESTION_PROMPT,
+        )
+        lines = [
+            re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", line).strip().strip('"')
+            for line in (raw or "").splitlines()
+        ]
+        picked = [line for line in lines if line.endswith("?") and 8 < len(line) <= 120][:3]
+        if picked:
+            return picked
+        logger.info("follow-up model returned nothing usable; using static suggestions")
+    except Exception:
+        logger.warning("follow-up suggestion generation failed; using static list", exc_info=True)
+    return _generate_suggestions(question)
 
 
 def _generate_suggestions(question: str) -> list[str]:

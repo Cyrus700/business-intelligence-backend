@@ -16,7 +16,7 @@ Flow for every question:
 import logging
 import re
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +68,10 @@ class AnswerResult:
     reply: str
     source: str  # "llm" | "local"
     tool_calls: int = 0  # how many tool rounds the LLM used
+    # Names of the tools the answer was actually built from, in call order.
+    # /analyze reports these as its "sources", which is the only honest way to
+    # say where a figure came from — the round count cannot.
+    tools_used: list[str] = field(default_factory=list)
 
 
 def _build_system_prompt(
@@ -148,7 +152,8 @@ async def _run_tool_loop(
     user,
     messages: list[AIMessage],
     system_prompt: str,
-) -> tuple[str, int, list[str]]:
+    intent: Intent | None = None,
+) -> tuple[str, int, list[str], list[str]]:
     """One tool-calling session.
 
     Returns (final_reply_markdown, tool_turn_count, tool_results). The tool
@@ -165,23 +170,23 @@ async def _run_tool_loop(
         # Silence here is how a bad model id or a revoked key turns into the
         # canned snapshot fallback for every question — say so in the log.
         logger.warning("no healthy AI provider; answering without the LLM (check keys / model id / circuits)")
-        return "", 0, []
+        return "", 0, [], []
 
     # Try each healthy provider in turn: a mid-loop failure on one shouldn't
     # cost the user their tool-grounded answer.
     last_error: Exception | None = None
     for provider in providers:
         try:
-            reply, turns, evidence = await _tool_session(db, user, messages, system_prompt, provider)
+            reply, turns, evidence, names = await _tool_session(db, user, messages, system_prompt, provider, intent)
             if reply.strip():
-                return reply, turns, evidence
+                return reply, turns, evidence, names
         except Exception as e:  # noqa: PERF203 - provider failover is the point
             last_error = e
             logger.warning("tool loop failed on %s: %s", provider.circuit_name, e)
             await _reset_transaction(db)
     if last_error:
         logger.warning("every provider failed the tool loop: %s", last_error)
-    return "", 0, []
+    return "", 0, [], []
 
 
 async def _tool_session(
@@ -190,7 +195,8 @@ async def _tool_session(
     messages: list[AIMessage],
     system_prompt: str,
     provider: BaseAIProvider,
-) -> tuple[str, int, list[str]]:
+    intent: Intent | None = None,
+) -> tuple[str, int, list[str], list[str]]:
     """Run the request → tools → answer cycle against one provider.
 
     Returns the reply, how many tool rounds it took, and every tool result
@@ -198,6 +204,7 @@ async def _tool_session(
     """
     loop_messages: list[AIMessage] = list(_compact_history(messages))
     evidence: list[str] = []
+    tool_names: list[str] = []
     turns = 0
 
     # When the question names a date the 30-day snapshot cannot answer, a model
@@ -229,13 +236,13 @@ async def _tool_session(
     for attempt in range(MAX_TOOL_TURNS):
         resp: ToolResponse = await provider.chat_with_tools(
             loop_messages,
-            tool_declarations(),
+            tool_declarations(intent),
             system_prompt=turn_system_prompt,
             tool_choice="required" if (force_tools and attempt == 0) else "auto",
         )
         if not resp.has_tool_calls:
             # The model is done gathering data and has written its answer.
-            return polish_reply(repair_mojibake(resp.content or "")), turns, evidence
+            return polish_reply(repair_mojibake(resp.content or "")), turns, evidence, tool_names
 
         turns += 1
         # The assistant turn must carry the tool_calls it made, and each result
@@ -245,6 +252,7 @@ async def _tool_session(
             result = await dispatch_tool(db, user, call.name, call.arguments)
             logger.info("tool %s(%s) → %d chars", call.name, call.arguments, len(result))
             evidence.append(result)
+            tool_names.append(call.name)
             loop_messages.append(AIMessage(role="tool", content=result, tool_call_id=call.id, name=call.name))
 
     # Turn budget spent while still calling tools. Ask once more with tools
@@ -261,7 +269,7 @@ async def _tool_session(
         ],
         system_prompt=turn_system_prompt,
     )
-    return polish_reply(repair_mojibake(final or "")), turns, evidence
+    return polish_reply(repair_mojibake(final or "")), turns, evidence, tool_names
 
 
 async def _verified(
@@ -271,6 +279,7 @@ async def _verified(
     msgs: list[AIMessage],
     system_prompt: str,
     tool_calls: int,
+    tool_names: list[str] | None = None,
 ) -> AnswerResult | None:
     """Accept the reply only if its figures trace back to the evidence.
 
@@ -281,7 +290,7 @@ async def _verified(
     """
     bad = unsupported_figures(reply, evidence)
     if not bad:
-        return AnswerResult(reply=reply, source="llm", tool_calls=tool_calls)
+        return AnswerResult(reply=reply, source="llm", tool_calls=tool_calls, tools_used=list(tool_names or []))
 
     logger.warning("ungrounded figures in AI reply: %s", bad[:8])
     try:
@@ -304,7 +313,7 @@ async def _verified(
     if still_bad:
         logger.warning("reply still ungrounded after repair: %s", still_bad[:8])
         return None
-    return AnswerResult(reply=repaired, source="llm", tool_calls=tool_calls)
+    return AnswerResult(reply=repaired, source="llm", tool_calls=tool_calls, tools_used=list(tool_names or []))
 
 
 async def answer_question(
@@ -329,6 +338,13 @@ async def answer_question(
     business_context = await build_business_context(db, user=user, org_id=org_id)
     system_prompt = _build_system_prompt(role, business_context, page, intent)
     msgs = _recent_history(history or [])
+    # Callers normally persist the question into the conversation before getting
+    # here, so it already sits at the end of `history`. When it doesn't — empty
+    # history, a failed write, a direct call — the model is handed a system
+    # prompt with nothing to answer and replies with a greeting. Ask the actual
+    # question rather than depending on the caller having done it for us.
+    if not msgs or msgs[-1].role != "user" or msgs[-1].content.strip() != question.strip():
+        msgs = [*msgs, AIMessage(role="user", content=question)]
     # The snapshot is evidence too: an answer that quotes it without calling a
     # tool is still grounded, and checking against tool results alone would
     # flag every one of those replies.
@@ -337,9 +353,11 @@ async def answer_question(
     # Tool-calling LLM path (read-only live queries) is the primary route;
     # falls back to plain chat, then the deterministic local engine.
     try:
-        reply, used, tool_evidence = await _run_tool_loop(db, user, msgs, system_prompt)
+        reply, used, tool_evidence, tool_names = await _run_tool_loop(db, user, msgs, system_prompt, intent)
         if reply.strip():
-            result = await _verified(db, reply, baseline_evidence + tool_evidence, msgs, system_prompt, used)
+            result = await _verified(
+                db, reply, baseline_evidence + tool_evidence, msgs, system_prompt, used, tool_names
+            )
             if result is not None:
                 return result
     except Exception as e:
