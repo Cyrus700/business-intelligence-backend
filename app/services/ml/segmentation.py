@@ -19,20 +19,16 @@ from app.services.analytics.queries import Filters
 logger = logging.getLogger(__name__)
 
 
-def _entity_frame(db: AsyncSession, f: Filters, dimension: str) -> tuple[list[str], np.ndarray]:
+async def _entity_frame(db: AsyncSession, f: Filters, dimension: str) -> tuple[list[str], np.ndarray]:
     """Return (labels, feature_matrix) for the chosen dimension."""
     from app.services.analytics.queries import _sales_conditions
 
     if dimension == "product":
         key, grp = Product.name, [Product.name]
-        join = SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        join = SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id)
     elif dimension == "category":
         key, grp = Product.category, [Product.category]
-        join = SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        join = SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id)
     elif dimension == "region":
         key, grp = SalesTransaction.region, [SalesTransaction.region]
         join = SalesTransaction.__table__
@@ -50,15 +46,14 @@ def _entity_frame(db: AsyncSession, f: Filters, dimension: str) -> tuple[list[st
             func.count(SalesTransaction.id).label("orders"),
             func.avg(SalesTransaction.unit_price).label("avg_price"),
             func.sum(
-                SalesTransaction.total_amount
-                - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+                SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
             ).label("margin"),
         )
         .select_from(join)
         .where(*_sales_conditions(f, f.date_from, f.date_to))
         .group_by(*grp)
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     labels = [r.key or "(unknown)" for r in rows]
     feats = []
     for r in rows:
@@ -72,14 +67,14 @@ def _entity_frame(db: AsyncSession, f: Filters, dimension: str) -> tuple[list[st
     return labels, np.array(feats, dtype=float)
 
 
-def segment(
+async def segment(
     db: AsyncSession,
     f: Filters,
     dimension: str = "product",
     n_clusters: int = 4,
 ) -> dict[str, Any]:
     """K-Means segmentation projected to 2-D via PCA."""
-    labels, X = _entity_frame(db, f, dimension)
+    labels, X = await _entity_frame(db, f, dimension)
     if len(labels) < max(3, n_clusters):
         return {
             "dimension": dimension,

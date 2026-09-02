@@ -133,7 +133,9 @@ def _send_sync(
             if not filename:
                 filename = "attachment.bin"
             maintype, _, subtype = mime.partition("/")
-            msg.add_attachment(data, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=filename)
+            msg.add_attachment(
+                data, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=filename
+            )
 
     # Port-aware connection: 465 → SSL, 587/25/2525 → STARTTLS.
     if port == 465:
@@ -193,7 +195,9 @@ async def send_email(
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
-            await asyncio.to_thread(_send_sync, to, subject, text_body, html_body, attachments=attachments, timeout=timeout)
+            await asyncio.to_thread(
+                _send_sync, to, subject, text_body, html_body, attachments=attachments, timeout=timeout
+            )
             _stats["sent"] += 1
             logger.info("email sent to %s — %s", to, subject)
             return True
@@ -203,7 +207,9 @@ async def send_email(
             if attempt < max_retries:
                 await asyncio.sleep(0.6 * (2**attempt))
     _stats["failed"] += 1
-    logger.error("email to %s permanently failed after %d attempts: %s", to, max_retries + 1, last_exc, exc_info=last_exc)
+    logger.error(
+        "email to %s permanently failed after %d attempts: %s", to, max_retries + 1, last_exc, exc_info=last_exc
+    )
     return False
 
 
@@ -212,6 +218,7 @@ def stats_snapshot() -> dict[str, Any]:
 
 
 # ── Convenience helpers ───────────────────────────────────────────────
+
 
 async def send_password_reset_email(to: str, token: str, full_name: str | None = None) -> bool:
     s = get_settings()
@@ -252,18 +259,26 @@ async def send_report_ready_email(
 async def send_test_email(to: str) -> bool:
     subject = f"{templates.BRAND} — Test email"
     text = f"This is a test email from {templates.BRAND}. If you received it, SMTP is configured correctly."
-    html = templates._wrap("Test email", "SMTP test", f'<p style="margin:0;color:{templates.COLOR_TEXT};font-size:14px;">This is a test email from <strong>{templates.BRAND}</strong>. If you received it, SMTP is configured correctly.</p>')
+    html = templates._wrap(
+        "Test email",
+        "SMTP test",
+        f'<p style="margin:0;color:{templates.COLOR_TEXT};font-size:14px;">This is a test email from <strong>{templates.BRAND}</strong>. If you received it, SMTP is configured correctly.</p>',
+    )
     return await send_email(to, subject, text, html)
 
 
-async def send_business_verification_email(to: str, business_name: str, token: str, full_name: str | None = None) -> bool:
+async def send_business_verification_email(
+    to: str, business_name: str, token: str, full_name: str | None = None
+) -> bool:
     s = get_settings()
     verify_url = f"{s.frontend_url}/verify-email?token={token}"
     subject, text, html = templates.business_email_verification(full_name, business_name, verify_url)
     return await send_email(to, subject, text, html)
 
 
-async def send_business_pending_admin_email(business_name: str, business_email: str, contact_name: str | None = None) -> bool:
+async def send_business_pending_admin_email(
+    business_name: str, business_email: str, contact_name: str | None = None
+) -> bool:
     s = get_settings()
     admin_email = (s.admin_email or "").strip()
     if not admin_email:
@@ -292,12 +307,16 @@ async def send_business_approved_email(to: str, business_name: str, full_name: s
     return await send_email(to, subject, text, html)
 
 
-async def send_business_rejected_email(to: str, business_name: str, reason: str | None, full_name: str | None = None) -> bool:
+async def send_business_rejected_email(
+    to: str, business_name: str, reason: str | None, full_name: str | None = None
+) -> bool:
     subject, text, html = templates.business_rejected(full_name, business_name, reason)
     return await send_email(to, subject, text, html)
 
 
-async def send_invite_email(to: str, token: str, inviter_email: str, role: str, business_name: str | None = None) -> bool:
+async def send_invite_email(
+    to: str, token: str, inviter_email: str, role: str, business_name: str | None = None
+) -> bool:
     s = get_settings()
     # business_name fallback: try to resolve via inviter's org if not provided
     if not business_name:

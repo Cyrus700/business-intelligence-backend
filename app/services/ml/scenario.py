@@ -27,9 +27,7 @@ def _fit_point_and_residuals(frame: pd.DataFrame, horizon: int, model: str | Non
         chosen, _ = fc.best_candidate(frame)
     forecaster = fc.make_forecaster(chosen)
     forecaster.fit(train)
-    future_ds = pd.Series(
-        pd.date_range(frame["ds"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
-    )
+    future_ds = pd.Series(pd.date_range(frame["ds"].iloc[-1] + pd.Timedelta(days=1), periods=horizon))
     preds = forecaster.predict(future_ds)
     fitted = forecaster.predict(train["ds"].reset_index(drop=True))["yhat"].to_numpy()
     resid = train["y"].to_numpy() - fitted

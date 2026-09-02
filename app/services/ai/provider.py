@@ -78,9 +78,7 @@ class BaseAIProvider(ABC):
     async def chat(self, messages: list[AIMessage], system_prompt: str | None = None) -> str:
         """Returns the full assistant reply."""
 
-    async def chat_stream(
-        self, messages: list[AIMessage], system_prompt: str | None = None
-    ) -> AsyncIterator[str]:
+    async def chat_stream(self, messages: list[AIMessage], system_prompt: str | None = None) -> AsyncIterator[str]:
         """Yields incremental text chunks. Default: single chunk from chat()."""
         yield await self.chat(messages, system_prompt)
 
@@ -110,9 +108,7 @@ class BaseAIProvider(ABC):
         state = self._circuit()
         if not state.is_open:
             return False
-        logger.warning(
-            "%s circuit OPEN (cooldown until %s)", self.circuit_name, state.circuit_open_until
-        )
+        logger.warning("%s circuit OPEN (cooldown until %s)", self.circuit_name, state.circuit_open_until)
         return True
 
     def _record_success(self, latency_ms: int | None, input_text: str, output_text: str) -> None:
@@ -245,9 +241,7 @@ class GroqProvider(BaseAIProvider):
             logger.warning("Groq tool-call error: %s", e)
             raise
 
-    async def chat_stream(
-        self, messages: list[AIMessage], system_prompt: str | None = None
-    ) -> AsyncIterator[str]:
+    async def chat_stream(self, messages: list[AIMessage], system_prompt: str | None = None) -> AsyncIterator[str]:
         if not self.api_key:
             raise RuntimeError("GROQ_API_KEY not configured")
         if await self._circuit_open():
@@ -393,13 +387,9 @@ class GeminiProvider(BaseAIProvider):
             )
             reply = resp.text or ""
             calls = []
-            for idx, part in enumerate(
-                getattr(getattr(resp, "candidates", [None])[0], "function_calls", []) or []
-            ):
+            for idx, part in enumerate(getattr(getattr(resp, "candidates", [None])[0], "function_calls", []) or []):
                 args = _json_loads(getattr(part, "args", None))
-                calls.append(
-                    ToolCall(id=f"c{idx}", name=part.name, arguments=args)
-                )
+                calls.append(ToolCall(id=f"c{idx}", name=part.name, arguments=args))
             self._record_success(
                 int((time.monotonic() - started) * 1000),
                 " ".join(m.content for m in messages),
@@ -411,9 +401,7 @@ class GeminiProvider(BaseAIProvider):
             logger.warning("Gemini tool-call error: %s", e)
             raise
 
-    async def chat_stream(
-        self, messages: list[AIMessage], system_prompt: str | None = None
-    ) -> AsyncIterator[str]:
+    async def chat_stream(self, messages: list[AIMessage], system_prompt: str | None = None) -> AsyncIterator[str]:
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY not configured")
         if await self._circuit_open():

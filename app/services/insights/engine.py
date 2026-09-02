@@ -58,9 +58,7 @@ async def _latest_data_date(db: AsyncSession, org_id=None) -> date | None:
         ).scalar_one()
     else:
         value = (
-            await db.execute(
-                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
-            )
+            await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))
         ).scalar_one()
     return value
 
@@ -164,7 +162,7 @@ async def detect_new_anomalies(db: AsyncSession, today: date, org_id=None) -> li
     q = select(Anomaly).where(Anomaly.status == "open", Anomaly.detected_at >= since)
     if org_id is not None:
         q = q.where(Anomaly.org_id == org_id)
-    anomalies = ((await db.execute(q)).scalars().all())
+    anomalies = (await db.execute(q)).scalars().all()
     found = []
     for a in anomalies:
         context = a.context or {}
@@ -183,9 +181,7 @@ async def detect_new_anomalies(db: AsyncSession, today: date, org_id=None) -> li
                 ),
                 "evidence": {"anomaly_id": str(a.id), **context},
                 "related_anomaly_id": a.id,
-                "period_start": date.fromisoformat(context["date"])
-                if context.get("date")
-                else None,
+                "period_start": date.fromisoformat(context["date"]) if context.get("date") else None,
                 "period_end": date.fromisoformat(context["date"]) if context.get("date") else None,
                 "dedupe_key": f"anomaly:{a.id}",
             }

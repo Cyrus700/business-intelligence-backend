@@ -5,10 +5,11 @@ assistant answers "revenue on 10 June" and "revenue on 1 Jan 2019" with the
 same text — the "it always says the same thing" failure mode.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
+from app.core.clock import business_today
 from app.services.ai.dates import parse_period
 from app.services.ai.local_engine import _named_periods
 
@@ -77,6 +78,7 @@ def test_invalid_calendar_date_is_rejected():
 
 # ── comparison splitting ───────────────────────────────────────────────────
 
+
 def test_comparison_splits_into_two_distinct_periods():
     pair = _named_periods("Compare 10 June and 12 June 2026 revenue.")
     assert pair is not None
@@ -84,10 +86,14 @@ def test_comparison_splits_into_two_distinct_periods():
 
 
 def test_comparison_handles_vs_connective():
+    # _named_periods parses against the real business date, so the expectation
+    # is derived from today rather than pinned to a month that goes stale.
     pair = _named_periods("last month vs this month")
     assert pair is not None
-    assert pair[0].start == date(2026, 7, 1)
-    assert pair[1].start == date(2026, 8, 1)
+    this_month = business_today().replace(day=1)
+    last_month = (this_month - timedelta(days=1)).replace(day=1)
+    assert pair[0].start == last_month
+    assert pair[1].start == this_month
 
 
 def test_single_period_question_is_not_a_comparison():

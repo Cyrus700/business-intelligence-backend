@@ -14,9 +14,12 @@ Revision ID: 29aa60c95764
 Revises: 6ad649b27309
 Create Date: 2026-08-20
 """
+
 from collections.abc import Sequence
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
+
 from alembic import op
 
 revision: str = "29aa60c95764"
@@ -59,7 +62,9 @@ def upgrade() -> None:
 
     # organizations
     add_column_if_missing("organizations", sa.Column("slug", sa.String(), nullable=True))
-    add_column_if_missing("organizations", sa.Column("is_legacy", sa.Boolean(), server_default=sa.text("false"), nullable=False))
+    add_column_if_missing(
+        "organizations", sa.Column("is_legacy", sa.Boolean(), server_default=sa.text("false"), nullable=False)
+    )
     # create unique constraint/index for slug if missing
     try:
         op.create_index(op.f("ix_organizations_slug"), "organizations", ["slug"], unique=True)
@@ -71,21 +76,29 @@ def upgrade() -> None:
         pass
 
     # profiles.is_super_admin + tighten org_id FK
-    add_column_if_missing("profiles", sa.Column("is_super_admin", sa.Boolean(), server_default=sa.text("false"), nullable=False))
+    add_column_if_missing(
+        "profiles", sa.Column("is_super_admin", sa.Boolean(), server_default=sa.text("false"), nullable=False)
+    )
 
     # organization_invites table
     try:
         op.create_table(
             "organization_invites",
             sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-            sa.Column("org_id", UUID(as_uuid=True), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False),
+            sa.Column(
+                "org_id", UUID(as_uuid=True), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+            ),
             sa.Column("email", sa.String(), nullable=True),
             sa.Column("role", sa.String(), nullable=False, server_default="analyst"),
             sa.Column("token", sa.String(), nullable=False, unique=True),
-            sa.Column("created_by", UUID(as_uuid=True), sa.ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True),
+            sa.Column(
+                "created_by", UUID(as_uuid=True), sa.ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True
+            ),
             sa.Column("expires_at", sa.DateTime(), nullable=False),
             sa.Column("accepted_at", sa.DateTime(), nullable=True),
-            sa.Column("accepted_by", UUID(as_uuid=True), sa.ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True),
+            sa.Column(
+                "accepted_by", UUID(as_uuid=True), sa.ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True
+            ),
             sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
             sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         )
@@ -101,7 +114,9 @@ def upgrade() -> None:
     legacy_id = conn.execute(sa.text("SELECT id FROM organizations WHERE is_legacy = true LIMIT 1")).scalar()
     if legacy_id is None:
         # No legacy yet — try to find any org named legacy, else create
-        legacy_id = conn.execute(sa.text("SELECT id FROM organizations WHERE name = :n"), {"n": LEGACY_ORG_NAME}).scalar()
+        legacy_id = conn.execute(
+            sa.text("SELECT id FROM organizations WHERE name = :n"), {"n": LEGACY_ORG_NAME}
+        ).scalar()
     if legacy_id is None:
         # Create new legacy org
         legacy_id = conn.execute(
@@ -114,8 +129,10 @@ def upgrade() -> None:
         print(f"Created legacy org {legacy_id}")
     else:
         # Ensure flags
-        conn.execute(sa.text("UPDATE organizations SET is_legacy = true, slug = COALESCE(slug, :slug) WHERE id = :id"), {"id": legacy_id, "slug": LEGACY_ORG_SLUG})
-    legacy_id_str = str(legacy_id)
+        conn.execute(
+            sa.text("UPDATE organizations SET is_legacy = true, slug = COALESCE(slug, :slug) WHERE id = :id"),
+            {"id": legacy_id, "slug": LEGACY_ORG_SLUG},
+        )
 
     # ── 3. Define tenant tables and org_id handling
     # Table -> (schema, needs_add, has_unique_global)
@@ -170,7 +187,16 @@ def upgrade() -> None:
                         print(f"add_column {schema}.{table} org_id failed: {e}")
                 # FK
                 try:
-                    op.create_foreign_key(op.f("fk_raw_uploads_org_id_organizations"), table, "organizations", ["org_id"], ["id"], source_schema=schema, referent_schema="public", ondelete="CASCADE")
+                    op.create_foreign_key(
+                        op.f("fk_raw_uploads_org_id_organizations"),
+                        table,
+                        "organizations",
+                        ["org_id"],
+                        ["id"],
+                        source_schema=schema,
+                        referent_schema="public",
+                        ondelete="CASCADE",
+                    )
                 except Exception:
                     pass
                 try:
@@ -192,7 +218,14 @@ def upgrade() -> None:
                     if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
                         print(f"add_column {table} org_id failed: {e}")
                 try:
-                    op.create_foreign_key(op.f(f"fk_{table}_org_id_organizations"), table, "organizations", ["org_id"], ["id"], ondelete="CASCADE")
+                    op.create_foreign_key(
+                        op.f(f"fk_{table}_org_id_organizations"),
+                        table,
+                        "organizations",
+                        ["org_id"],
+                        ["id"],
+                        ondelete="CASCADE",
+                    )
                 except Exception as e:
                     if "already exists" not in str(e).lower():
                         pass
@@ -285,10 +318,16 @@ def upgrade() -> None:
     # kpi_snapshots: (snapshot_date, metric, dimensions) -> (+ org_id)
     try:
         conn.execute(sa.text("ALTER TABLE kpi_snapshots DROP CONSTRAINT IF EXISTS uq_kpi_point"))
-        conn.execute(sa.text("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname='uq_kpi_point') THEN ALTER TABLE kpi_snapshots DROP CONSTRAINT uq_kpi_point; END IF; END $$"))
+        conn.execute(
+            sa.text(
+                "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname='uq_kpi_point') THEN ALTER TABLE kpi_snapshots DROP CONSTRAINT uq_kpi_point; END IF; END $$"
+            )
+        )
         # Use op if column names change; create new
         try:
-            op.create_unique_constraint("uq_kpi_point", "kpi_snapshots", ["snapshot_date", "metric", "dimensions", "org_id"])
+            op.create_unique_constraint(
+                "uq_kpi_point", "kpi_snapshots", ["snapshot_date", "metric", "dimensions", "org_id"]
+            )
         except Exception as e:
             if "already exists" not in str(e):
                 print(f"kpi_snapshots unique: {e}")
@@ -299,7 +338,9 @@ def upgrade() -> None:
     try:
         conn.execute(sa.text("ALTER TABLE ml_models DROP CONSTRAINT IF EXISTS uq_model_version"))
         try:
-            op.create_unique_constraint("uq_model_version", "ml_models", ["model_type", "target", "dimensions", "version", "org_id"])
+            op.create_unique_constraint(
+                "uq_model_version", "ml_models", ["model_type", "target", "dimensions", "version", "org_id"]
+            )
         except Exception:
             pass
     except Exception as e:

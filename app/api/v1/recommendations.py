@@ -128,9 +128,7 @@ async def decide_recommendation(
         severity=insight.severity,
         evidence=insight.evidence,
         dedupe_key=insight.dedupe_key,
-        impact_estimate=float(insight.impact_estimate)
-        if insight.impact_estimate is not None
-        else None,
+        impact_estimate=float(insight.impact_estimate) if insight.impact_estimate is not None else None,
         priority=insight.priority,
         action=insight.action,
         status=insight.status,

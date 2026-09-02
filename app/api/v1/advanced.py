@@ -5,15 +5,12 @@ global cross-filters (date / region / channel / category) exactly like the
 rest of the dashboard.
 """
 
-from datetime import date
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbSession, get_current_user
-from app.api.v1.analytics import FiltersDep, get_filters
-from app.core.clock import business_today
+from app.api.v1.analytics import FiltersDep
 from app.models import Product, SalesTransaction
 from app.services.analytics import advanced
 from app.services.analytics.influencers import key_influencers
@@ -25,15 +22,12 @@ from app.services.ml.segmentation import segment
 router = APIRouter(prefix="/advanced", tags=["advanced"], dependencies=[Depends(get_current_user)])
 
 
-def _daily_series(db: AsyncSession, f: Filters, metric: str = "revenue") -> list[dict]:
+async def _daily_series(db: AsyncSession, f: Filters, metric: str = "revenue") -> list[dict]:
     bucket = cast(func.date_trunc("day", cast(SalesTransaction.txn_date, Date)), Date)
     if metric == "orders":
         expr = func.count(SalesTransaction.id)
     elif metric == "gross_margin":
-        expr = func.sum(
-            SalesTransaction.total_amount
-            - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
-        )
+        expr = func.sum(SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity)
     else:
         expr = func.sum(SalesTransaction.total_amount)
     from app.services.analytics.queries import _sales_conditions
@@ -41,15 +35,13 @@ def _daily_series(db: AsyncSession, f: Filters, metric: str = "revenue") -> list
     stmt = (
         select(bucket.label("ds"), expr.label("y"))
         .select_from(
-            SalesTransaction.__table__.join(
-                Product.__table__, Product.id == SalesTransaction.product_id, isouter=True
-            )
+            SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id, isouter=True)
         )
         .where(*_sales_conditions(f, f.date_from, f.date_to))
         .group_by(bucket)
         .order_by(bucket)
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     return [{"ds": r.ds, "y": float(r.y or 0.0)} for r in rows]
 
 
@@ -130,7 +122,7 @@ async def forecast_scenarios_endpoint(
     n_paths: int = Query(500, ge=50, le=2000),
     model: str | None = None,
 ):
-    series = _daily_series(db, f, metric=metric)
+    series = await _daily_series(db, f, metric=metric)
     if len(series) < 7:
         return {"error": "insufficient history for probabilistic forecast", "points": 0}
     import pandas as pd
@@ -140,11 +132,9 @@ async def forecast_scenarios_endpoint(
 
 
 @router.get("/model-comparison")
-async def model_comparison_endpoint(
-    db: DbSession, f: FiltersDep, metric: str = "revenue"
-):
+async def model_comparison_endpoint(db: DbSession, f: FiltersDep, metric: str = "revenue"):
     """Holdout MAPE for every candidate model on the selected series."""
-    series = _daily_series(db, f, metric=metric)
+    series = await _daily_series(db, f, metric=metric)
     if len(series) < fc.HOLDOUT_DAYS + 14:
         return {"error": "need at least ~104 days of history", "candidates": []}
     import pandas as pd

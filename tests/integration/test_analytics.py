@@ -19,10 +19,7 @@ CSV = (
     "2026-05-15,BEV-001,Everest Tea,Beverages,Namaste Mart,retail,Kathmandu,Bagmati,store,5,320,0\n"
 )
 EXPENSES_CSV = "date,category,amount\n2026-06-05,rent,5000\n2026-06-20,marketing,2500\n"
-INVENTORY_CSV = (
-    "date,sku,quantity_on_hand,reorder_level\n"
-    "2026-06-30,BEV-001,500,120\n2026-06-30,SNK-001,100,120\n"
-)
+INVENTORY_CSV = "date,sku,quantity_on_hand,reorder_level\n2026-06-30,BEV-001,500,120\n2026-06-30,SNK-001,100,120\n"
 
 RANGE = {"from": "2026-06-01", "to": "2026-06-30"}
 
@@ -58,9 +55,7 @@ async def test_kpi_summary_values_and_period_change(client, seeded):
 
 
 async def test_kpi_summary_with_region_filter(client, seeded):
-    resp = await client.get(
-        "/api/v1/kpis/summary", headers=auth(seeded), params={**RANGE, "region": "Bagmati"}
-    )
+    resp = await client.get("/api/v1/kpis/summary", headers=auth(seeded), params={**RANGE, "region": "Bagmati"})
     cards = {c["metric"]: c for c in resp.json()["cards"]}
     assert cards["revenue"]["value"] == 1600.0  # 960 + 640
     assert "expense_total" not in cards  # expenses carry no sales dimensions
@@ -156,9 +151,7 @@ async def test_inventory_levels_flags_reorder(client, seeded):
     assert rows["SNK-001"]["below_reorder"] is True
     assert rows["BEV-001"]["below_reorder"] is False
 
-    resp = await client.get(
-        "/api/v1/inventory/levels", headers=auth(seeded), params={"below_reorder": "true"}
-    )
+    resp = await client.get("/api/v1/inventory/levels", headers=auth(seeded), params={"below_reorder": "true"})
     assert [r["sku"] for r in resp.json()] == ["SNK-001"]
 
 

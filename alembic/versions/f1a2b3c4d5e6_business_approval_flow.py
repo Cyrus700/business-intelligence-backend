@@ -4,9 +4,11 @@ Revision ID: f1a2b3c4d5e6
 Revises: d0def9feeedd
 Create Date: 2026-09-02
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "f1a2b3c4d5e6"
 down_revision = ("d0def9feeedd", "29aa60c95764")
@@ -22,15 +24,21 @@ def upgrade():
     op.add_column("organizations", sa.Column("rejected_at", sa.DateTime(), nullable=True))
     op.add_column("organizations", sa.Column("rejected_by", postgresql.UUID(as_uuid=True), nullable=True))
     op.add_column("organizations", sa.Column("rejection_reason", sa.Text(), nullable=True))
-    op.create_foreign_key("fk_organizations_approved_by", "organizations", "profiles", ["approved_by"], ["id"], ondelete="SET NULL")
-    op.create_foreign_key("fk_organizations_rejected_by", "organizations", "profiles", ["rejected_by"], ["id"], ondelete="SET NULL")
+    op.create_foreign_key(
+        "fk_organizations_approved_by", "organizations", "profiles", ["approved_by"], ["id"], ondelete="SET NULL"
+    )
+    op.create_foreign_key(
+        "fk_organizations_rejected_by", "organizations", "profiles", ["rejected_by"], ["id"], ondelete="SET NULL"
+    )
     op.create_index("ix_organizations_status", "organizations", ["status"])
 
     # Existing orgs (legacy and already created) are considered approved
     op.execute("UPDATE organizations SET status='approved', approved_at=now() WHERE status='pending'")
 
     # Profiles: email verification
-    op.add_column("profiles", sa.Column("email_verified", sa.Boolean(), nullable=False, server_default=sa.text("false")))
+    op.add_column(
+        "profiles", sa.Column("email_verified", sa.Boolean(), nullable=False, server_default=sa.text("false"))
+    )
     op.add_column("profiles", sa.Column("email_verification_token", sa.String(length=128), nullable=True))
     op.add_column("profiles", sa.Column("email_verification_expires_at", sa.DateTime(), nullable=True))
     op.add_column("profiles", sa.Column("email_verified_at", sa.DateTime(), nullable=True))

@@ -46,9 +46,7 @@ MAX_TOOL_TURNS = 4  # how many tool rounds per user question
 # Casual/social exchanges never touch the LLM: the deterministic local
 # engine answers them instantly and consistently, so "hello" always gets
 # a friendly greeting instead of a data dump.
-CONVERSATIONAL_INTENTS = frozenset(
-    {Intent.GREETING, Intent.THANKS, Intent.HELP, Intent.CAPABILITIES}
-)
+CONVERSATIONAL_INTENTS = frozenset({Intent.GREETING, Intent.THANKS, Intent.HELP, Intent.CAPABILITIES})
 
 
 async def _reset_transaction(db: AsyncSession) -> None:
@@ -73,12 +71,15 @@ class AnswerResult:
 
 
 def _build_system_prompt(
-    role: str, business_context: str, page: str | None = None, intent: Intent | None = None,
-    *, tools_enabled: bool = True,
+    role: str,
+    business_context: str,
+    page: str | None = None,
+    intent: Intent | None = None,
+    *,
+    tools_enabled: bool = True,
 ) -> str:
     role_guide = {
-        "admin": "The user is an ADMIN with full access to all modules and can act "
-        "on any recommendation.",
+        "admin": "The user is an ADMIN with full access to all modules and can act on any recommendation.",
         "manager": "The user is a MANAGER focused on operational decisions and team priorities.",
         "analyst": "The user is an ANALYST and appreciates precise, data-heavy detail.",
     }.get(role, "The user has dashboard access.")
@@ -168,9 +169,7 @@ async def _run_tool_loop(
     last_error: Exception | None = None
     for provider in providers:
         try:
-            reply, turns, evidence = await _tool_session(
-                db, user, messages, system_prompt, provider
-            )
+            reply, turns, evidence = await _tool_session(db, user, messages, system_prompt, provider)
             if reply.strip():
                 return reply, turns, evidence
         except Exception as e:  # noqa: PERF203 - provider failover is the point
@@ -201,9 +200,7 @@ async def _tool_session(
     # When the question names a date the 30-day snapshot cannot answer, a model
     # that declines to call a tool has nothing to answer *from* — so require a
     # call on the first turn instead of relying on its judgement.
-    question = next(
-        (m.content for m in reversed(loop_messages) if m.role == "user"), ""
-    )
+    question = next((m.content for m in reversed(loop_messages) if m.role == "user"), "")
     parsed_period = parse_period(question)
     force_tools = parsed_period is not None
 
@@ -240,18 +237,12 @@ async def _tool_session(
         turns += 1
         # The assistant turn must carry the tool_calls it made, and each result
         # must reference its call id — otherwise the next request is rejected.
-        loop_messages.append(
-            AIMessage(role="assistant", content=resp.content or "", tool_calls=resp.tool_calls)
-        )
+        loop_messages.append(AIMessage(role="assistant", content=resp.content or "", tool_calls=resp.tool_calls))
         for call in resp.tool_calls:
             result = await dispatch_tool(db, user, call.name, call.arguments)
             logger.info("tool %s(%s) → %d chars", call.name, call.arguments, len(result))
             evidence.append(result)
-            loop_messages.append(
-                AIMessage(
-                    role="tool", content=result, tool_call_id=call.id, name=call.name
-                )
-            )
+            loop_messages.append(AIMessage(role="tool", content=result, tool_call_id=call.id, name=call.name))
 
     # Turn budget spent while still calling tools. Ask once more with tools
     # withheld so the user gets a composed answer — never a raw tool dump.
@@ -261,8 +252,7 @@ async def _tool_session(
             AIMessage(
                 role="user",
                 content=(
-                    "Now answer my original question using only the tool results above. "
-                    "Do not call any more tools."
+                    "Now answer my original question using only the tool results above. Do not call any more tools."
                 ),
             ),
         ],
@@ -326,7 +316,9 @@ async def answer_question(
     org_id = None if getattr(user, "is_super_admin", False) else getattr(user, "org_id", None) if user else None
     if intent in CONVERSATIONAL_INTENTS:
         try:
-            return AnswerResult(reply=await local_answer(db, question, intent, org_id=org_id, user=user), source="local")
+            return AnswerResult(
+                reply=await local_answer(db, question, intent, org_id=org_id, user=user), source="local"
+            )
         except Exception as e:
             logger.warning("Local conversational answer failed: %s", e)
             await _reset_transaction(db)
@@ -344,9 +336,7 @@ async def answer_question(
     try:
         reply, used, tool_evidence = await _run_tool_loop(db, user, msgs, system_prompt)
         if reply.strip():
-            result = await _verified(
-                db, reply, baseline_evidence + tool_evidence, msgs, system_prompt, used
-            )
+            result = await _verified(db, reply, baseline_evidence + tool_evidence, msgs, system_prompt, used)
             if result is not None:
                 return result
     except Exception as e:
@@ -402,9 +392,7 @@ def _snapshot_fallback(business_context: str) -> str:
 # a forecast total and an anomaly count — nothing by channel, by region, and no
 # period-against-period comparison. Streaming these from the snapshot alone
 # produces a confident answer built on data that was never in the prompt.
-SNAPSHOT_BLIND_INTENTS = frozenset(
-    {Intent.CHANNELS, Intent.REGIONS, Intent.COMPARE}
-)
+SNAPSHOT_BLIND_INTENTS = frozenset({Intent.CHANNELS, Intent.REGIONS, Intent.COMPARE})
 
 # Phrasings that ask for detail past the snapshot's depth even when the intent
 # looks covered: a breakdown, a per-day series, a ranking longer than five, or
@@ -475,9 +463,7 @@ async def stream_answer(
     # No tools are attached to a streaming call, so the prompt must not claim
     # otherwise: told to "CALL THE TOOLS" with none available, the model either
     # stalls or narrates a tool call it never made.
-    system_prompt = _build_system_prompt(
-        role, business_context, page, intent, tools_enabled=False
-    )
+    system_prompt = _build_system_prompt(role, business_context, page, intent, tools_enabled=False)
     msgs = _recent_history(history or [])
 
     settings = get_settings()

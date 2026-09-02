@@ -84,7 +84,7 @@ def _severity_for(issue_type: str, row_count: int) -> str:
 
 def _iso_sample(rows: list[tuple]) -> list[dict]:
     out = []
-    for row in rows[: _MAX_SAMPLE_ROWS]:
+    for row in rows[:_MAX_SAMPLE_ROWS]:
         out.append({str(i): str(v) for i, v in enumerate(row)})
     return out
 
@@ -139,8 +139,12 @@ async def _audit_sales(db: AsyncSession) -> _TableResult:
     if bad:
         issues.append(
             _issue(
-                "sales_transactions", "completeness", "null_required",
-                _severity_for("null_required", int(bad)), "domain:sales", "Sales domain",
+                "sales_transactions",
+                "completeness",
+                "null_required",
+                _severity_for("null_required", int(bad)),
+                "domain:sales",
+                "Sales domain",
                 f"{int(bad)} of {int(total)} sales rows missing a required field "
                 "(txn_date, quantity, unit_price, total_amount or product).",
                 int(bad),
@@ -163,8 +167,12 @@ async def _audit_sales(db: AsyncSession) -> _TableResult:
     if invalid:
         issues.append(
             _issue(
-                "sales_transactions", "validity", "negative_value",
-                _severity_for("negative_value", int(invalid)), "domain:sales", "Sales domain",
+                "sales_transactions",
+                "validity",
+                "negative_value",
+                _severity_for("negative_value", int(invalid)),
+                "domain:sales",
+                "Sales domain",
                 f"{int(invalid)} of {int(total)} sales rows violate validity rules "
                 "(non-positive quantity/price, negative discount, future date).",
                 int(invalid),
@@ -177,19 +185,20 @@ async def _audit_sales(db: AsyncSession) -> _TableResult:
         .select_from(SalesTransaction)
         .where(
             SalesTransaction.total_amount
-            == SalesTransaction.quantity * SalesTransaction.unit_price
-            - SalesTransaction.discount
+            == SalesTransaction.quantity * SalesTransaction.unit_price - SalesTransaction.discount
         ),
     )
     acc_bad = total - acc_total
     if acc_bad:
         issues.append(
             _issue(
-                "sales_transactions", "accuracy", "expected_total_mismatch",
+                "sales_transactions",
+                "accuracy",
+                "expected_total_mismatch",
                 _severity_for("expected_total_mismatch", int(acc_bad)),
-                "domain:sales", "Sales domain",
-                f"{int(acc_bad)} sales rows where total_amount ≠ "
-                "quantity × unit_price − discount.",
+                "domain:sales",
+                "Sales domain",
+                f"{int(acc_bad)} sales rows where total_amount ≠ quantity × unit_price − discount.",
                 int(acc_bad),
             )
         )
@@ -217,8 +226,12 @@ async def _audit_sales(db: AsyncSession) -> _TableResult:
     if dup_count:
         issues.append(
             _issue(
-                "sales_transactions", "uniqueness", "duplicate_row",
-                _severity_for("duplicate_row", int(dup_count)), "domain:sales", "Sales domain",
+                "sales_transactions",
+                "uniqueness",
+                "duplicate_row",
+                _severity_for("duplicate_row", int(dup_count)),
+                "domain:sales",
+                "Sales domain",
                 f"{int(dup_count)} duplicate sales rows (same date, product, quantity, total).",
                 int(dup_count),
                 _iso_sample([tuple(r) for r in dup_rows[:_MAX_SAMPLE_ROWS]]),
@@ -235,10 +248,13 @@ async def _audit_sales(db: AsyncSession) -> _TableResult:
     if orphan:
         issues.append(
             _issue(
-                "sales_transactions", "consistency", "orphan_fk",
-                "critical", "domain:sales", "Sales domain",
-                f"{int(orphan)} sales rows reference a product that no longer exists "
-                "(orphaned product_id).",
+                "sales_transactions",
+                "consistency",
+                "orphan_fk",
+                "critical",
+                "domain:sales",
+                "Sales domain",
+                f"{int(orphan)} sales rows reference a product that no longer exists (orphaned product_id).",
                 int(orphan),
             )
         )
@@ -283,8 +299,12 @@ async def _audit_expenses(db: AsyncSession) -> _TableResult:
     if bad:
         issues.append(
             _issue(
-                "expenses", "completeness", "null_required",
-                _severity_for("null_required", int(bad)), "domain:finance", "Finance domain",
+                "expenses",
+                "completeness",
+                "null_required",
+                _severity_for("null_required", int(bad)),
+                "domain:finance",
+                "Finance domain",
                 f"{int(bad)} of {int(total)} expense rows missing date, amount or category.",
                 int(bad),
             )
@@ -304,10 +324,13 @@ async def _audit_expenses(db: AsyncSession) -> _TableResult:
     if invalid:
         issues.append(
             _issue(
-                "expenses", "validity", "invalid_category",
-                _severity_for("invalid_category", int(invalid)), "domain:finance", "Finance domain",
-                f"{int(invalid)} expense rows with negative amounts or categories outside "
-                f"{VALID_EXPENSE_CATEGORIES}.",
+                "expenses",
+                "validity",
+                "invalid_category",
+                _severity_for("invalid_category", int(invalid)),
+                "domain:finance",
+                "Finance domain",
+                f"{int(invalid)} expense rows with negative amounts or categories outside {VALID_EXPENSE_CATEGORIES}.",
                 int(invalid),
             )
         )
@@ -329,8 +352,12 @@ async def _audit_expenses(db: AsyncSession) -> _TableResult:
     if dup_count:
         issues.append(
             _issue(
-                "expenses", "uniqueness", "duplicate_row",
-                _severity_for("duplicate_row", int(dup_count)), "domain:finance", "Finance domain",
+                "expenses",
+                "uniqueness",
+                "duplicate_row",
+                _severity_for("duplicate_row", int(dup_count)),
+                "domain:finance",
+                "Finance domain",
                 f"{int(dup_count)} duplicate expense rows (same date, category, amount).",
                 int(dup_count),
                 _iso_sample([tuple(r) for r in dup_rows[:_MAX_SAMPLE_ROWS]]),
@@ -373,11 +400,13 @@ async def _audit_inventory(db: AsyncSession) -> _TableResult:
     if bad:
         issues.append(
             _issue(
-                "inventory_levels", "completeness", "null_required",
+                "inventory_levels",
+                "completeness",
+                "null_required",
                 _severity_for("null_required", int(bad)),
-                "domain:inventory", "Inventory domain",
-                f"{int(bad)} of {int(total)} inventory rows missing snapshot date, "
-                "quantity or product.",
+                "domain:inventory",
+                "Inventory domain",
+                f"{int(bad)} of {int(total)} inventory rows missing snapshot date, quantity or product.",
                 int(bad),
             )
         )
@@ -395,9 +424,12 @@ async def _audit_inventory(db: AsyncSession) -> _TableResult:
     if invalid:
         issues.append(
             _issue(
-                "inventory_levels", "validity", "negative_value",
+                "inventory_levels",
+                "validity",
+                "negative_value",
                 _severity_for("negative_value", int(invalid)),
-                "domain:inventory", "Inventory domain",
+                "domain:inventory",
+                "Inventory domain",
                 f"{int(invalid)} inventory rows with negative quantity or future snapshot date.",
                 int(invalid),
             )
@@ -413,8 +445,12 @@ async def _audit_inventory(db: AsyncSession) -> _TableResult:
     if orphan:
         issues.append(
             _issue(
-                "inventory_levels", "consistency", "orphan_fk",
-                "critical", "domain:inventory", "Inventory domain",
+                "inventory_levels",
+                "consistency",
+                "orphan_fk",
+                "critical",
+                "domain:inventory",
+                "Inventory domain",
                 f"{int(orphan)} inventory rows reference a missing product.",
                 int(orphan),
             )
@@ -443,17 +479,18 @@ async def _audit_products(db: AsyncSession) -> _TableResult:
 
     complete = await _count(
         db,
-        select(func.count()).select_from(Product).where(
-            Product.sku.is_not(None), Product.name.is_not(None)
-        ),
+        select(func.count()).select_from(Product).where(Product.sku.is_not(None), Product.name.is_not(None)),
     )
     bad = total - complete
     if bad:
         issues.append(
             _issue(
-                "products", "completeness", "null_required",
+                "products",
+                "completeness",
+                "null_required",
                 _severity_for("null_required", int(bad)),
-                "table:products", "Product dimension",
+                "table:products",
+                "Product dimension",
                 f"{int(bad)} products missing SKU or name.",
                 int(bad),
             )
@@ -471,9 +508,12 @@ async def _audit_products(db: AsyncSession) -> _TableResult:
     if dup_count:
         issues.append(
             _issue(
-                "products", "uniqueness", "duplicate_row",
+                "products",
+                "uniqueness",
+                "duplicate_row",
                 _severity_for("duplicate_row", int(dup_count)),
-                "table:products", "Product dimension",
+                "table:products",
+                "Product dimension",
                 f"{int(dup_count)} duplicate product SKUs.",
                 int(dup_count),
                 _iso_sample([tuple(r) for r in dup_rows[:_MAX_SAMPLE_ROWS]]),
@@ -491,9 +531,7 @@ async def _audit_products(db: AsyncSession) -> _TableResult:
     )
 
 
-async def _compute_timeliness(
-    db: AsyncSession, today: date
-) -> tuple[float, list[DataQualityIssue]]:
+async def _compute_timeliness(db: AsyncSession, today: date) -> tuple[float, list[DataQualityIssue]]:
     """Timeliness per domain: how long since the freshest row was ingested.
 
     Score 100 when within tolerance, decaying linearly to 0 at 4× tolerance.
@@ -502,9 +540,7 @@ async def _compute_timeliness(
     scores: list[float] = []
     domains = {"sales": SalesTransaction, "finance": Expense, "inventory": InventoryLevel}
     for domain, model in domains.items():
-        latest = (
-            await db.execute(select(func.max(model.ingested_at)).select_from(model))
-        ).scalar_one()
+        latest = (await db.execute(select(func.max(model.ingested_at)).select_from(model))).scalar_one()
         tolerance = TIMELINESS_TOLERANCE_DAYS[domain]
         if latest is None:
             scores.append(100.0)  # empty domain: nothing stale
@@ -515,11 +551,13 @@ async def _compute_timeliness(
         if stale_days > tolerance:
             issues.append(
                 _issue(
-                    domain, "timeliness", "stale_ingestion",
+                    domain,
+                    "timeliness",
+                    "stale_ingestion",
                     "warning" if stale_days <= 14 else "critical",
-                    f"domain:{domain}", f"{domain.capitalize()} domain",
-                    f"No {domain} rows ingested for {stale_days} day(s) "
-                    f"(tolerance: {tolerance} day(s)).",
+                    f"domain:{domain}",
+                    f"{domain.capitalize()} domain",
+                    f"No {domain} rows ingested for {stale_days} day(s) (tolerance: {tolerance} day(s)).",
                     1,
                 )
             )
@@ -544,10 +582,13 @@ async def _verify_forecast_consistency(db: AsyncSession) -> list[DataQualityIssu
         return []
     return [
         _issue(
-            "forecasts", "consistency", "invalid_date",
-            "warning", "domain:sales", "Sales domain",
-            f"{len(rows)} active forecast rows have upper bound below lower bound "
-            "(inverted confidence interval).",
+            "forecasts",
+            "consistency",
+            "invalid_date",
+            "warning",
+            "domain:sales",
+            "Sales domain",
+            f"{len(rows)} active forecast rows have upper bound below lower bound (inverted confidence interval).",
             len(rows),
         )
     ]
@@ -563,13 +604,14 @@ async def _source_quality(
     out: dict[str, dict] = {}
     for source in sources:
         job = (
-            await db.execute(
-                select(EtlJob)
-                .where(EtlJob.data_source_id == source.id)
-                .order_by(EtlJob.started_at.desc())
-                .limit(1)
+            (
+                await db.execute(
+                    select(EtlJob).where(EtlJob.data_source_id == source.id).order_by(EtlJob.started_at.desc()).limit(1)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         out[source.name] = {
             "kind": source.kind,
             "status": source.status,
@@ -581,9 +623,7 @@ async def _source_quality(
     return out
 
 
-async def run_quality_audit(
-    db: AsyncSession, triggered_by: str = "schedule", org_id=None
-) -> DataQualityRun | None:
+async def run_quality_audit(db: AsyncSession, triggered_by: str = "schedule", org_id=None) -> DataQualityRun | None:
     """Run the full quality audit and persist a DataQualityRun + issues."""
     start = time.perf_counter()
     today = business_today()
@@ -654,7 +694,10 @@ async def run_quality_audit(
 
     logger.info(
         "data quality run: score=%s rows=%d issues=%d (%s)",
-        overall, rows_checked, len(all_issues[:_MAX_ISSUES_PER_TYPE]), triggered_by,
+        overall,
+        rows_checked,
+        len(all_issues[:_MAX_ISSUES_PER_TYPE]),
+        triggered_by,
     )
     return run
 
@@ -677,10 +720,7 @@ def _dimension_scores(results: dict[str, _TableResult], timeliness: float) -> di
 def _table_breakdown(results: dict[str, _TableResult], timeliness: float) -> dict:
     out: dict[str, dict] = {}
     for table, res in results.items():
-        table_scores = {
-            dim: _pct(res.dimension_hits[dim], res.dimension_total[dim])
-            for dim in res.dimension_hits
-        }
+        table_scores = {dim: _pct(res.dimension_hits[dim], res.dimension_total[dim]) for dim in res.dimension_hits}
         if table in TABLE_DOMAINS:
             table_scores["timeliness"] = timeliness
         out[table] = {
@@ -695,18 +735,14 @@ def _domain_breakdown(results: dict[str, _TableResult]) -> dict:
     domains: dict[str, dict] = {}
     for table, res in results.items():
         domain = TABLE_DOMAINS.get(table, "other")
-        entry = domains.setdefault(
-            domain, {"rows_checked": 0, "tables": [], "issues": 0}
-        )
+        entry = domains.setdefault(domain, {"rows_checked": 0, "tables": [], "issues": 0})
         entry["rows_checked"] += res.rows_checked
         entry["issues"] += len(res.issues)
         entry["tables"].append(table)
     return domains
 
 
-async def acknowledge_issue(
-    db: AsyncSession, issue_id, status: str, user_id
-) -> DataQualityIssue | None:
+async def acknowledge_issue(db: AsyncSession, issue_id, status: str, user_id) -> DataQualityIssue | None:
     status = status if status in ("acknowledged", "resolved") else "acknowledged"
     issue = await db.get(DataQualityIssue, issue_id)
     if issue is None:

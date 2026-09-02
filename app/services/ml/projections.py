@@ -207,9 +207,7 @@ class Scenario:
                 "revenue": round(self.revenue_delta, 2),
                 "profit": round(self.profit_delta, 2),
                 "revenue_pct": (
-                    round(self.revenue_delta / self.baseline_revenue * 100, 1)
-                    if self.baseline_revenue
-                    else None
+                    round(self.revenue_delta / self.baseline_revenue * 100, 1) if self.baseline_revenue else None
                 ),
             },
         }
@@ -250,6 +248,7 @@ def simulate(
 
 # ── warehouse-backed wrappers ──────────────────────────────────────────────
 
+
 def month_bounds(day: date) -> tuple[date, date]:
     start = day.replace(day=1)
     next_month = (start + timedelta(days=32)).replace(day=1)
@@ -273,14 +272,10 @@ async def project_current_period(
     """Project how the current month or quarter lands, from live daily data."""
     today = business_today()
     start, end = quarter_bounds(today) if period == "quarter" else month_bounds(today)
-    label = f"Q{(start.month - 1) // 3 + 1} {start.year}" if period == "quarter" else (
-        start.strftime("%B %Y")
-    )
+    label = f"Q{(start.month - 1) // 3 + 1} {start.year}" if period == "quarter" else (start.strftime("%B %Y"))
 
     history_from = min(start, today - timedelta(days=lookback_days - 1))
-    points = await kpi_timeseries(
-        db, Filters(date_from=history_from, date_to=today, org_id=org_id), metric, "day"
-    )
+    points = await kpi_timeseries(db, Filters(date_from=history_from, date_to=today, org_id=org_id), metric, "day")
     history = [(p["period"], float(p["value"])) for p in points]
     return project_period(history, start, end, today, metric=metric, period_label=label)
 

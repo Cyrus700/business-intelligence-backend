@@ -8,12 +8,11 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import bcrypt
@@ -32,9 +31,6 @@ def main() -> None:
     parser.add_argument("--quick", action="store_true", help="Skip all prompts")
     args = parser.parse_args()
 
-    if sys.version_info < (3, 12):
-        sys.exit("Python >=3.12 required")
-
     # 1. .env
     env_path = ROOT / ".env"
     if not env_path.exists():
@@ -51,7 +47,9 @@ def main() -> None:
     try:
         subprocess.check_call(
             ["psql", "-U", "postgres", "-h", "localhost", "-c", "SELECT 1"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
         )
     except Exception:
         print("\nWARNING: Postgres not reachable at localhost:5432 user=postgres.")
@@ -62,7 +60,9 @@ def main() -> None:
     for db in ["bi_dev", "bi_test"]:
         subprocess.call(
             ["psql", "-U", "postgres", "-h", "localhost", "-c", f"CREATE DATABASE {db}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
         )
 
     # 5. Migrations
@@ -72,7 +72,7 @@ def main() -> None:
     print("\n>>> Creating dev admin profile & JWT")
 
     admin_id = "00000000-0000-0000-0000-000000000001"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Insert profile if not exists
     pw_hash = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode()
@@ -83,12 +83,14 @@ def main() -> None:
     )
     subprocess.check_call(
         ["psql", "-U", "postgres", "-h", "localhost", "-d", "bi_dev", "-c", insert_sql],
-        stdout=subprocess.DEVNULL, env=env,
+        stdout=subprocess.DEVNULL,
+        env=env,
     )
     print("Admin profile ready")
 
     # Generate JWT
     import jwt as pyjwt
+
     secret = "dev-secret-do-not-use-in-production"
     token = pyjwt.encode(
         {
@@ -105,8 +107,8 @@ def main() -> None:
 
     # Write the dev token to a file for the frontend to reference
     (ROOT / ".dev-token").write_text(token)
-    print(f"\nDev JWT written to .dev-token")
-    print(f"Set this in the frontend .env.local as:")
+    print("\nDev JWT written to .dev-token")
+    print("Set this in the frontend .env.local as:")
     print(f"  NEXT_PUBLIC_DEV_API_TOKEN={token}")
 
     # 7. Seed demo data
@@ -125,9 +127,9 @@ def main() -> None:
     print("\n" + "=" * 50)
     print("  Setup complete!")
     print("=" * 50)
-    print(f"\n  Start backend:   uv run uvicorn app.main:app --reload")
-    print(f"  Start frontend:  cd ../business-intelligence-frontend && bun dev")
-    print(f"  API docs:        http://localhost:8000/docs")
+    print("\n  Start backend:   uv run uvicorn app.main:app --reload")
+    print("  Start frontend:  cd ../business-intelligence-frontend && bun dev")
+    print("  API docs:        http://localhost:8000/docs")
     print()
 
 

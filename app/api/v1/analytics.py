@@ -3,7 +3,6 @@
 import dataclasses
 from datetime import date, timedelta
 from typing import Annotated, Literal
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -106,17 +105,13 @@ async def list_kpi_definitions(
     response_model=KpiDefinitionOut,
     dependencies=[Depends(require_role("admin"))],
 )
-async def update_kpi_definition(
-    metric: str, body: KpiDefinitionUpdate, db: DbSession
-) -> KpiDefinitionOut:
+async def update_kpi_definition(metric: str, body: KpiDefinitionUpdate, db: DbSession) -> KpiDefinitionOut:
     from fastapi import HTTPException
     from sqlalchemy import select
 
     from app.models import KpiDefinition
 
-    definition = (
-        await db.execute(select(KpiDefinition).where(KpiDefinition.metric == metric))
-    ).scalar_one_or_none()
+    definition = (await db.execute(select(KpiDefinition).where(KpiDefinition.metric == metric))).scalar_one_or_none()
     if definition is None:
         raise HTTPException(404, f"No KPI definition for '{metric}'")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -157,7 +152,9 @@ async def get_sales_transactions(
     user: CurrentUser,
     sku: str | None = None,
     search: str | None = None,
-    sort_by: str | None = Query(None, description="Sort column: txn_date|product|channel|region|quantity|total_amount|ingested_at"),
+    sort_by: str | None = Query(
+        None, description="Sort column: txn_date|product|channel|region|quantity|total_amount|ingested_at"
+    ),
     sort_dir: str | None = Query(None, description="Sort direction: asc|desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -191,9 +188,7 @@ async def get_inventory_levels(
     db: DbSession,
     user: CurrentUser,
     below_reorder: bool = False,
-    as_of: Annotated[
-        date | None, Query(description="Newest snapshot on or before this date")
-    ] = None,
+    as_of: Annotated[date | None, Query(description="Newest snapshot on or before this date")] = None,
 ) -> list[InventoryRow]:
     org_id = None if is_super_admin(user) else user.org_id
     return await queries.inventory_levels(db, below_reorder_only=below_reorder, as_of=as_of, org_id=org_id)
@@ -230,9 +225,7 @@ async def diagnose_change_endpoint(
     db: DbSession,
     f: FiltersDep,
     user: CurrentUser,
-    metric: Literal[
-        "revenue", "orders", "avg_order_value", "gross_margin", "expense_total"
-    ] = "revenue",
+    metric: Literal["revenue", "orders", "avg_order_value", "gross_margin", "expense_total"] = "revenue",
     dimensions: str = "region,channel,product",
 ) -> dict:
     f = _scoped_filters(f, user)
@@ -254,6 +247,7 @@ async def diagnose_change_endpoint(
 async def cache_stats() -> dict:
     """Query cache hit/miss statistics."""
     from app.services.analytics.cache import get_cache_stats
+
     return await get_cache_stats()
 
 
@@ -261,5 +255,6 @@ async def cache_stats() -> dict:
 async def cache_clear() -> dict:
     """Clear all cached queries."""
     from app.services.analytics.cache import clear_query_cache
+
     await clear_query_cache()
     return {"status": "cleared"}

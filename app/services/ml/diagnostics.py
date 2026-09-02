@@ -61,8 +61,8 @@ class ChangeBreakdown:
     total_previous: float
     total_delta: float
     change_pct: float | None
-    drivers: list[Contribution] = field(default_factory=list)   # pushed it up
-    drags: list[Contribution] = field(default_factory=list)     # held it down
+    drivers: list[Contribution] = field(default_factory=list)  # pushed it up
+    drags: list[Contribution] = field(default_factory=list)  # held it down
     new_members: list[str] = field(default_factory=list)
     lost_members: list[str] = field(default_factory=list)
 
@@ -139,9 +139,7 @@ def decompose(
         total_current=total_current,
         total_previous=total_previous,
         total_delta=total_delta,
-        change_pct=(
-            round(total_delta / total_previous * 100, 1) if total_previous else None
-        ),
+        change_pct=(round(total_delta / total_previous * 100, 1) if total_previous else None),
         drivers=drivers,
         drags=drags,
         new_members=sorted(c.key for c in contributions if c.status == "new"),
@@ -166,8 +164,8 @@ class PriceVolumeBridge:
     orders_previous: float
     aov_current: float
     aov_previous: float
-    volume_effect: float       # Δorders at last period's average order value
-    value_effect: float        # ΔAOV on last period's order count
+    volume_effect: float  # Δorders at last period's average order value
+    value_effect: float  # ΔAOV on last period's order count
     interaction_effect: float  # the part only explained by both moving
     verdict: str
 
@@ -256,9 +254,7 @@ class Concentration:
 
 
 def concentration(values: dict[str, float], dimension: str = "product") -> Concentration:
-    ranked = sorted(
-        ((k, v) for k, v in values.items() if v > 0), key=lambda kv: kv[1], reverse=True
-    )
+    ranked = sorted(((k, v) for k, v in values.items() if v > 0), key=lambda kv: kv[1], reverse=True)
     total = sum(v for _, v in ranked)
     if not ranked or total <= 0:
         return Concentration(dimension, 0, 0.0, 0.0, 0.0, "no data", [])
@@ -286,6 +282,7 @@ def concentration(values: dict[str, float], dimension: str = "product") -> Conce
 
 # ── warehouse-backed wrappers ──────────────────────────────────────────────
 
+
 async def _revenue_by(db: AsyncSession, dimension: str, start: date, end: date, org_id=None) -> dict[str, float]:
     rows = await sales_by_dimension(db, Filters(date_from=start, date_to=end, org_id=org_id), dimension)
     return {r["key"]: float(r["revenue"]) for r in rows}
@@ -308,7 +305,5 @@ async def explain_change(
     )
 
 
-async def analyse_concentration(
-    db: AsyncSession, dimension: str, start: date, end: date, org_id=None
-) -> Concentration:
+async def analyse_concentration(db: AsyncSession, dimension: str, start: date, end: date, org_id=None) -> Concentration:
     return concentration(await _revenue_by(db, dimension, start, end, org_id=org_id), dimension=dimension)

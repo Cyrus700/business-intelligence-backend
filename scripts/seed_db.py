@@ -31,18 +31,14 @@ SOURCES = [
 async def main() -> None:
     async with get_session_factory()() as db:
         for name, kind, domain, file_name in SOURCES:
-            source = (
-                await db.execute(select(DataSource).where(DataSource.name == name))
-            ).scalar_one_or_none()
+            source = (await db.execute(select(DataSource).where(DataSource.name == name))).scalar_one_or_none()
             if source is None:
                 source = DataSource(name=name, kind=kind, target_domain=domain)
                 db.add(source)
                 await db.flush()
 
             frame = pd.read_csv(OUTPUT / file_name)
-            result = await run_frame_pipeline(
-                db, domain, frame, trigger="manual", source_id=source.id
-            )
+            result = await run_frame_pipeline(db, domain, frame, trigger="manual", source_id=source.id)
             print(
                 f"{file_name:>16}: {result.rows_loaded:,} loaded, "
                 f"{result.skipped_duplicates:,} duplicates skipped, "

@@ -24,9 +24,7 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("email", nargs="?", default=settings.admin_email)
     parser.add_argument("--create", action="store_true", help="create the auth user first")
-    parser.add_argument(
-        "--password", default=settings.admin_password, help="password when using --create"
-    )
+    parser.add_argument("--password", default=settings.admin_password, help="password when using --create")
     args = parser.parse_args()
 
     admin_api = SupabaseAdmin()
@@ -38,13 +36,9 @@ async def main() -> None:
         print(f"created auth user {user_id}")
 
     async with get_session_factory()() as session:
-        profile = (
-            await session.execute(select(Profile).where(Profile.email == args.email))
-        ).scalar_one_or_none()
+        profile = (await session.execute(select(Profile).where(Profile.email == args.email))).scalar_one_or_none()
         if profile is None:
-            raise SystemExit(
-                f"no profile for {args.email} — sign the user up first or pass --create"
-            )
+            raise SystemExit(f"no profile for {args.email} — sign the user up first or pass --create")
         profile.role = "admin"
         await admin_api.set_role(profile.id, "admin")
         await session.commit()

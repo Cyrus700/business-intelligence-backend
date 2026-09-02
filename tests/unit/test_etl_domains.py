@@ -108,16 +108,12 @@ def test_transform_frame_alias_for_expenses_and_inventory():
     )
     assert len(expenses.records) == 1
     assert expenses.records[0]["amount"] == Decimal("5000.00")
-    inventory = transform_frame(
-        "inventory", pd.DataFrame([{"Date": "2026-06-01", "Item Code": "A-1", "Stock": 42}])
-    )
+    inventory = transform_frame("inventory", pd.DataFrame([{"Date": "2026-06-01", "Item Code": "A-1", "Stock": 42}]))
     assert len(inventory.records) == 1
     assert inventory.records[0]["quantity_on_hand"] == 42
 
 
 def test_transform_frame_rejects_conflicting_alias_columns():
-    frame = pd.DataFrame(
-        [{"qty": 1, "quantity": 2, "date": "2026-01-01", "sku": "X", "unit_price": 5}]
-    )
+    frame = pd.DataFrame([{"qty": 1, "quantity": 2, "date": "2026-01-01", "sku": "X", "unit_price": 5}])
     with pytest.raises(ValueError, match="duplicate column names"):
         transform_frame("sales", frame)

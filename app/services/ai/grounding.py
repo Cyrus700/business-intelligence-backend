@@ -50,8 +50,8 @@ _MASK_PATTERNS = (
     re.compile(rf"\b(?:{_MONTHS})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s*\d{{0,4}}\b", re.IGNORECASE),
     re.compile(rf"\b(?:{_MONTHS})\.?\s+\d{{4}}\b", re.IGNORECASE),
     re.compile(r"\bQ[1-4]\s*\d{4}\b", re.IGNORECASE),
-    re.compile(r"\b(?:19|20)\d{2}\b"),          # a bare year
-    re.compile(r"\b\d{1,2}:\d{2}\b"),           # clock time
+    re.compile(r"\b(?:19|20)\d{2}\b"),  # a bare year
+    re.compile(r"\b\d{1,2}:\d{2}\b"),  # clock time
     re.compile(r"^\s*\d{1,2}[.)]\s", re.MULTILINE),  # ordered-list markers
 )
 

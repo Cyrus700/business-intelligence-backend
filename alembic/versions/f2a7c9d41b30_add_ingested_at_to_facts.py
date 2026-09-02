@@ -61,10 +61,7 @@ def upgrade() -> None:
 
         # Everything still unset: fall back to the business date at midnight,
         # which is always <= the true ingestion time and never in the future.
-        op.execute(
-            f"UPDATE {table} SET ingested_at = {date_col}::timestamp "
-            f"WHERE ingested_at IS NULL"
-        )
+        op.execute(f"UPDATE {table} SET ingested_at = {date_col}::timestamp WHERE ingested_at IS NULL")
 
         op.alter_column(table, "ingested_at", nullable=False)
         op.create_index(f"ix_{_index_stem(table)}_ingested_at", table, ["ingested_at"])

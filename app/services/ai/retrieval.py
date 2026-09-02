@@ -96,16 +96,13 @@ class InsightRetriever:
         iq = select(Insight).order_by(Insight.generated_at.desc()).limit(MAX_DOCS)
         if org_id is not None:
             iq = iq.where(Insight.org_id == org_id)
-        insights = ((await db.execute(iq)).scalars().all())
+        insights = (await db.execute(iq)).scalars().all()
         for ins in insights:
             all_rows.append(
                 {
                     "kind": "recommendation" if ins.insight_type == "recommendation" else "insight",
                     "title": ins.title,
-                    "text": (
-                        f"{ins.title}. {ins.body} "
-                        f"{_fmt_evidence(ins.evidence)}"
-                    ),
+                    "text": (f"{ins.title}. {ins.body} {_fmt_evidence(ins.evidence)}"),
                     "created_at": ins.generated_at.isoformat() if ins.generated_at else None,
                 }
             )
@@ -113,7 +110,7 @@ class InsightRetriever:
         aq = select(Anomaly).order_by(Anomaly.detected_at.desc()).limit(MAX_DOCS)
         if org_id is not None:
             aq = aq.where(Anomaly.org_id == org_id)
-        anomalies = ((await db.execute(aq)).scalars().all())
+        anomalies = (await db.execute(aq)).scalars().all()
         for a in anomalies:
             ctx = a.context or {}
             date_str = ctx.get("date", "?")

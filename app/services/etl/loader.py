@@ -27,16 +27,16 @@ def _batches(rows: list[dict[str, Any]]) -> Iterator[list[dict[str, Any]]]:
         yield rows[i : i + BATCH_SIZE]
 
 
-async def _ensure_products(db: AsyncSession, records: list[dict[str, Any]], org_id: uuid.UUID | None = None) -> dict[str, uuid.UUID]:
+async def _ensure_products(
+    db: AsyncSession, records: list[dict[str, Any]], org_id: uuid.UUID | None = None
+) -> dict[str, uuid.UUID]:
     wanted = {r["sku"]: r for r in records if r.get("sku")}
     if not wanted:
         return {}
     stmt = select(Product).where(Product.sku.in_(wanted))
     if org_id is not None:
         stmt = stmt.where(Product.org_id == org_id)
-    existing = {
-        p.sku: p.id for p in (await db.execute(stmt)).scalars()
-    }
+    existing = {p.sku: p.id for p in (await db.execute(stmt)).scalars()}
     for sku, r in wanted.items():
         if sku not in existing:
             product = Product(
@@ -52,21 +52,14 @@ async def _ensure_products(db: AsyncSession, records: list[dict[str, Any]], org_
     return existing
 
 
-async def _ensure_customers(
-    db: AsyncSession, records: list[dict[str, Any]]
-) -> dict[str, uuid.UUID]:
+async def _ensure_customers(db: AsyncSession, records: list[dict[str, Any]]) -> dict[str, uuid.UUID]:
     wanted = {r["customer_name"]: r for r in records if r.get("customer_name")}
     if not wanted:
         return {}
-    existing = {
-        c.name: c.id
-        for c in (await db.execute(select(Customer).where(Customer.name.in_(wanted)))).scalars()
-    }
+    existing = {c.name: c.id for c in (await db.execute(select(Customer).where(Customer.name.in_(wanted)))).scalars()}
     for name, r in wanted.items():
         if name not in existing:
-            customer = Customer(
-                name=name, segment=r.get("segment"), city=r.get("city"), region=r.get("region")
-            )
+            customer = Customer(name=name, segment=r.get("segment"), city=r.get("city"), region=r.get("region"))
             db.add(customer)
             await db.flush()
             existing[name] = customer.id
@@ -130,9 +123,7 @@ async def load_expenses(
     ingested_at = business_now().replace(tzinfo=None)
     rows = [
         {
-            **{
-                k: r[k] for k in ("expense_date", "category", "amount", "department", "description")
-            },
+            **{k: r[k] for k in ("expense_date", "category", "amount", "department", "description")},
             "row_hash": r["row_hash"],
             "source_id": source_id,
             "etl_job_id": etl_job_id,
@@ -144,10 +135,7 @@ async def load_expenses(
     loaded = 0
     for batch in _batches(rows):
         stmt = (
-            pg_insert(Expense)
-            .values(batch)
-            .on_conflict_do_nothing(index_elements=["row_hash"])
-            .returning(Expense.id)
+            pg_insert(Expense).values(batch).on_conflict_do_nothing(index_elements=["row_hash"]).returning(Expense.id)
         )
         loaded += len((await db.execute(stmt)).scalars().all())
     return LoadResult(loaded=loaded, skipped_duplicates=len(rows) - loaded)

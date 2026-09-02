@@ -46,18 +46,20 @@ def test_decompose_reports_change_pct_and_survives_a_zero_base():
 def test_bridge_terms_reconstruct_the_movement_exactly():
     """volume + value + interaction must equal the revenue delta, always."""
     b = price_volume_bridge(
-        orders_current=120, orders_previous=100,
-        revenue_current=132_000, revenue_previous=100_000,
+        orders_current=120,
+        orders_previous=100,
+        revenue_current=132_000,
+        revenue_previous=100_000,
     )
-    assert b.volume_effect + b.value_effect + b.interaction_effect == pytest.approx(
-        b.revenue_delta
-    )
+    assert b.volume_effect + b.value_effect + b.interaction_effect == pytest.approx(b.revenue_delta)
 
 
 def test_bridge_names_a_pure_volume_move():
     b = price_volume_bridge(
-        orders_current=200, orders_previous=100,
-        revenue_current=200_000, revenue_previous=100_000,
+        orders_current=200,
+        orders_previous=100,
+        revenue_current=200_000,
+        revenue_previous=100_000,
     )
     assert b.aov_current == b.aov_previous
     assert b.value_effect == 0
@@ -66,8 +68,10 @@ def test_bridge_names_a_pure_volume_move():
 
 def test_bridge_names_a_pure_value_move():
     b = price_volume_bridge(
-        orders_current=100, orders_previous=100,
-        revenue_current=150_000, revenue_previous=100_000,
+        orders_current=100,
+        orders_previous=100,
+        revenue_current=150_000,
+        revenue_previous=100_000,
     )
     assert b.volume_effect == 0
     assert b.verdict == "driven by order value"

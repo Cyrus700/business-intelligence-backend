@@ -75,19 +75,13 @@ async def _totals(db: AsyncSession) -> dict[str, Any]:
         "forecast_points": int(await _scalar(db, select(func.count(Forecast.id))) or 0),
         "models_trained": int(await _scalar(db, select(func.count(MlModel.id))) or 0),
         "anomalies_total": int(await _scalar(db, select(func.count(Anomaly.id))) or 0),
-        "anomalies_open": int(
-            await _scalar(db, select(func.count(Anomaly.id)).where(Anomaly.status == "open")) or 0
-        ),
+        "anomalies_open": int(await _scalar(db, select(func.count(Anomaly.id)).where(Anomaly.status == "open")) or 0),
         "insights": int(await _scalar(db, select(func.count(Insight.id))) or 0),
     }
 
 
 async def _coverage(db: AsyncSession) -> dict[str, str | None]:
-    row = (
-        await db.execute(
-            select(func.min(SalesTransaction.txn_date), func.max(SalesTransaction.txn_date))
-        )
-    ).one()
+    row = (await db.execute(select(func.min(SalesTransaction.txn_date), func.max(SalesTransaction.txn_date)))).one()
     return {
         "from": row[0].isoformat() if row[0] else None,
         "to": row[1].isoformat() if row[1] else None,
@@ -98,9 +92,7 @@ def _month_end(d: date) -> date:
     return (date(d.year + d.month // 12, d.month % 12 + 1, 1)) - timedelta(days=1)
 
 
-async def _revenue_series(
-    db: AsyncSession, latest: date | None
-) -> list[dict[str, Any]]:
+async def _revenue_series(db: AsyncSession, latest: date | None) -> list[dict[str, Any]]:
     """Monthly revenue/orders/expenses for the last ``SERIES_MONTHS`` months of data.
 
     The most recent month is usually mid-flight, so it is flagged ``partial`` —
@@ -240,9 +232,7 @@ async def _headline_kpis(db: AsyncSession, latest: date | None) -> dict[str, Any
         ).one()
         spend = await _scalar(
             db,
-            select(func.coalesce(func.sum(Expense.amount), 0)).where(
-                Expense.expense_date.between(d_from, d_to)
-            ),
+            select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.expense_date.between(d_from, d_to)),
         )
         return {
             "revenue": _f(r.revenue),
@@ -334,9 +324,7 @@ async def _active_model(db: AsyncSession) -> dict[str, Any] | None:
 
 
 async def _pipeline_health(db: AsyncSession) -> dict[str, Any]:
-    rows = (
-        await db.execute(select(EtlJob.status, func.count(EtlJob.id)).group_by(EtlJob.status))
-    ).all()
+    rows = (await db.execute(select(EtlJob.status, func.count(EtlJob.id)).group_by(EtlJob.status))).all()
     by_status = {str(s): int(n) for s, n in rows}
     total = sum(by_status.values()) or 1
     succeeded = by_status.get("succeeded", 0) + by_status.get("success", 0)

@@ -12,7 +12,9 @@ pytestmark = pytest.mark.integration
 
 async def test_decomposition_tree(client, user_token):
     _, token = user_token
-    r = await client.get("/api/v1/advanced/decomposition-tree?metric=revenue", headers={"Authorization": f"Bearer {token}"})
+    r = await client.get(
+        "/api/v1/advanced/decomposition-tree?metric=revenue", headers={"Authorization": f"Bearer {token}"}
+    )
     assert r.status_code == 200
     body = r.json()
     assert "root" in body and "hierarchy" in body
@@ -20,7 +22,9 @@ async def test_decomposition_tree(client, user_token):
 
 async def test_waterfall(client, user_token):
     _, token = user_token
-    r = await client.get("/api/v1/advanced/waterfall?metric=revenue&dimension=category", headers={"Authorization": f"Bearer {token}"})
+    r = await client.get(
+        "/api/v1/advanced/waterfall?metric=revenue&dimension=category", headers={"Authorization": f"Bearer {token}"}
+    )
     assert r.status_code == 200
     assert "steps" in r.json()
 
@@ -50,14 +54,18 @@ async def test_funnel_radar_small_multiples(client, user_token):
 
 async def test_key_influencers(client, user_token):
     _, token = user_token
-    r = await client.get("/api/v1/advanced/key-influencers?target=revenue", headers={"Authorization": f"Bearer {token}"})
+    r = await client.get(
+        "/api/v1/advanced/key-influencers?target=revenue", headers={"Authorization": f"Bearer {token}"}
+    )
     assert r.status_code == 200
     assert "leading_dimension" in r.json()
 
 
 async def test_segmentation(client, user_token):
     _, token = user_token
-    r = await client.get("/api/v1/advanced/segmentation?dimension=product&n_clusters=4", headers={"Authorization": f"Bearer {token}"})
+    r = await client.get(
+        "/api/v1/advanced/segmentation?dimension=product&n_clusters=4", headers={"Authorization": f"Bearer {token}"}
+    )
     assert r.status_code == 200
     assert "entities" in r.json()
 

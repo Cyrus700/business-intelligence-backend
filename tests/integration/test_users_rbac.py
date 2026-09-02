@@ -80,9 +80,7 @@ async def test_role_change_syncs_jwt_metadata(client, admin_token, user_token):
     target, _ = user_token
     _, token = admin_token
     fake = override_admin_api()
-    resp = await client.patch(
-        f"/api/v1/users/{target.id}", headers=auth(token), json={"role": "manager"}
-    )
+    resp = await client.patch(f"/api/v1/users/{target.id}", headers=auth(token), json={"role": "manager"})
     assert resp.status_code == 200
     assert resp.json()["role"] == "manager"
     assert fake.role_updates == [(target.id, "manager")]
@@ -92,9 +90,7 @@ async def test_mutating_request_writes_audit_log(client, admin_token, user_token
     target, _ = user_token
     _, token = admin_token
     override_admin_api()
-    await client.patch(
-        f"/api/v1/users/{target.id}", headers=auth(token), json={"department": "finance"}
-    )
+    await client.patch(f"/api/v1/users/{target.id}", headers=auth(token), json={"department": "finance"})
     async with get_session_factory()() as session:
         logs = (await session.execute(select(AuditLog))).scalars().all()
     assert any(f"PATCH /api/v1/users/{target.id}" == log.action for log in logs)

@@ -66,13 +66,7 @@ async def test_upload_rebuilds_kpi_snapshots(client, manager_token):
     await client.post(kwargs.pop("url"), **kwargs)
     async with get_session_factory()() as db:
         rows = (
-            (
-                await db.execute(
-                    select(KpiSnapshot).where(
-                        KpiSnapshot.metric == "revenue", KpiSnapshot.dimensions == {}
-                    )
-                )
-            )
+            (await db.execute(select(KpiSnapshot).where(KpiSnapshot.metric == "revenue", KpiSnapshot.dimensions == {})))
             .scalars()
             .all()
         )
@@ -98,9 +92,7 @@ async def test_expense_upload(client, manager_token):
     assert resp.json()["error_report"]["loaded"] == 1
 
 
-async def test_etl_jobs_visible_to_manager_and_above(
-    client, user_token, manager_token, admin_token
-):
+async def test_etl_jobs_visible_to_manager_and_above(client, user_token, manager_token, admin_token):
     _, analyst_tok = user_token
     _, token = manager_token
     _, admin_tok = admin_token
@@ -172,8 +164,6 @@ async def test_paused_source_cannot_run(client, admin_token):
         },
     )
     source_id = resp.json()["id"]
-    await client.patch(
-        f"/api/v1/data-sources/{source_id}", headers=auth(token), json={"status": "paused"}
-    )
+    await client.patch(f"/api/v1/data-sources/{source_id}", headers=auth(token), json={"status": "paused"})
     run = await client.post(f"/api/v1/etl/run/{source_id}", headers=auth(token))
     assert run.status_code == 409

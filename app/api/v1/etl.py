@@ -7,22 +7,16 @@ from app.api.deps import CurrentUser, DbSession, require_role
 from app.models import DataSource, EtlJob
 from app.schemas.integration import EtlJobOut
 
-router = APIRouter(
-    prefix="/etl", tags=["data-integration"], dependencies=[Depends(require_role("manager"))]
-)
+router = APIRouter(prefix="/etl", tags=["data-integration"], dependencies=[Depends(require_role("manager"))])
 
 
 @router.post("/run/{source_id}", response_model=EtlJobOut)
-async def run_source(
-    source_id: UUID, db: DbSession, user: CurrentUser
-) -> EtlJobOut:
+async def run_source(source_id: UUID, db: DbSession, user: CurrentUser) -> EtlJobOut:
     from app.api.deps import org_predicate, user_org_id
 
     source = (
         await db.execute(
-            select(DataSource).where(
-                DataSource.id == source_id, org_predicate(DataSource.org_id, user_org_id(user))
-            )
+            select(DataSource).where(DataSource.id == source_id, org_predicate(DataSource.org_id, user_org_id(user)))
         )
     ).scalar_one_or_none()
     if source is None:
@@ -49,9 +43,7 @@ async def list_jobs(
 ) -> list[EtlJobOut]:
     from app.api.deps import org_predicate, user_org_id
 
-    stmt = select(EtlJob).where(
-        org_predicate(EtlJob.org_id, user_org_id(user))
-    ).order_by(EtlJob.started_at.desc())
+    stmt = select(EtlJob).where(org_predicate(EtlJob.org_id, user_org_id(user))).order_by(EtlJob.started_at.desc())
     if status_filter:
         stmt = stmt.where(EtlJob.status == status_filter)
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)
@@ -64,11 +56,7 @@ async def get_job(job_id: UUID, db: DbSession, user: CurrentUser) -> EtlJobOut:
     from app.api.deps import org_predicate, user_org_id
 
     job = (
-        await db.execute(
-            select(EtlJob).where(
-                EtlJob.id == job_id, org_predicate(EtlJob.org_id, user_org_id(user))
-            )
-        )
+        await db.execute(select(EtlJob).where(EtlJob.id == job_id, org_predicate(EtlJob.org_id, user_org_id(user))))
     ).scalar_one_or_none()
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")

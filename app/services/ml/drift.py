@@ -27,9 +27,7 @@ DEGRADATION_FACTOR = 1.5
 MIN_THRESHOLD_MAPE = 10.0
 
 
-async def check_drift(
-    db: AsyncSession, model: MlModel, window_days: int = WINDOW_DAYS, org_id=None
-) -> ModelDrift:
+async def check_drift(db: AsyncSession, model: MlModel, window_days: int = WINDOW_DAYS, org_id=None) -> ModelDrift:
     """Score `model`'s stored forecasts against actuals for the last
     `window_days` and record (and possibly act on) the result."""
     holdout_mape = (model.metrics or {}).get("mape")
@@ -42,20 +40,20 @@ async def check_drift(
         window_start = measured_on - timedelta(days=window_days - 1)
         actual = frame[(frame["ds"].dt.date >= window_start) & (frame["ds"].dt.date <= measured_on)]
         rows = (
-            await db.execute(
-                select(Forecast).where(
-                    Forecast.model_id == model.id,
-                    Forecast.forecast_date >= window_start,
-                    Forecast.forecast_date <= measured_on,
+            (
+                await db.execute(
+                    select(Forecast).where(
+                        Forecast.model_id == model.id,
+                        Forecast.forecast_date >= window_start,
+                        Forecast.forecast_date <= measured_on,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         by_date = {r.forecast_date: float(r.yhat) for r in rows}
-        paired = [
-            (row["y"], by_date[row["ds"].date()])
-            for _, row in actual.iterrows()
-            if row["ds"].date() in by_date
-        ]
+        paired = [(row["y"], by_date[row["ds"].date()]) for _, row in actual.iterrows() if row["ds"].date() in by_date]
         if paired:
             import numpy as np
 
@@ -80,7 +78,10 @@ async def check_drift(
     if triggered:
         logger.warning(
             "drift triggered retrain: %s%s live_mape=%.2f > threshold=%.2f",
-            model.target, model.dimensions or "", live_mape, threshold,
+            model.target,
+            model.dimensions or "",
+            live_mape,
+            threshold,
         )
         await train_target(db, model.target, dimensions=model.dimensions)
     return drift

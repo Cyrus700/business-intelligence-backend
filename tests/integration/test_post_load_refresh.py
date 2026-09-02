@@ -29,11 +29,7 @@ def _upload(token: str, content: str = CSV, name: str = "sales.csv", domain: str
 
 async def _latest_job() -> EtlJob:
     async with get_session_factory()() as db:
-        return (
-            (await db.execute(select(EtlJob).order_by(EtlJob.started_at.desc()).limit(1)))
-            .scalars()
-            .first()
-        )
+        return (await db.execute(select(EtlJob).order_by(EtlJob.started_at.desc()).limit(1))).scalars().first()
 
 
 async def test_upload_refreshes_the_derived_layer(client, manager_token):
@@ -63,6 +59,7 @@ async def test_upload_invalidates_the_assistant_index(client, manager_token):
 
 async def test_a_failed_refresh_never_fails_the_ingest(client, manager_token, monkeypatch):
     """The rows are already committed; a downstream hiccup must not undo them."""
+
     async def exploding_scan(*args, **kwargs):
         raise RuntimeError("anomaly scanner is down")
 

@@ -109,6 +109,7 @@ async def resume_scheduler_job(job_id: str) -> dict[str, str]:
 
 # ── Workers — professional pool observability (powers All Transactions strip) ──
 
+
 class WorkerMetricsOut(BaseModel):
     worker_id: str
     hostname: str
@@ -152,7 +153,11 @@ async def workers_status(db: DbSession) -> WorkersStatusOut:
 
     pool = get_metrics()
     # queue depth = pending + claimed
-    q_depth = (await db.execute(select(func.count()).select_from(BackgroundJob).where(BackgroundJob.status.in_(["pending", "claimed"])))).scalar() or 0
+    q_depth = (
+        await db.execute(
+            select(func.count()).select_from(BackgroundJob).where(BackgroundJob.status.in_(["pending", "claimed"]))
+        )
+    ).scalar() or 0
     recent = (await db.execute(select(BackgroundJob).order_by(BackgroundJob.run_at.desc()).limit(12))).scalars().all()
     runs = [
         WorkerRunOut(
@@ -197,7 +202,9 @@ async def workers_status(db: DbSession) -> WorkersStatusOut:
                     trigger="cron",
                 )
             )
-    sched_status = SchedulerStatusOut(running=sched.running if sched else False, jobs=sched_jobs, timezone="Asia/Kathmandu")
+    sched_status = SchedulerStatusOut(
+        running=sched.running if sched else False, jobs=sched_jobs, timezone="Asia/Kathmandu"
+    )
     return WorkersStatusOut(
         pool=WorkerMetricsOut(**pool),
         scheduler=sched_status,
@@ -211,7 +218,11 @@ async def workers_status(db: DbSession) -> WorkersStatusOut:
 async def workers_runs(db: DbSession, limit: int = 20) -> list[WorkerRunOut]:
     from app.models.jobs import BackgroundJob
 
-    rows = (await db.execute(select(BackgroundJob).order_by(BackgroundJob.run_at.desc()).limit(min(limit, 50)))).scalars().all()
+    rows = (
+        (await db.execute(select(BackgroundJob).order_by(BackgroundJob.run_at.desc()).limit(min(limit, 50))))
+        .scalars()
+        .all()
+    )
     return [
         WorkerRunOut(
             id=str(r.id),
@@ -250,9 +261,7 @@ async def storage_info(db: DbSession) -> StorageInfoOut:
     # Count files and sizes from uploads table
     from app.models import RawUpload
 
-    total_files = (
-        await db.execute(select(func.count()).select_from(RawUpload))
-    ).scalar() or 0
+    total_files = (await db.execute(select(func.count()).select_from(RawUpload))).scalar() or 0
 
     total_size = 0  # file_size column not available in RawUpload model
 
@@ -269,13 +278,7 @@ async def storage_info(db: DbSession) -> StorageInfoOut:
         type_stats[domain] = {"count": count, "size_bytes": 0}
 
     # Recent uploads
-    recent = (
-        await db.execute(
-            select(RawUpload)
-            .order_by(RawUpload.created_at.desc())
-            .limit(20)
-        )
-    ).scalars().all()
+    recent = (await db.execute(select(RawUpload).order_by(RawUpload.created_at.desc()).limit(20))).scalars().all()
 
     recent_uploads = [
         {
@@ -352,9 +355,7 @@ async def security_status(db: DbSession) -> SecurityStatusOut:
     # Audit events
     audit_events = (
         await db.execute(
-            select(func.count())
-            .select_from(text("audit_logs"))
-            .where(text("created_at >= :cutoff")),
+            select(func.count()).select_from(text("audit_logs")).where(text("created_at >= :cutoff")),
             {"cutoff": cutoff},
         )
     ).scalar() or 0
@@ -382,9 +383,7 @@ async def security_status(db: DbSession) -> SecurityStatusOut:
         rate_limit={
             "enabled": True,
             "requests_per_minute": rate_limit_config,
-            "current_usage_pct": min(
-                100, (audit_events / max(1, rate_limit_config * 60 * 24)) * 100
-            ),
+            "current_usage_pct": min(100, (audit_events / max(1, rate_limit_config * 60 * 24)) * 100),
         },
         audit={
             "enabled": True,
@@ -462,16 +461,12 @@ async def admin_stats(db: DbSession) -> dict[str, Any]:
 
     users = (await db.execute(select(func.count()).select_from(Profile))).scalar() or 0
     active_users = (
-        await db.execute(
-            select(func.count()).select_from(Profile).where(Profile.is_active.is_(True))
-        )
+        await db.execute(select(func.count()).select_from(Profile).where(Profile.is_active.is_(True)))
     ).scalar() or 0
     etl_jobs = (await db.execute(select(func.count()).select_from(EtlJob))).scalar() or 0
     models = (await db.execute(select(func.count()).select_from(MlModel))).scalar() or 0
     active_models = (
-        await db.execute(
-            select(func.count()).select_from(MlModel).where(MlModel.is_active.is_(True))
-        )
+        await db.execute(select(func.count()).select_from(MlModel).where(MlModel.is_active.is_(True)))
     ).scalar() or 0
 
     return {

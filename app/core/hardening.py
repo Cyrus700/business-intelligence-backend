@@ -81,11 +81,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return f"ip:{client}"
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        limiter = (
-            self.strict
-            if request.method == "POST" and request.url.path in STRICT_PATHS
-            else self.default
-        )
+        limiter = self.strict if request.method == "POST" and request.url.path in STRICT_PATHS else self.default
         allowed, remaining = limiter.hit(self._key(request))
         if not allowed:
             return JSONResponse(

@@ -52,17 +52,11 @@ async def train_target(
     winner = min(candidates, key=lambda e: e.metrics[metric_key])
 
     # degradation guard: don't replace a better active model
-    active_q = select(MlModel).where(
-        MlModel.target == target, MlModel.dimensions == dims, MlModel.is_active.is_(True)
-    )
+    active_q = select(MlModel).where(MlModel.target == target, MlModel.dimensions == dims, MlModel.is_active.is_(True))
     if org_id is not None:
         active_q = active_q.where(MlModel.org_id == org_id)
     active = (await db.execute(active_q)).scalar_one_or_none()
-    if (
-        active
-        and active.metrics
-        and active.metrics.get(metric_key, 1e18) < winner.metrics[metric_key]
-    ):
+    if active and active.metrics and active.metrics.get(metric_key, 1e18) < winner.metrics[metric_key]:
         logger.warning(
             "keeping active %s model for %s%s (%s %.2f <= new %.2f)",
             active.model_type,
@@ -109,9 +103,7 @@ async def train_target(
     forecaster = forecasting.make_forecaster(model.model_type)
     forecaster.fit(frame)
     last = frame["ds"].max()
-    future = pd.Series(
-        pd.date_range(last + timedelta(days=1), periods=horizon, freq="D"), name="ds"
-    )
+    future = pd.Series(pd.date_range(last + timedelta(days=1), periods=horizon, freq="D"), name="ds")
     preds = forecaster.predict(future)
 
     await db.execute(delete(Forecast).where(Forecast.model_id == model.id))

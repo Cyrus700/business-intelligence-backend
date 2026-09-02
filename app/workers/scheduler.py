@@ -34,11 +34,7 @@ async def _run_scheduled_source(source_id: str) -> None:
             return
         # Advisory lock scoped by org_id + source_id so two orgs never block each other
         lock_key = f"{source.org_id}:{source_id}" if source.org_id else source_id
-        lock = (
-            await db.execute(
-                text("SELECT pg_try_advisory_lock(hashtext(:key))"), {"key": lock_key}
-            )
-        ).scalar()
+        lock = (await db.execute(text("SELECT pg_try_advisory_lock(hashtext(:key))"), {"key": lock_key})).scalar()
         if not lock:
             logger.warning("source %s already running; skipping", source_id)
             return
@@ -53,8 +49,8 @@ async def _run_scheduled_source(source_id: str) -> None:
 
 # ── Pure business logic (no worker awareness) — kept separate so tests can call them directly
 async def _weekly_retrain(org_id=None) -> None:
-    from app.services.ml.registry import train_all
     from app.models import Organization
+    from app.services.ml.registry import train_all
 
     if org_id is not None:
         async with get_session_factory()() as db:
@@ -125,7 +121,9 @@ async def _daily_drift_check(org_id=None) -> None:
                 try:
                     results = await check_all(per_db, org_id=org.id)
                     triggered = sum(1 for r in results if r.triggered)
-                    logger.info("daily drift check org %s: %d model(s) checked, %d retrained", org.id, len(results), triggered)
+                    logger.info(
+                        "daily drift check org %s: %d model(s) checked, %d retrained", org.id, len(results), triggered
+                    )
                 except Exception:
                     logger.exception("drift check failed for org %s", org.id)
 
@@ -142,7 +140,11 @@ async def _nightly_insights_and_alerts(org_id=None) -> None:
             recs = await persist_recommendations(db, org_id=org_id)
             logger.info(
                 "nightly org %s: %d insights, %d notifications, %d/%d recommendations (new/generated)",
-                org_id, insights, notifications, recs["new"], recs["generated"],
+                org_id,
+                insights,
+                notifications,
+                recs["new"],
+                recs["generated"],
             )
         return
     from app.models import Organization
@@ -156,7 +158,10 @@ async def _nightly_insights_and_alerts(org_id=None) -> None:
                 recs = await persist_recommendations(per_db)
                 logger.info(
                     "nightly: %d insights, %d notifications, %d/%d recommendations (new/generated)",
-                    insights, notifications, recs["new"], recs["generated"],
+                    insights,
+                    notifications,
+                    recs["new"],
+                    recs["generated"],
                 )
             return
         for org in orgs:
@@ -167,7 +172,11 @@ async def _nightly_insights_and_alerts(org_id=None) -> None:
                     recs = await persist_recommendations(per_db, org_id=org.id)
                     logger.info(
                         "nightly org %s: %d insights, %d notifications, %d/%d recommendations",
-                        org.id, insights, notifications, recs["new"], recs["generated"],
+                        org.id,
+                        insights,
+                        notifications,
+                        recs["new"],
+                        recs["generated"],
                     )
                 except Exception:
                     logger.exception("nightly job failed for org %s", org.id)
@@ -179,29 +188,36 @@ async def _nightly_insights_and_alerts(org_id=None) -> None:
 async def _w_ml_retrain(_payload: dict) -> None:
     await _weekly_retrain()
 
+
 @worker_pool.register("anomaly_scan")
 async def _w_anomaly_scan(_payload: dict) -> None:
     await _daily_anomaly_scan()
+
 
 @worker_pool.register("drift_check")
 async def _w_drift_check(_payload: dict) -> None:
     await _daily_drift_check()
 
+
 @worker_pool.register("insights_alerts")
 async def _w_insights_alerts(_payload: dict) -> None:
     await _nightly_insights_and_alerts()
+
 
 @worker_pool.register("source_pull")
 async def _w_source_pull(payload: dict) -> None:
     await _run_scheduled_source(str(payload["source_id"]))
 
+
 @worker_pool.register("monthly_report")
 async def _w_monthly_report(_payload: dict) -> None:
     await _monthly_report()
 
+
 @worker_pool.register("quality_audit")
 async def _w_quality_audit(_payload: dict) -> None:
     await _daily_quality_audit()
+
 
 @worker_pool.register("report_schedules")
 async def _w_report_schedules(_payload: dict) -> None:
@@ -221,7 +237,9 @@ async def _monthly_report(org_id=None) -> None:
             start = end.replace(day=1)
             title = f"Monthly business summary — {start:%B %Y}"
             payload = await builder.build_pdf(db, start, end, title, org_id=oid)
-            stored = FileStorage().save(make_key(f"monthly-{start:%Y-%m}-{oid}.pdf") if oid else make_key(f"monthly-{start:%Y-%m}.pdf"), payload)
+            stored = FileStorage().save(
+                make_key(f"monthly-{start:%Y-%m}-{oid}.pdf") if oid else make_key(f"monthly-{start:%Y-%m}.pdf"), payload
+            )
             db.add(
                 Report(
                     report_type="monthly_summary",
@@ -280,7 +298,9 @@ async def _daily_quality_audit(org_id=None) -> None:
                     if run is None:
                         logger.error("daily data-quality audit failed for org %s", org.id)
                     else:
-                        logger.info("daily quality audit org %s: score=%s issues=%d", org.id, run.score, run.issues_found)
+                        logger.info(
+                            "daily quality audit org %s: score=%s issues=%d", org.id, run.score, run.issues_found
+                        )
                 except Exception:
                     logger.exception("quality audit failed for org %s", org.id)
 
@@ -366,7 +386,11 @@ async def _run_due_report_schedules() -> None:
                         else:
                             from app.services.email.service import send_report_ready_email
 
-                            mime = "application/pdf" if schedule.format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            mime = (
+                                "application/pdf"
+                                if schedule.format == "pdf"
+                                else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
                             fname = f"report-{start}-{end}.{schedule.format}"
                             await send_report_ready_email(
                                 owner.email,
@@ -387,23 +411,30 @@ async def _run_due_report_schedules() -> None:
 async def _tick_ml_retrain() -> None:
     await worker_pool.submit_and_wait("ml_retrain")
 
+
 async def _tick_anomaly_scan() -> None:
     await worker_pool.submit_and_wait("anomaly_scan")
+
 
 async def _tick_drift_check() -> None:
     await worker_pool.submit_and_wait("drift_check")
 
+
 async def _tick_insights_alerts() -> None:
     await worker_pool.submit_and_wait("insights_alerts")
+
 
 async def _tick_monthly_report() -> None:
     await worker_pool.submit_and_wait("monthly_report")
 
+
 async def _tick_quality_audit() -> None:
     await worker_pool.submit_and_wait("quality_audit")
 
+
 async def _tick_report_schedules() -> None:
     await worker_pool.submit_and_wait("report_schedules")
+
 
 async def _tick_source_pull(source_id: str) -> None:
     await worker_pool.submit_and_wait("source_pull", {"source_id": source_id})
@@ -426,9 +457,7 @@ async def start_scheduler() -> AsyncIOScheduler:
     except Exception:
         logger.exception("failed to start report claim loop")
 
-    _scheduler = AsyncIOScheduler(
-        job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 300}
-    )
+    _scheduler = AsyncIOScheduler(job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 300})
     # ML lifecycle jobs (docs/05-ml-plan.md): weekly retrain, daily anomaly scan
     _scheduler.add_job(_tick_ml_retrain, CronTrigger.from_crontab("0 2 * * 1"), id="ml-retrain")
     _scheduler.add_job(_tick_anomaly_scan, CronTrigger.from_crontab("30 1 * * *"), id="anomaly-scan")

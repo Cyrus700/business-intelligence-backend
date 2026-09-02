@@ -12,11 +12,9 @@ from __future__ import annotations
 import re
 import warnings
 from functools import lru_cache
-from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -98,7 +96,9 @@ class Settings(BaseSettings):
     smtp_from: str = Field(default="InsightFlow <alerts@insightflow.local>")
     smtp_timeout: int = Field(default=15, ge=5, le=60, description="SMTP socket timeout (seconds)")
     smtp_max_retries: int = Field(default=2, ge=0, le=5)
-    email_rate_limit_per_minute: int = Field(default=10, ge=1, le=100, description="Max emails per recipient per minute")
+    email_rate_limit_per_minute: int = Field(
+        default=10, ge=1, le=100, description="Max emails per recipient per minute"
+    )
 
     # ── Rate limiting ─────────────────────────────────────────────────────
     rate_limit_per_minute: int = Field(default=240, ge=10, le=100_000)
@@ -136,7 +136,7 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def _harden(self) -> "Settings":
+    def _harden(self) -> Settings:
         is_prod = self.env == "prod"
         # ── Database ──────────────────────────────────────────────────
         if is_prod and not self.database_url:

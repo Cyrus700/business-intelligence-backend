@@ -30,9 +30,7 @@ ADMIN_DSN = "postgresql://postgres:postgres@localhost:54329/postgres"
 def pytest_configure(config):  # noqa: C901
     try:
         with psycopg.connect(ADMIN_DSN, autocommit=True) as conn:
-            exists = conn.execute(
-                "SELECT 1 FROM pg_database WHERE datname = 'bi_test'"
-            ).fetchone()
+            exists = conn.execute("SELECT 1 FROM pg_database WHERE datname = 'bi_test'").fetchone()
             if not exists:
                 conn.execute("CREATE DATABASE bi_test")
         alembic_cfg = Config("alembic.ini")
@@ -109,7 +107,7 @@ def mint_token(
 
 async def _ensure_test_org() -> uuid.UUID:
     """Get or create a legacy org for tests (so org_id is not NULL after migration)."""
-    from sqlalchemy import select, text as sa_text
+    from sqlalchemy import text as sa_text
 
     org_id = None
     try:

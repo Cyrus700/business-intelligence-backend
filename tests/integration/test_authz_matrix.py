@@ -131,7 +131,6 @@ MIN_ROLE: dict[tuple[str, str], str | None] = {
     # data freshness — read-only, any authenticated role
     ("GET", "/api/v1/data-coverage"): "analyst",
     ("GET", "/api/v1/watermark"): "analyst",
-    ("GET", "/api/v1/data-quality/quality/history"): "analyst",
     # advanced analytics (Power BI-grade): authenticated, analyst+
     ("GET", "/api/v1/advanced/decomposition-tree"): "analyst",
     ("GET", "/api/v1/advanced/waterfall"): "analyst",
@@ -231,9 +230,7 @@ async def test_authorization_matrix(client, caller):
         elif expected == "403":
             assert resp.status_code == 403, f"{caller} {method} {path}: {resp.status_code}"
         else:
-            assert resp.status_code not in (401, 403), (
-                f"{caller} {method} {path}: {resp.status_code}"
-            )
+            assert resp.status_code not in (401, 403), f"{caller} {method} {path}: {resp.status_code}"
         results.append((method, path, resp.status_code, min_role or "public"))
 
     _RESULTS[caller] = {(m, p): code for m, p, code, _ in results}

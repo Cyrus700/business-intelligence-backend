@@ -4,15 +4,16 @@ Revision ID: 6ad649b27309
 Revises: b7a6c5d4e3f2
 Create Date: 2026-08-19 15:10:37.468656
 """
+
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
+from alembic import op
 
-revision: str = '6ad649b27309'
-down_revision: str | None = 'b7a6c5d4e3f2'
+revision: str = "6ad649b27309"
+down_revision: str | None = "b7a6c5d4e3f2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

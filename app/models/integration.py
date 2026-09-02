@@ -38,17 +38,13 @@ class DataSource(Base, TimestampMixin):
 class RawUpload(Base):
     __tablename__ = "raw_uploads"
     __table_args__ = (
-        CheckConstraint(
-            "status IN ('received', 'validated', 'loaded', 'failed')", name="valid_status"
-        ),
+        CheckConstraint("status IN ('received', 'validated', 'loaded', 'failed')", name="valid_status"),
         Index("ix_raw_uploads_org_id", "org_id"),
         {"schema": "staging"},
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("data_sources.id", ondelete="SET NULL")
-    )
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
     file_name: Mapped[str]
     target_domain: Mapped[str | None] = mapped_column(nullable=True)
     s3_key: Mapped[str | None]
@@ -68,9 +64,7 @@ class EtlJob(Base):
     __tablename__ = "etl_jobs"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("data_sources.id", ondelete="SET NULL")
-    )
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
     )

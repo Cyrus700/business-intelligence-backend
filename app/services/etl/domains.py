@@ -50,9 +50,7 @@ COLUMN_ALIASES: dict[str, list[str]] = {
 }
 
 _ALIAS_LOOKUP: dict[str, str] = {
-    name: canonical
-    for canonical, names in COLUMN_ALIASES.items()
-    for name in [canonical, *names]
+    name: canonical for canonical, names in COLUMN_ALIASES.items() for name in [canonical, *names]
 }
 
 
@@ -74,9 +72,7 @@ def resolve_columns(frame: pd.DataFrame) -> pd.DataFrame:
         for name in sorted(conflicts):
             sources = [str(c) for c, r in zip(frame.columns, resolved) if r == name]
             details.append(f"{name} ({', '.join(sources)})")
-        raise ValueError(
-            f"duplicate column names: {'; '.join(details)} all map to the same column"
-        )
+        raise ValueError(f"duplicate column names: {'; '.join(details)} all map to the same column")
     frame.columns = resolved
     return frame
 
@@ -136,9 +132,7 @@ def transform_sales_row(raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("sku is missing")
     quantity = _parse_int(raw.get("quantity"), "quantity", minimum=1)
     unit_price = _parse_money(raw.get("unit_price"), "unit_price")
-    discount = _parse_money(
-        raw.get("discount", 0) if not pd.isna(raw.get("discount", 0)) else 0, "discount"
-    )
+    discount = _parse_money(raw.get("discount", 0) if not pd.isna(raw.get("discount", 0)) else 0, "discount")
     total = (unit_price * quantity - discount).quantize(Decimal("0.01"))
     if total < 0:
         raise ValueError(f"discount {discount} exceeds line total")

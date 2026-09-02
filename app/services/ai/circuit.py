@@ -33,9 +33,7 @@ def _estimate_tokens(text: str) -> int:
 
 
 def estimate_cost_usd(model: str, input_text: str, output_text: str) -> float:
-    in_price, out_price = next(
-        (p for prefix, p in PRICING_PER_1M.items() if model.startswith(prefix)), DEFAULT_PRICE
-    )
+    in_price, out_price = next((p for prefix, p in PRICING_PER_1M.items() if model.startswith(prefix)), DEFAULT_PRICE)
     tokens_in = _estimate_tokens(input_text)
     tokens_out = _estimate_tokens(output_text)
     return (tokens_in * in_price + tokens_out * out_price) / 1e6

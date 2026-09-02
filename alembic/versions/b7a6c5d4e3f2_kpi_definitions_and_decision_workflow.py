@@ -9,8 +9,9 @@ Create Date: 2026-08-19
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID
+
 from alembic import op
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision: str = "b7a6c5d4e3f2"
 down_revision: str | None = "f9c8e7d6a5b4"
@@ -35,9 +36,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.UniqueConstraint("metric", name="uq_kpi_definition_metric"),
     )
-    op.create_check_constraint(
-        "ck_kpi_metric_not_empty", "kpi_definitions", "char_length(metric) > 0"
-    )
+    op.create_check_constraint("ck_kpi_metric_not_empty", "kpi_definitions", "char_length(metric) > 0")
 
     op.add_column("ml_models", sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("ml_models", sa.Column("retired_at", sa.DateTime(timezone=True), nullable=True))
@@ -51,9 +50,7 @@ def upgrade() -> None:
         "insights",
         "status IN ('open', 'accepted', 'dismissed', 'postponed', 'actioned')",
     )
-    op.create_check_constraint(
-        "valid_priority", "insights", "priority IN ('low', 'medium', 'high')"
-    )
+    op.create_check_constraint("valid_priority", "insights", "priority IN ('low', 'medium', 'high')")
 
     op.drop_constraint("valid_action", "recommendation_feedback", type_="check")
     op.create_check_constraint(
@@ -63,9 +60,7 @@ def upgrade() -> None:
     )
 
     # Performance indexes on hot read paths (Phase 14).
-    op.create_index(
-        "ix_kpi_snapshots_metric_dims", "kpi_snapshots", ["metric", "dimensions"]
-    )
+    op.create_index("ix_kpi_snapshots_metric_dims", "kpi_snapshots", ["metric", "dimensions"])
     op.create_index("ix_forecasts_model_id", "forecasts", ["model_id"])
     op.create_index("ix_insights_type_generated", "insights", ["insight_type", "generated_at"])
     op.create_index("ix_etl_jobs_status_started", "etl_jobs", ["status", "started_at"])
@@ -153,9 +148,7 @@ def downgrade() -> None:
     op.drop_index("ix_kpi_snapshots_metric_dims", table_name="kpi_snapshots")
 
     op.drop_constraint("valid_action", "recommendation_feedback", type_="check")
-    op.create_check_constraint(
-        "valid_action", "recommendation_feedback", "action IN ('accepted', 'dismissed')"
-    )
+    op.create_check_constraint("valid_action", "recommendation_feedback", "action IN ('accepted', 'dismissed')")
     op.drop_constraint("valid_priority", "insights", type_="check")
     op.drop_constraint("ck_insight_status", "insights", type_="check")
     op.drop_column("insights", "impact_estimate")

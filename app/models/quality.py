@@ -68,7 +68,9 @@ class DataQualityRun(Base):
     triggered_by: Mapped[str] = mapped_column(default="schedule")  # schedule | manual | etl
     duration_ms: Mapped[int] = mapped_column(default=0)
     error: Mapped[str | None] = mapped_column(Text)
-    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
@@ -90,9 +92,7 @@ class DataQualityIssue(Base):
     __tablename__ = "data_quality_issues"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("data_quality_runs.id", ondelete="CASCADE"), index=True
-    )
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_quality_runs.id", ondelete="CASCADE"), index=True)
     table_name: Mapped[str]
     dimension: Mapped[str]
     issue_type: Mapped[str]
@@ -107,7 +107,9 @@ class DataQualityIssue(Base):
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
     resolved_at: Mapped[datetime | None]
-    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (

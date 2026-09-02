@@ -114,6 +114,7 @@ def require_permission(*permissions: str) -> Callable[..., Profile]:
 
 # ── attribute-based access helpers ────────────────────────────────────────
 
+
 def user_org_id(user: Profile) -> UUID | None:
     """Tenant scope of the caller."""
     return user.org_id

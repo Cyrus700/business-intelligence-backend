@@ -63,9 +63,7 @@ class Forecast(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "model_id", "target", "dimensions", "forecast_date", name="uq_forecast_point"
-        ),
+        UniqueConstraint("model_id", "target", "dimensions", "forecast_date", name="uq_forecast_point"),
         Index("ix_forecasts_target_date", "target", "forecast_date"),
         Index("ix_forecasts_model_id", "model_id"),
         Index("ix_forecasts_org_id", "org_id"),
@@ -98,9 +96,7 @@ class Anomaly(Base):
     )
     # anomalies on the same business day across metrics are grouped into one
     # correlated event (root-cause-aware alerting)
-    correlation_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), index=True
-    )
+    correlation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
 
     __table_args__ = (
         CheckConstraint("severity IN ('low', 'medium', 'high')", name="valid_severity"),
@@ -125,9 +121,7 @@ class AnomalyFeedback(Base):
     __tablename__ = "anomaly_feedback"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    anomaly_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("anomalies.id", ondelete="CASCADE"), index=True
-    )
+    anomaly_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anomalies.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
@@ -139,9 +133,7 @@ class AnomalyFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint(
-            "disposition IN ('false_positive', 'confirmed')", name="valid_disposition"
-        ),
+        CheckConstraint("disposition IN ('false_positive', 'confirmed')", name="valid_disposition"),
         Index("ix_anomaly_feedback_anomaly_created", "anomaly_id", "created_at"),
         Index("ix_anomaly_feedback_org_id", "org_id"),
     )
@@ -157,9 +149,7 @@ class ModelDrift(Base):
     __tablename__ = "model_drift"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    model_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("ml_models.id", ondelete="CASCADE"), index=True
-    )
+    model_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ml_models.id", ondelete="CASCADE"), index=True)
     target: Mapped[str]
     measured_on: Mapped[date] = mapped_column(index=True)
     window_days: Mapped[int] = mapped_column(default=7)

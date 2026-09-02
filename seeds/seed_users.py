@@ -119,6 +119,7 @@ async def main() -> None:
 
             if user_id is None:
                 import uuid
+
                 user_id = uuid.uuid5(uuid.NAMESPACE_URL, f"https://seed/{user['email']}")
 
             profile = Profile(

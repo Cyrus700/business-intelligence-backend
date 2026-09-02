@@ -214,6 +214,7 @@ def _expense_action(value: float, change: float | None, cats: list[dict]) -> str
 
 # ── handlers ────────────────────────────────────────────────────────────
 
+
 async def _revenue(db: AsyncSession, f: Filters, q: str) -> str:
     cards = await _kpi_map(db, f)
     rev = cards.get("revenue", {})
@@ -230,10 +231,7 @@ async def _revenue(db: AsyncSession, f: Filters, q: str) -> str:
     if change is not None:
         lines.append(f"- **Change vs previous period:** {change:+.1f}%")
     if top:
-        lines.append(
-            f"- **Top seller:** {top['key']} at {npr(top['revenue'])} "
-            f"({top['share_pct']}% of sales)"
-        )
+        lines.append(f"- **Top seller:** {top['key']} at {npr(top['revenue'])} ({top['share_pct']}% of sales)")
     lines += ["", f"**Suggested action:** {_revenue_action(value, change, top)}"]
     return "\n".join(lines)
 
@@ -270,9 +268,7 @@ async def _profit(db: AsyncSession, f: Filters, q: str) -> str:
         return _no_data("profitability", _period_label(f))
     net = float(margin) - float(exp)
     margin_pct = (float(margin) / rev * 100) if rev else 0
-    health = (
-        "healthy" if margin_pct >= 40 else "moderate" if margin_pct >= 25 else "under pressure"
-    )
+    health = "healthy" if margin_pct >= 40 else "moderate" if margin_pct >= 25 else "under pressure"
     lines = [
         f"### Profitability — {_period_label(f)}",
         "",
@@ -299,21 +295,16 @@ async def _forecast(db: AsyncSession, f: Filters, q: str) -> str:
     fq = select(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(WINDOW_DAYS)
     if f.org_id is not None:
         fq = fq.where(Forecast.org_id == f.org_id)
-    rows = ((await db.execute(fq)).scalars().all())
+    rows = (await db.execute(fq)).scalars().all()
     if not rows:
-        return (
-            "The forecast model has no projections yet. "
-            "Retrain it from the **Forecast** section."
-        )
+        return "The forecast model has no projections yet. Retrain it from the **Forecast** section."
     total = sum(float(r.yhat) for r in rows)
     avg = total / len(rows)
     lo = sum(float(r.yhat_lower) if r.yhat_lower is not None else float(r.yhat) for r in rows)
     hi = sum(float(r.yhat_upper) if r.yhat_upper is not None else float(r.yhat) for r in rows)
     metrics = (model.metrics or {}) if model.metrics else {}
     acc = metrics.get("mape") or metrics.get("mae")
-    acc_txt = (
-        f" (historical MAPE/error ≈ {float(acc):.2f})" if acc is not None else ""
-    )
+    acc_txt = f" (historical MAPE/error ≈ {float(acc):.2f})" if acc is not None else ""
     return "\n".join(
         [
             f"### Revenue Forecast — next {len(rows)} days",
@@ -332,10 +323,7 @@ async def _forecast(db: AsyncSession, f: Filters, q: str) -> str:
 async def _inventory(db: AsyncSession, f: Filters, q: str) -> str:
     low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
     if not low:
-        return (
-            "Good news — **no products are below their reorder level** right now. "
-            "Inventory looks healthy."
-        )
+        return "Good news — **no products are below their reorder level** right now. Inventory looks healthy."
     urgent = [r for r in low if r["quantity_on_hand"] <= r["reorder_level"] * 0.5]
     lines = [
         f"### Inventory Alert — {len(low)} product(s) below reorder level",
@@ -347,10 +335,7 @@ async def _inventory(db: AsyncSession, f: Filters, q: str) -> str:
     for r in shown:
         status = "⚠️ Critical" if r in urgent else "Low"
         name = r["product"] or r["sku"]
-        lines.append(
-            f"| {name} | {r['quantity_on_hand']:,.0f} "
-            f"| {r['reorder_level']:,.0f} | {status} |"
-        )
+        lines.append(f"| {name} | {r['quantity_on_hand']:,.0f} | {r['reorder_level']:,.0f} | {status} |")
     if len(low) > len(shown):
         lines.append(f"\n…and {len(low) - len(shown)} more.")
     lines += [
@@ -365,7 +350,7 @@ async def _anomalies(db: AsyncSession, f: Filters, q: str) -> str:
     aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(20)
     if f.org_id is not None:
         aq = aq.where(Anomaly.org_id == f.org_id)
-    rows = ((await db.execute(aq)).scalars().all())
+    rows = (await db.execute(aq)).scalars().all()
     if not rows:
         return "No **open anomalies** detected in the current window — operations look stable. ✔"
     lines = [
@@ -377,16 +362,10 @@ async def _anomalies(db: AsyncSession, f: Filters, q: str) -> str:
     sev_icons = {"high": "🔴 High", "medium": "🟠 Medium", "low": "🟡 Low"}
     for a in rows[:10]:
         expected = npr(a.expected_value) if a.expected_value is not None else "—"
-        dev = (
-            f"{(float(a.deviation_score) * 100):+.1f}%"
-            if a.deviation_score is not None
-            else "—"
-        )
+        dev = f"{(float(a.deviation_score) * 100):+.1f}%" if a.deviation_score is not None else "—"
         sev = sev_icons.get(a.severity, a.severity)
         metric = a.metric.replace("_", " ")
-        lines.append(
-            f"| {metric} | {npr(a.observed_value)} | {expected} | {dev} | {sev} |"
-        )
+        lines.append(f"| {metric} | {npr(a.observed_value)} | {expected} | {dev} | {sev} |")
     lines += [
         "",
         "**Suggested action:** acknowledge high-severity alerts and review the "
@@ -415,9 +394,7 @@ async def _products(db: AsyncSession, f: Filters, q: str) -> str:
     return "\n".join(lines)
 
 
-async def _dimension(
-    db: AsyncSession, f: Filters, q: str, dim: str, title: str, tip: str
-) -> str:
+async def _dimension(db: AsyncSession, f: Filters, q: str, dim: str, title: str, tip: str) -> str:
     rows = await sales_by_dimension(db, f, dim)
     if not rows:
         return _no_data(f"{title.lower()} sales")
@@ -428,26 +405,18 @@ async def _dimension(
         "|---|---|---|---|",
     ]
     for r in rows[:8]:
-        lines.append(
-            f"| {r['key']} | {npr(r['revenue'])} | {r['share_pct']}% | {r['orders']} |"
-        )
+        lines.append(f"| {r['key']} | {npr(r['revenue'])} | {r['share_pct']}% | {r['orders']} |")
     lines += ["", f"**{tip}**"]
     return "\n".join(lines)
 
 
 async def _channels(db: AsyncSession, f: Filters, q: str) -> str:
-    tip = (
-        "Channel mix matters — focus spend on your highest-share channel "
-        "while fixing underperformers."
-    )
+    tip = "Channel mix matters — focus spend on your highest-share channel while fixing underperformers."
     return await _dimension(db, f, q, "channel", "Sales by Channel", tip)
 
 
 async def _regions(db: AsyncSession, f: Filters, q: str) -> str:
-    tip = (
-        "Geographic gaps may signal demand, supply, or marketing issues "
-        "worth investigating."
-    )
+    tip = "Geographic gaps may signal demand, supply, or marketing issues worth investigating."
     return await _dimension(db, f, q, "region", "Sales by Region", tip)
 
 
@@ -520,9 +489,7 @@ async def _compare_periods(db: AsyncSession, periods: list[ParsedPeriod], org_id
         "",
     ]
     if delta is None:
-        lines.append(
-            f"{first['label']} had no revenue, so there is no percentage to compare against."
-        )
+        lines.append(f"{first['label']} had no revenue, so there is no percentage to compare against.")
     else:
         direction = "up" if delta >= 0 else "down"
         lines.append(
@@ -540,11 +507,9 @@ async def _compare_periods(db: AsyncSession, periods: list[ParsedPeriod], org_id
 
 # ── social / help intents ───────────────────────────────────────────────
 
+
 async def _greeting(db: AsyncSession, f: Filters, q: str) -> str:
-    if any(
-        k in q.lower()
-        for k in ("how are you", "how r u", "how are u", "hru", "how's it going", "how is it going")
-    ):
+    if any(k in q.lower() for k in ("how are you", "how r u", "how are u", "hru", "how's it going", "how is it going")):
         return (
             "I'm doing great, thank you for asking! 🙌 How can I help you with your "
             "business data today?\n\n"
@@ -556,7 +521,7 @@ async def _greeting(db: AsyncSession, f: Filters, q: str) -> str:
         "Ask me anything about your **live data** — revenue, expenses, forecasts, "
         "inventory, anomalies, or product performance — and I'll answer with real "
         "numbers, never guesses.\n\n"
-        "Try: *\"What's our revenue trend this month?\"*"
+        'Try: *"What\'s our revenue trend this month?"*'
     )
 
 
@@ -598,8 +563,8 @@ async def _business(db: AsyncSession, f: Filters, q: str) -> str:
                     "Ask me about its **revenue, expenses, forecasts, inventory, anomalies** — I'll pull live numbers for this workspace."
                 )
         # Fallback: super-admin or no org
+
         from app.models.identity import Organization
-        from sqlalchemy import select as _select
 
         # If super-admin with no org, list accessible orgs hint
         if org_id is None:
@@ -644,7 +609,7 @@ async def _generic(db: AsyncSession, f: Filters) -> str:
         aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(20)
         if f.org_id is not None:
             aq = aq.where(Anomaly.org_id == f.org_id)
-        open_anoms = ((await db.execute(aq)).scalars().all())
+        open_anoms = (await db.execute(aq)).scalars().all()
         if open_anoms:
             lines.append(f"- **Anomalies:** {len(open_anoms)} open alert(s) need review")
     except Exception:

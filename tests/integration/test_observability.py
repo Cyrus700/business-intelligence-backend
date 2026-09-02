@@ -45,9 +45,7 @@ async def test_mutating_request_audited_with_request_id(client, manager_token, a
     assert resp.status_code == 200, resp.text
 
     _, admin = admin_token
-    audit_resp = await client.get(
-        "/api/v1/audit-logs?limit=50", headers={"Authorization": f"Bearer {admin}"}
-    )
+    audit_resp = await client.get("/api/v1/audit-logs?limit=50", headers={"Authorization": f"Bearer {admin}"})
     assert audit_resp.status_code == 200, audit_resp.text
     rows = audit_resp.json()
     assert isinstance(rows, list) and rows

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     admin,
+    advanced,
     ai,
     analytics,
     audit,
@@ -12,7 +13,6 @@ from app.api.v1 import (
     health,
     landing,
     ml,
-    advanced,
     quality,
     rbac,
     recommendations,

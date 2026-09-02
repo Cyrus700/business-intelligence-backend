@@ -33,10 +33,7 @@ DEFAULT_ROLES: list[RoleSeed] = [
     {
         "name": "analyst",
         "label": "Analyst",
-        "description": (
-            "View data, dashboards, forecasts and insights. Read-only access to "
-            "most features."
-        ),
+        "description": ("View data, dashboards, forecasts and insights. Read-only access to most features."),
         "rank": 1,
         "color": "green",
     },
@@ -53,10 +50,7 @@ DEFAULT_ROLES: list[RoleSeed] = [
     {
         "name": "admin",
         "label": "Admin",
-        "description": (
-            "Full platform control — manage users, roles, data sources, audit "
-            "logs and ML models."
-        ),
+        "description": ("Full platform control — manage users, roles, data sources, audit logs and ML models."),
         "rank": 3,
         "color": "purple",
     },

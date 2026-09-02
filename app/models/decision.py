@@ -19,12 +19,8 @@ class Insight(Base):
     body: Mapped[str] = mapped_column(Text)
     severity: Mapped[str] = mapped_column(default="info")
     evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    related_anomaly_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("anomalies.id", ondelete="SET NULL")
-    )
-    related_forecast_id: Mapped[int | None] = mapped_column(
-        ForeignKey("forecasts.id", ondelete="SET NULL")
-    )
+    related_anomaly_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anomalies.id", ondelete="SET NULL"))
+    related_forecast_id: Mapped[int | None] = mapped_column(ForeignKey("forecasts.id", ondelete="SET NULL"))
     period_start: Mapped[date | None]
     period_end: Mapped[date | None]
     generated_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -90,15 +86,9 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE")
-    )
-    alert_rule_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("alert_rules.id", ondelete="SET NULL")
-    )
-    insight_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("insights.id", ondelete="SET NULL")
-    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"))
+    alert_rule_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("alert_rules.id", ondelete="SET NULL"))
+    insight_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("insights.id", ondelete="SET NULL"))
     title: Mapped[str]
     body: Mapped[str | None] = mapped_column(Text)
     is_read: Mapped[bool] = mapped_column(default=False)
@@ -162,9 +152,7 @@ class ReportSchedule(Base, TimestampMixin):
     last_report_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("reports.id", ondelete="SET NULL")
     )
-    created_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE")
-    )
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
     )
@@ -172,12 +160,8 @@ class ReportSchedule(Base, TimestampMixin):
     __table_args__ = (
         CheckConstraint("frequency IN ('weekly', 'monthly')", name="valid_frequency"),
         CheckConstraint("format IN ('pdf', 'xlsx')", name="valid_schedule_format"),
-        CheckConstraint(
-            "day_of_week IS NULL OR (day_of_week BETWEEN 0 AND 6)", name="valid_day_of_week"
-        ),
-        CheckConstraint(
-            "day_of_month IS NULL OR (day_of_month BETWEEN 1 AND 28)", name="valid_day_of_month"
-        ),
+        CheckConstraint("day_of_week IS NULL OR (day_of_week BETWEEN 0 AND 6)", name="valid_day_of_week"),
+        CheckConstraint("day_of_month IS NULL OR (day_of_month BETWEEN 1 AND 28)", name="valid_day_of_month"),
         Index("ix_report_schedules_due", "is_active", "next_run_at"),
         Index("ix_report_schedules_org_id", "org_id"),
     )

@@ -97,10 +97,7 @@ def upgrade() -> None:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         for name, command, using, check in policies:
             with_check = f" WITH CHECK ({check})" if check else ""
-            op.execute(
-                f"CREATE POLICY {name} ON {table} FOR {command} "
-                f"TO PUBLIC USING ({using}){with_check}"
-            )
+            op.execute(f"CREATE POLICY {name} ON {table} FOR {command} TO PUBLIC USING ({using}){with_check}")
 
 
 def downgrade() -> None:

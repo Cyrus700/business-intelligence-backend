@@ -146,6 +146,7 @@ async def test_window_outside_loaded_data_returns_zero_not_error(client, seeded)
 
 # ── coverage ───────────────────────────────────────────────────────────────
 
+
 async def test_data_coverage_reports_real_extents(client, seeded):
     resp = await client.get("/api/v1/data-coverage", headers=auth(seeded))
     assert resp.status_code == 200

@@ -24,8 +24,7 @@ _METRIC_AGG = {
     "revenue": func.sum(SalesTransaction.total_amount),
     "orders": func.count(SalesTransaction.id),
     "gross_margin": func.sum(
-        SalesTransaction.total_amount
-        - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+        SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
     ),
     "avg_order_value": func.avg(SalesTransaction.total_amount),
     "units": func.sum(SalesTransaction.quantity),
@@ -42,9 +41,7 @@ def _col(dim: str):
 
 def _join_for(*dims):
     if "product" in dims or "category" in dims:
-        return SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        return SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id)
     return SalesTransaction.__table__
 
 
@@ -69,7 +66,7 @@ async def decomposition_tree(
         .where(*_conditions(f))
         .group_by(*[c.element for c in cols])
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     tree: dict[str, Any] = {"name": "Total", "children": {}}
     total = 0.0
     for r in rows:
@@ -91,9 +88,7 @@ async def decomposition_tree(
             "share_pct": round(value / total * 100, 1) if total else 0.0,
         }
         if children:
-            out["children"] = sorted(
-                [finalize(c) for c in children], key=lambda c: c["value"], reverse=True
-            )
+            out["children"] = sorted([finalize(c) for c in children], key=lambda c: c["value"], reverse=True)
         return out
 
     return {"metric": metric, "hierarchy": levels, "root": finalize(tree), "total": round(total, 2)}
@@ -117,8 +112,8 @@ async def waterfall(
         .where(*_conditions(pf))
         .group_by(_col(dimension))
     )
-    cur = {r.k or "(unknown)": float(r.v or 0) for r in db.execute(cur_stmt).all()}
-    prev = {r.k or "(unknown)": float(r.v or 0) for r in db.execute(prev_stmt).all()}
+    cur = {r.k or "(unknown)": float(r.v or 0) for r in (await db.execute(cur_stmt)).all()}
+    prev = {r.k or "(unknown)": float(r.v or 0) for r in (await db.execute(prev_stmt)).all()}
     keys = list({*cur, *prev})
     steps = []
     for k in keys:
@@ -151,7 +146,7 @@ async def heatmap(
         .where(*_conditions(f))
         .group_by(rcol, ccol)
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     data: dict[tuple, float] = {(r.r or "(unknown)", r.c or "(unknown)"): float(r.v or 0) for r in rows}
     r_keys = sorted({k[0] for k in data})
     c_keys = sorted({k[1] for k in data})
@@ -171,7 +166,12 @@ async def heatmap(
 
 # ── Scatter / bubble ───────────────────────────────────────────────
 async def scatter(
-    db: AsyncSession, f: Filters, dimension: str = "product", x: str = "revenue", y: str = "margin_pct", size: str = "units"
+    db: AsyncSession,
+    f: Filters,
+    dimension: str = "product",
+    x: str = "revenue",
+    y: str = "margin_pct",
+    size: str = "units",
 ) -> dict:
     if dimension not in DIMS:
         dimension = "product"
@@ -184,8 +184,7 @@ async def scatter(
             func.count(SalesTransaction.id).label("orders"),
             func.avg(SalesTransaction.total_amount).label("aov"),
             func.sum(
-                SalesTransaction.total_amount
-                - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+                SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
             ).label("gross_margin"),
         )
         .select_from(_join_for(dimension))
@@ -194,7 +193,7 @@ async def scatter(
     )
     if dimension in ("category", "product"):
         stmt = stmt.add_columns(Product.category.label("cat"))
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     pts = []
     for r in rows:
         revenue = float(r.revenue or 0)
@@ -231,7 +230,9 @@ async def scatter(
 
 
 # ── Funnel ─────────────────────────────────────────────────────────
-async def funnel(db: AsyncSession, f: Filters, metric: str = "revenue", dimension: str = "category", top_n: int = 8) -> dict:
+async def funnel(
+    db: AsyncSession, f: Filters, metric: str = "revenue", dimension: str = "category", top_n: int = 8
+) -> dict:
     stmt = (
         select(_col(dimension).label("k"), func.sum(_METRIC_AGG[metric]).label("v"))
         .select_from(_join_for(dimension))
@@ -239,13 +240,15 @@ async def funnel(db: AsyncSession, f: Filters, metric: str = "revenue", dimensio
         .group_by(_col(dimension))
         .order_by(func.sum(_METRIC_AGG[metric]).desc())
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     stages = [{"label": r.k or "(unknown)", "value": round(float(r.v or 0), 2)} for r in rows][:top_n]
     return {"metric": metric, "dimension": dimension, "stages": stages}
 
 
 # ── Radar (multi-metric comparison of entities) ────────────────────
-async def radar(db: AsyncSession, f: Filters, dimension: str = "region", metrics: str = "revenue,orders,gross_margin,aov,units") -> dict:
+async def radar(
+    db: AsyncSession, f: Filters, dimension: str = "region", metrics: str = "revenue,orders,gross_margin,aov,units"
+) -> dict:
     if dimension not in DIMS:
         dimension = "region"
     metric_list = [m.strip() for m in metrics.split(",") if m.strip() in _METRIC_AGG]
@@ -253,13 +256,8 @@ async def radar(db: AsyncSession, f: Filters, dimension: str = "region", metrics
         metric_list = ["revenue", "orders"]
     key = _col(dimension)
     cols = [key.label("k")] + [func.sum(_METRIC_AGG[m]).label(m) for m in metric_list]
-    stmt = (
-        select(*cols)
-        .select_from(_join_for(dimension))
-        .where(*_conditions(f))
-        .group_by(key)
-    )
-    rows = db.execute(stmt).all()
+    stmt = select(*cols).select_from(_join_for(dimension)).where(*_conditions(f)).group_by(key)
+    rows = (await db.execute(stmt)).all()
     entities = [r.k or "(unknown)" for r in rows]
     raw = {m: np.array([float(getattr(r, m) or 0) for r in rows]) for m in metric_list}
     series = {}
@@ -294,7 +292,7 @@ async def small_multiples(
         .group_by(bucket, key)
         .order_by(bucket, key)
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     members: dict[str, list[dict]] = {}
     periods: set = set()
     for r in rows:

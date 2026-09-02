@@ -64,12 +64,8 @@ class SalesTransaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     txn_date: Mapped[date]
-    product_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("products.id", ondelete="SET NULL")
-    )
-    customer_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("customers.id", ondelete="SET NULL")
-    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"))
     quantity: Mapped[int]
     unit_price: Mapped[Decimal] = mapped_column(Money)
     discount: Mapped[Decimal] = mapped_column(Money, default=0)
@@ -78,12 +74,8 @@ class SalesTransaction(Base):
     region: Mapped[str | None]
     # natural-key hash for idempotent loads (Phase 2)
     row_hash: Mapped[str | None] = mapped_column(unique=True)
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("data_sources.id", ondelete="SET NULL")
-    )
-    etl_job_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("etl_jobs.id", ondelete="SET NULL")
-    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
+    etl_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("etl_jobs.id", ondelete="SET NULL"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
     )
@@ -114,12 +106,8 @@ class Expense(Base):
     department: Mapped[str | None]
     description: Mapped[str | None]
     row_hash: Mapped[str | None] = mapped_column(unique=True)
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("data_sources.id", ondelete="SET NULL")
-    )
-    etl_job_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("etl_jobs.id", ondelete="SET NULL")
-    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
+    etl_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("etl_jobs.id", ondelete="SET NULL"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
     )
@@ -151,9 +139,7 @@ class InventoryLevel(Base):
     quantity_on_hand: Mapped[int]
     reorder_level: Mapped[int] = mapped_column(default=0)
     warehouse: Mapped[str | None]
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("data_sources.id", ondelete="SET NULL")
-    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
     )
@@ -216,9 +202,7 @@ class KpiDefinition(Base):
     )
     visibility: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     is_active: Mapped[bool] = mapped_column(default=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("char_length(metric) > 0", name="ck_kpi_metric_not_empty"),

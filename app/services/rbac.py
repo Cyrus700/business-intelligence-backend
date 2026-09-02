@@ -209,9 +209,7 @@ async def ensure_seeded(db: AsyncSession) -> Policy:
         name
         for name in role_ids
         if not (
-            await db.execute(
-                select(RolePermission.id).where(RolePermission.role_id == role_ids[name]).limit(1)
-            )
+            await db.execute(select(RolePermission.id).where(RolePermission.role_id == role_ids[name]).limit(1))
         ).first()
     }
 
@@ -224,9 +222,7 @@ async def ensure_seeded(db: AsyncSession) -> Policy:
     ]
     if rows:
         await db.execute(
-            pg_insert(RolePermission)
-            .values(rows)
-            .on_conflict_do_nothing(index_elements=["role_id", "permission_id"])
+            pg_insert(RolePermission).values(rows).on_conflict_do_nothing(index_elements=["role_id", "permission_id"])
         )
     await db.commit()
     invalidate()

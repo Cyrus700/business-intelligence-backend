@@ -75,7 +75,9 @@ def sign_token(
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def sign_reset_token(user_id: UUID, email: str, role: str = "analyst", token_version: int = 0, org_id: UUID | None = None) -> str:
+def sign_reset_token(
+    user_id: UUID, email: str, role: str = "analyst", token_version: int = 0, org_id: UUID | None = None
+) -> str:
     """Short-lived password-reset token (30 min by default, isolated purpose)."""
     settings = get_settings()
     ttl_min = settings.jwt_reset_expiry_minutes

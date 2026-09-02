@@ -85,7 +85,7 @@ async def discover_segments(db: AsyncSession, target: str, org_id=None) -> list[
                     {"key": key, "metric": metric},
                 )
             ).all()
-        segments.extend({key: v} for v, in rows if v)
+        segments.extend({key: v} for (v,) in rows if v)
     return segments
 
 
@@ -141,11 +141,7 @@ async def load_series(
             )
         ).all()
     else:
-        rows = (
-            await db.execute(
-                text(_SERIES_SQL), {"metric": TARGET_METRIC[target], "dim": json.dumps(dims)}
-            )
-        ).all()
+        rows = (await db.execute(text(_SERIES_SQL), {"metric": TARGET_METRIC[target], "dim": json.dumps(dims)})).all()
     frame = pd.DataFrame(rows, columns=["ds", "y"])
     if frame.empty:
         return frame

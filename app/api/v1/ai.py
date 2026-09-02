@@ -58,9 +58,7 @@ async def _load_or_create_conversation(
     from sqlalchemy import select as sa_select
 
     history = await db.execute(
-        sa_select(Message)
-        .where(Message.conversation_id == cid)
-        .order_by(Message.created_at, Message.id)
+        sa_select(Message).where(Message.conversation_id == cid).order_by(Message.created_at, Message.id)
     )
     msgs = [AIMessage(role=m.role, content=m.content) for m in history.scalars().all()]
     return cid, msgs
@@ -123,9 +121,7 @@ async def ai_chat_stream(
         yield _sse({"conversation_id": str(cid)})
         reply_parts: list[str] = []
         try:
-            async for chunk in stream_answer(
-                db, user.role, body.message, msgs, page=page, user=user
-            ):
+            async for chunk in stream_answer(db, user.role, body.message, msgs, page=page, user=user):
                 if chunk:
                     reply_parts.append(chunk)
                     yield _sse({"delta": chunk})
@@ -163,11 +159,7 @@ async def list_conversations(
     from sqlalchemy import func as sa_func
     from sqlalchemy import select
 
-    subq = (
-        select(Message.conversation_id, sa_func.count().label("cnt"))
-        .group_by(Message.conversation_id)
-        .subquery()
-    )
+    subq = select(Message.conversation_id, sa_func.count().label("cnt")).group_by(Message.conversation_id).subquery()
     rows = (
         await db.execute(
             select(Conversation, subq.c.cnt)
@@ -178,9 +170,7 @@ async def list_conversations(
         )
     ).all()
     return [
-        ConversationOut(
-            id=str(c.id), title=c.title, created_at=c.created_at.isoformat(), message_count=cnt or 0
-        )
+        ConversationOut(id=str(c.id), title=c.title, created_at=c.created_at.isoformat(), message_count=cnt or 0)
         for c, cnt in rows
     ]
 
@@ -205,12 +195,14 @@ async def get_conversation_messages(
     from sqlalchemy import select as sa_select
 
     rows = (
-        await db.execute(
-            sa_select(Message)
-            .where(Message.conversation_id == conv_id)
-            .order_by(Message.created_at, Message.id)
+        (
+            await db.execute(
+                sa_select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at, Message.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         MessageOut(
             id=str(m.id),
@@ -319,9 +311,9 @@ async def ai_insights(
     user: CurrentUser,
     scope: str = Query("dashboard", pattern="^(dashboard|forecast|anomalies|inventory|all)$"),
 ) -> list[InsightOut]:
+    from app.api.deps import is_super_admin
     from app.services.analytics import queries
     from app.services.analytics.queries import Filters
-    from app.api.deps import is_super_admin
 
     today = business_today()
     # Scope filters to caller's org unless super-admin (sees all)
@@ -338,10 +330,7 @@ async def ai_insights(
             metric = card.get("metric", "")
             insights.append(
                 InsightOut(
-                    title=(
-                        f"{metric.replace('_', ' ').title()} "
-                        f"{'Increased' if direction == 'up' else 'Decreased'}"
-                    ),
+                    title=(f"{metric.replace('_', ' ').title()} {'Increased' if direction == 'up' else 'Decreased'}"),
                     body=(
                         f"{metric.replace('_', ' ').title()} is at रू {val:,.0f}, "
                         f"{'up' if direction == 'up' else 'down'} {abs(change_pct):.1f}% "
@@ -359,10 +348,7 @@ async def ai_insights(
             insights.append(
                 InsightOut(
                     title=f"{len(stock)} Products Below Reorder Level",
-                    body=(
-                        f"{len(stock)} products need restocking: "
-                        f"{', '.join(names)}{'…' if len(stock) > 5 else ''}."
-                    ),
+                    body=(f"{len(stock)} products need restocking: {', '.join(names)}{'…' if len(stock) > 5 else ''}."),
                     type="inventory",
                     priority="high",
                 )
@@ -379,7 +365,12 @@ async def ai_insights(
             mq = mq.where(MlModel.org_id == org_id)
         model = (await db.execute(mq)).scalar_one_or_none()
         if model:
-            fq = select(ForecastModel).where(ForecastModel.model_id == model.id).order_by(ForecastModel.forecast_date).limit(30)
+            fq = (
+                select(ForecastModel)
+                .where(ForecastModel.model_id == model.id)
+                .order_by(ForecastModel.forecast_date)
+                .limit(30)
+            )
             if org_id is not None:
                 fq = fq.where(ForecastModel.org_id == org_id)
             rows = (await db.execute(fq)).scalars().all()
@@ -436,6 +427,7 @@ def _generate_suggestions(question: str) -> list[str]:
 
 # ── Executive Briefing (Phase 9) ────────────────────────────────────
 
+
 class ExecutiveBriefing(BaseModel):
     generated_at: str
     period: str
@@ -478,7 +470,7 @@ async def executive_briefing(
     # Ask AI for the briefing
     briefing_prompt = f"""Generate a concise executive briefing for the period {period_str}.
 
-Key metrics: {', '.join(kpi_lines)}
+Key metrics: {", ".join(kpi_lines)}
 
 Structure the response with these exact sections:
 1. PERFORMANCE — one paragraph summary

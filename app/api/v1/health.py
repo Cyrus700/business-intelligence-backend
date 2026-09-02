@@ -66,16 +66,13 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
     now = business_now()
     today = now.date()
     formula = (
-        "score = 0.30*growth + 0.25*profitability + 0.15*forecast_health "
-        "+ 0.15*freshness + 0.15*anomalies (each 0-100)"
+        "score = 0.30*growth + 0.25*profitability + 0.15*forecast_health + 0.15*freshness + 0.15*anomalies (each 0-100)"
     )
     components: list[dict[str, Any]] = []
 
     def add(name: str, weight: float, score: float, detail: str) -> None:
         score = max(0.0, min(100.0, score))
-        components.append(
-            {"name": name, "weight": weight, "score": round(score, 1), "detail": detail}
-        )
+        components.append({"name": name, "weight": weight, "score": round(score, 1), "detail": detail})
 
     # growth: 14d vs previous 14d revenue
     revenue = (
@@ -147,11 +144,7 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
     )
 
     # data freshness: days since the latest snapshot
-    latest = (
-        await db.execute(
-            text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
-        )
-    ).scalar()
+    latest = (await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))).scalar()
     if latest is None:
         freshness = 0.0
         detail = "no data yet"
@@ -163,11 +156,7 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
 
     # open anomalies penalty
     open_count = (
-        await db.execute(
-            select(func.count()).select_from(
-                text("anomalies WHERE status IN ('open', 'acknowledged')")
-            )
-        )
+        await db.execute(select(func.count()).select_from(text("anomalies WHERE status IN ('open', 'acknowledged')")))
     ).scalar() or 0
     add("open_anomalies", 0.15, 100 - 10 * int(open_count), f"{open_count} open anomaly(s)")
 
@@ -193,9 +182,7 @@ async def _system_health(db: DbSession) -> dict[str, Any]:
     components: list[dict[str, Any]] = []
 
     def add(name: str, status: str, latency_ms: float | None, detail: str) -> None:
-        components.append(
-            {"name": name, "status": status, "latency_ms": latency_ms, "detail": detail}
-        )
+        components.append({"name": name, "status": status, "latency_ms": latency_ms, "detail": detail})
 
     start = time.perf_counter()
     try:
@@ -209,16 +196,11 @@ async def _system_health(db: DbSession) -> dict[str, Any]:
         from app.services.storage import LOCAL_ROOT
 
         ok = LOCAL_ROOT.is_dir()
-        add("storage", "ok" if ok else "down", round((time.perf_counter() - start) * 1000, 1),
-            f"root {LOCAL_ROOT}")
+        add("storage", "ok" if ok else "down", round((time.perf_counter() - start) * 1000, 1), f"root {LOCAL_ROOT}")
     except Exception as exc:  # noqa: BLE001
         add("storage", "down", None, f"{type(exc).__name__}: {exc}")
 
-    last_etl = (
-        await db.execute(
-            select(EtlJob).order_by(EtlJob.started_at.desc()).limit(1)
-        )
-    ).scalar_one_or_none()
+    last_etl = (await db.execute(select(EtlJob).order_by(EtlJob.started_at.desc()).limit(1))).scalar_one_or_none()
     if last_etl is None:
         add("etl", "degraded", None, "no ETL job ever ran")
     elif last_etl.status == "success":
@@ -250,7 +232,13 @@ async def _system_health(db: DbSession) -> dict[str, Any]:
         s = _get()
         stats = stats_snapshot()
         if not is_configured():
-            add("email", "degraded", None, "SMTP not configured — in-app notifications only " f"(sent={stats['sent']} failed={stats['failed']} skipped={stats['skipped']})")
+            add(
+                "email",
+                "degraded",
+                None,
+                "SMTP not configured — in-app notifications only "
+                f"(sent={stats['sent']} failed={stats['failed']} skipped={stats['skipped']})",
+            )
         else:
             # Quick TCP check is too heavy for a health probe; report config
             # + recent send stats instead. A dedicated /admin/email/test can
@@ -266,8 +254,10 @@ async def _system_health(db: DbSession) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         add("email", "down", None, f"{type(exc).__name__}: {exc}")
 
-    overall = "ok" if all(c["status"] == "ok" for c in components) else (
-        "degraded" if all(c["status"] in ("ok", "degraded") for c in components) else "down"
+    overall = (
+        "ok"
+        if all(c["status"] == "ok" for c in components)
+        else ("degraded" if all(c["status"] in ("ok", "degraded") for c in components) else "down")
     )
     return {
         "generated_at": business_now().isoformat(),
@@ -329,16 +319,12 @@ async def ai_usage(db: DbSession) -> AiUsageOut:
     cutoff = business_now().replace(tzinfo=None) - timedelta(days=14)
     requests = (
         await db.execute(
-            select(func.count())
-            .select_from(Message)
-            .where(Message.role == "user", Message.created_at >= cutoff)
+            select(func.count()).select_from(Message).where(Message.role == "user", Message.created_at >= cutoff)
         )
     ).scalar() or 0
     assistant = (
         await db.execute(
-            select(func.count())
-            .select_from(Message)
-            .where(Message.role == "assistant", Message.created_at >= cutoff)
+            select(func.count()).select_from(Message).where(Message.role == "assistant", Message.created_at >= cutoff)
         )
     ).scalar() or 0
     users = (

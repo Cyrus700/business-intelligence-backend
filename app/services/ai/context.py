@@ -45,9 +45,7 @@ def npr(value: float | None) -> str:
     return f"रू {_indian_grouped(value)}" if value is not None else "—"
 
 
-async def build_business_context(
-    db: AsyncSession, days: int = DEFAULT_WINDOW_DAYS, *, org_id=None, user=None
-) -> str:
+async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DAYS, *, org_id=None, user=None) -> str:
     # Resolve org scope: per-business isolation, super-admin sees all
     if org_id is None and user is not None:
         org_id = None if getattr(user, "is_super_admin", False) else getattr(user, "org_id", None)
@@ -60,10 +58,7 @@ async def build_business_context(
     # (its own notion comes from training data) and silently misreads every
     # relative date the user gives it.
     now = business_now()
-    lines.append(
-        f"- Today is {today:%A %d %B %Y} ({today.isoformat()}), "
-        f"current time {now:%H:%M} {BUSINESS_TZ_NAME}."
-    )
+    lines.append(f"- Today is {today:%A %d %B %Y} ({today.isoformat()}), current time {now:%H:%M} {BUSINESS_TZ_NAME}.")
     lines.append(f"- The figures below cover {window_start.isoformat()} → {today.isoformat()}.")
     # Business identity — must be first-class so "what is my business name?" is answered correctly
     try:
@@ -78,7 +73,9 @@ async def build_business_context(
         elif user is not None and getattr(user, "is_super_admin", False):
             lines.append("- Business / workspace: Platform Super-Admin (sees all organizations)")
         if user is not None:
-            lines.append(f"- Signed-in user: {getattr(user, 'email', 'unknown')} · role {getattr(user, 'role', 'unknown')}")
+            lines.append(
+                f"- Signed-in user: {getattr(user, 'email', 'unknown')} · role {getattr(user, 'role', 'unknown')}"
+            )
     except Exception:
         pass
     # Everything appended above is calendar metadata, not warehouse data — the
@@ -137,8 +134,7 @@ async def build_business_context(
                 else "; no products below reorder level"
             )
             lines.append(
-                f"- Inventory: {len(levels)} SKUs, {total_units:,.0f} units on hand "
-                f"(latest snapshot){low_txt}"
+                f"- Inventory: {len(levels)} SKUs, {total_units:,.0f} units on hand (latest snapshot){low_txt}"
             )
     except Exception:
         pass
@@ -149,10 +145,15 @@ async def build_business_context(
             mq = mq.where(MlModel.org_id == org_id)
         model = (await db.execute(mq.order_by(MlModel.trained_at.desc()))).scalar_one_or_none()
         if model:
-            fq = select(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(DEFAULT_WINDOW_DAYS)
+            fq = (
+                select(Forecast)
+                .where(Forecast.model_id == model.id)
+                .order_by(Forecast.forecast_date)
+                .limit(DEFAULT_WINDOW_DAYS)
+            )
             if org_id is not None:
                 fq = fq.where(Forecast.org_id == org_id)
-            rows = ((await db.execute(fq)).scalars().all())
+            rows = (await db.execute(fq)).scalars().all()
             if rows:
                 total = sum(float(r.yhat) for r in rows)
                 avg = total / len(rows)
@@ -167,20 +168,14 @@ async def build_business_context(
         aq = select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(10)
         if org_id is not None:
             aq = aq.where(Anomaly.org_id == org_id)
-        anoms = ((await db.execute(aq)).scalars().all())
+        anoms = (await db.execute(aq)).scalars().all()
         if anoms:
             top = anoms[:3]
-            detail = ", ".join(
-                f"{a.metric.replace('_', ' ')} ({npr(a.observed_value)})" for a in top
-            )
-            lines.append(
-                f"- {len(anoms)} open anomaly alert(s); latest: {detail}"
-            )
+            detail = ", ".join(f"{a.metric.replace('_', ' ')} ({npr(a.observed_value)})" for a in top)
+            lines.append(f"- {len(anoms)} open anomaly alert(s); latest: {detail}")
     except Exception:
         pass
 
     if len(lines) == header_lines:
-        lines.append(
-            "- No analytics data loaded yet — connect a data source to populate the dashboard."
-        )
+        lines.append("- No analytics data loaded yet — connect a data source to populate the dashboard.")
     return "\n".join(lines)

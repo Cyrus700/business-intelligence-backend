@@ -65,7 +65,13 @@ check_untyped_defs = true
 # expressions that mypy's stubs over-narrow. Runtime correctness is covered by
 # the integration test suite's exact-value assertions.
 [[tool.mypy.overrides]]
-module = ["app.services.analytics.queries", "app.api.v1.analytics"]
+module = [
+    "app.services.analytics.queries",
+    "app.api.v1.analytics",
+    "app.api.v1.advanced",
+    "app.services.analytics.influencers",
+    "app.services.ml.segmentation",
+]
 disable_error_code = ["arg-type", "return-value", "call-overload", "assignment", "attr-defined", "list-item", "index"]
 
 [[tool.mypy.overrides]]

@@ -112,9 +112,7 @@ class BacktestOut(BaseModel):
     models: dict[str, BacktestModel]
 
 
-async def _active_model(
-    db, target: str, dimensions: dict[str, Any] | None = None, org_id=None
-) -> MlModel | None:
+async def _active_model(db, target: str, dimensions: dict[str, Any] | None = None, org_id=None) -> MlModel | None:
     q = select(MlModel).where(
         MlModel.target == target,
         MlModel.dimensions == (dimensions or {}),
@@ -201,9 +199,7 @@ async def get_forecast(
 
     forecaster = NaiveSeasonal()
     forecaster.fit(frame)
-    future = pd.date_range(
-        start=frame["ds"].max() + pd.Timedelta(days=1), periods=horizon, freq="D"
-    )
+    future = pd.date_range(start=frame["ds"].max() + pd.Timedelta(days=1), periods=horizon, freq="D")
     preds = forecaster.predict(pd.Series(future))
     m = _roll30_summary(frame)
     return ForecastOut(
@@ -250,12 +246,13 @@ async def model_registry(db: DbSession, user: CurrentUser) -> list[ModelOut]:
     """Model registry (Phase 6) — every trained model with lifecycle dates,
     metrics, params, and the dataset range it was trained on."""
     from sqlalchemy import text
+
     from app.api.deps import is_super_admin
 
     q = select(MlModel).order_by(MlModel.trained_at.desc(), MlModel.version.desc())
     if not is_super_admin(user) and user.org_id is not None:
         q = q.where(MlModel.org_id == user.org_id)
-    models = ((await db.execute(q)).scalars().all())
+    models = (await db.execute(q)).scalars().all()
 
     dataset_range: dict[str, tuple[date | None, date | None]] = {}
     for m in models:
@@ -268,15 +265,17 @@ async def model_registry(db: DbSession, user: CurrentUser) -> list[ModelOut]:
                         "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e "
                         "FROM kpi_snapshots WHERE metric = :m AND org_id = :org"
                     ),
-                    {"m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target, "org": str(user.org_id)},
+                    {
+                        "m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target,
+                        "org": str(user.org_id),
+                    },
                 )
             ).first()
         else:
             row = (
                 await db.execute(
                     text(
-                        "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e "
-                        "FROM kpi_snapshots WHERE metric = :m"
+                        "SELECT MIN(snapshot_date) AS s, MAX(snapshot_date) AS e FROM kpi_snapshots WHERE metric = :m"
                     ),
                     {"m": m.target.replace("_daily", "") if m.target.endswith("_daily") else m.target},
                 )
@@ -376,8 +375,8 @@ async def backtest(
 )
 async def retrain(db: DbSession, user: CurrentUser) -> dict[str, Any]:
     """Synchronous retrain of all targets (takes ~30-60s; acceptable for admin use)."""
-    from app.services.ml.registry import train_all
     from app.api.deps import is_super_admin
+    from app.services.ml.registry import train_all
 
     org_id = None if is_super_admin(user) else user.org_id
     models = await train_all(db, org_id=org_id)
@@ -422,9 +421,7 @@ async def list_anomalies(
     response_model=AnomalyOut,
     dependencies=[Depends(require_role("manager"))],
 )
-async def update_anomaly(
-    anomaly_id: UUID, body: AnomalyUpdate, db: DbSession, user: CurrentUser
-) -> AnomalyOut:
+async def update_anomaly(anomaly_id: UUID, body: AnomalyUpdate, db: DbSession, user: CurrentUser) -> AnomalyOut:
     from app.api.deps import is_super_admin
 
     anomaly = await db.get(Anomaly, anomaly_id)

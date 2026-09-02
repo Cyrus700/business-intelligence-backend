@@ -384,10 +384,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
         )
 
     # ── volume problem or value problem ───────────────────────────────────
-    cards = {
-        c["metric"]: c
-        for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1]))
-    }
+    cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1]))}
     rev, orders = cards.get("revenue"), cards.get("orders")
     if rev and orders and rev.get("previous_value") and orders.get("previous_value"):
         bridge = price_volume_bridge(
@@ -554,11 +551,7 @@ async def persist_recommendations(db: AsyncSession, org_id=None) -> dict[str, in
             if len(new_warnings) > 1
             else new_warnings[0]["title"]
         )
-        body = (
-            new_warnings[0]["body"]
-            if len(new_warnings) == 1
-            else "; ".join(w["title"] for w in new_warnings)
-        )
+        body = new_warnings[0]["body"] if len(new_warnings) == 1 else "; ".join(w["title"] for w in new_warnings)
         for user in recipients:
             db.add(Notification(user_id=user.id, title=title, body=body, org_id=org_id or user.org_id))
 
@@ -585,7 +578,7 @@ async def generate_all_recommendations(db: AsyncSession, org_id=None) -> list[di
 
             sig = _ins.signature(generator)
             if "org_id" in sig.parameters:
-                all_recs.extend(await generator(db, today, org_id=org_id))
+                all_recs.extend(await generator(db, today, org_id=org_id))  # type: ignore[call-arg]
             else:
                 all_recs.extend(await generator(db, today))
         except Exception:
@@ -640,9 +633,7 @@ async def _latest_data_date(db: AsyncSession, org_id=None) -> date | None:
         ).scalar_one()
     else:
         value = (
-            await db.execute(
-                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'")
-            )
+            await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))
         ).scalar_one()
     return value
 

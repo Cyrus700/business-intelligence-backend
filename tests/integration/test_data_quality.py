@@ -148,7 +148,12 @@ async def test_overview_and_history_endpoints(client, manager_token):
     assert body["latest"] is not None
     assert body["latest"]["score"] == 100.0
     assert set(body["latest"]["dimensions"]) >= {
-        "completeness", "validity", "consistency", "uniqueness", "timeliness", "accuracy",
+        "completeness",
+        "validity",
+        "consistency",
+        "uniqueness",
+        "timeliness",
+        "accuracy",
     }
     assert len(body["trend"]) >= 1
 

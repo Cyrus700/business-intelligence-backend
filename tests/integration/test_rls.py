@@ -44,9 +44,7 @@ async def count_as(role: str | None, sub: uuid.UUID, table: str) -> int:
     claims = json.dumps({"sub": str(sub), "app_metadata": {"role": role}} if role else {})
     async with get_session_factory()() as db:
         await db.execute(text("SET LOCAL ROLE rls_probe"))
-        await db.execute(
-            text("SELECT set_config('request.jwt.claims', :claims, true)"), {"claims": claims}
-        )
+        await db.execute(text("SELECT set_config('request.jwt.claims', :claims, true)"), {"claims": claims})
         n = (await db.execute(text(f"SELECT COUNT(*) FROM {table}"))).scalar_one()
         await db.rollback()
     return int(n)

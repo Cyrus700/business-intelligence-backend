@@ -46,9 +46,10 @@ def create_app() -> FastAPI:
     # Global unhandled-exception sanitiser — never leak stack traces or
     # internal paths to clients in prod. Dev keeps the full traceback via
     # FastAPI's debug response (when env!=prod we still sanitise 500s).
+    import logging
+
     from fastapi import Request
     from fastapi.responses import JSONResponse
-    import logging
 
     logger = logging.getLogger(__name__)
 

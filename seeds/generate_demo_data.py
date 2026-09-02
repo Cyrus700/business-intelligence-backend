@@ -132,9 +132,7 @@ def gen_sales() -> pd.DataFrame:
         d = START + timedelta(days=i)
         years_in = i / 365.25
         base = 26 * (1 + 0.18 * years_in)  # gentle growth trend
-        weekday_mult = [1.0, 0.95, 0.95, 1.0, 1.15, 1.3, 0.7][
-            d.weekday()
-        ]  # Sat=5 busy, Sun=6 (Nepal wk)
+        weekday_mult = [1.0, 0.95, 0.95, 1.0, 1.15, 1.3, 0.7][d.weekday()]  # Sat=5 busy, Sun=6 (Nepal wk)
         fest_mult, in_festival = festival_boost(d)
         n_orders = max(3, int(rng.normal(base * weekday_mult * fest_mult, base * 0.14)))
 

@@ -15,7 +15,6 @@ Three complementary signals, all grounded in warehouse aggregates:
 """
 
 import logging
-from dataclasses import dataclass
 
 import numpy as np
 from sqlalchemy import func, select
@@ -29,21 +28,17 @@ logger = logging.getLogger(__name__)
 DIMENSIONS = ("region", "channel", "category", "product")
 
 
-def _member_values(db: AsyncSession, f: Filters, dimension: str) -> list[tuple[str, float]]:
+async def _member_values(db: AsyncSession, f: Filters, dimension: str) -> list[tuple[str, float]]:
     """(member, metric_value) for a dimension using the active filters."""
     from app.services.analytics.queries import _sales_conditions
 
     if dimension == "product":
         key = Product.name
-        stmt_from = SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        stmt_from = SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id)
         group = [Product.name]
     elif dimension == "category":
         key = Product.category
-        stmt_from = SalesTransaction.__table__.join(
-            Product.__table__, Product.id == SalesTransaction.product_id
-        )
+        stmt_from = SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id)
         group = [Product.category]
     else:
         key = getattr(SalesTransaction, dimension)
@@ -55,10 +50,10 @@ def _member_values(db: AsyncSession, f: Filters, dimension: str) -> list[tuple[s
         .where(*_sales_conditions(f, f.date_from, f.date_to))
         .group_by(*group)
     )
-    return [(r.key or "(unknown)", float(r.value or 0.0)) for r in db.execute(stmt).all()]
+    return [(r.key or "(unknown)", float(r.value or 0.0)) for r in (await db.execute(stmt)).all()]
 
 
-def _numeric_drivers(db: AsyncSession, f: Filters) -> list[dict]:
+async def _numeric_drivers(db: AsyncSession, f: Filters) -> list[dict]:
     """Pearson correlation of revenue with volume/price/margin across products."""
     from app.services.analytics.queries import _sales_conditions
 
@@ -69,19 +64,14 @@ def _numeric_drivers(db: AsyncSession, f: Filters) -> list[dict]:
             func.sum(SalesTransaction.quantity).label("units"),
             func.avg(SalesTransaction.unit_price).label("price"),
             func.sum(
-                SalesTransaction.total_amount
-                - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+                SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
             ).label("margin"),
         )
-        .select_from(
-            SalesTransaction.__table__.join(
-                Product.__table__, Product.id == SalesTransaction.product_id
-            )
-        )
+        .select_from(SalesTransaction.__table__.join(Product.__table__, Product.id == SalesTransaction.product_id))
         .where(*_sales_conditions(f, f.date_from, f.date_to))
         .group_by(Product.id)
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     if len(rows) < 3:
         return []
     rev = np.array([float(r.revenue or 0) for r in rows])
@@ -122,7 +112,7 @@ async def key_influencers(db: AsyncSession, f: Filters, target: str = "revenue")
 
     dim_results = []
     for dim in DIMENSIONS:
-        members = _member_values(db, f, dim)
+        members = await _member_values(db, f, dim)
         if len(members) < 2:
             continue
         vals = np.array([m[1] for m in members], dtype=float)
@@ -157,7 +147,7 @@ async def key_influencers(db: AsyncSession, f: Filters, target: str = "revenue")
     dim_results.sort(key=lambda d: d["variation_share"], reverse=True)
     leading = dim_results[0]["dimension"] if dim_results else None
 
-    numeric = _numeric_drivers(db, f)
+    numeric = await _numeric_drivers(db, f)
 
     return {
         "target": target,

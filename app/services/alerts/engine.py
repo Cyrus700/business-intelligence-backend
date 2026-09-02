@@ -126,9 +126,7 @@ async def evaluate_alerts(db: AsyncSession, today: date | None = None, org_id=No
             ).scalar_one()
         else:
             today = (
-                await db.execute(
-                    text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric='revenue'")
-                )
+                await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric='revenue'"))
             ).scalar_one()
     if today is None:
         return 0
@@ -177,7 +175,7 @@ async def evaluate_alerts(db: AsyncSession, today: date | None = None, org_id=No
             created += 1
             if (rule.channels or {}).get("email"):
                 # Honor per-user preference (default on) and non-blocking send.
-                prefs = (user.preferences or {})
+                prefs = user.preferences or {}
                 if prefs.get("anomaly_alerts") is False:
                     continue
                 try:

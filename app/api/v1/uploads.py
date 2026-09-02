@@ -221,12 +221,8 @@ async def list_uploads(
     stmt = select(RawUpload).where(org_predicate(RawUpload.org_id, user.org_id))
     if status_filter:
         stmt = stmt.where(RawUpload.status == status_filter)
-    total = (
-        (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
-    )
-    rows = (
-        (await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))).scalars().all()
-    )
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
+    rows = (await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))).scalars().all()
     return PaginatedUploads(
         items=[UploadOut.model_validate(r) for r in rows],
         total=total,
@@ -245,9 +241,7 @@ async def get_upload(
 
     upload = (
         await db.execute(
-            select(RawUpload).where(
-                RawUpload.id == upload_id, org_predicate(RawUpload.org_id, user.org_id)
-            )
+            select(RawUpload).where(RawUpload.id == upload_id, org_predicate(RawUpload.org_id, user.org_id))
         )
     ).scalar_one_or_none()
     if upload is None:

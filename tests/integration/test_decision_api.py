@@ -195,8 +195,6 @@ async def test_report_xlsx_roundtrip(client):
     )
     assert resp.status_code == 201
 
-    download = await client.get(
-        f"/api/v1/reports/{resp.json()['id']}/download", headers=auth(token)
-    )
+    download = await client.get(f"/api/v1/reports/{resp.json()['id']}/download", headers=auth(token))
     assert download.status_code == 200
     assert download.content.startswith(b"PK")  # xlsx = zip container

@@ -98,14 +98,20 @@ async def data_quality_overview(
     org_filter_run = [] if is_super_admin(user) else [DataQualityRun.org_id == user.org_id]
     org_filter_issue = [] if is_super_admin(user) else [DataQualityIssue.org_id == user.org_id]
     latest = (
-        await db.execute(select(DataQualityRun).where(*org_filter_run).order_by(DataQualityRun.created_at.desc()))
-    ).scalars().first()
+        (await db.execute(select(DataQualityRun).where(*org_filter_run).order_by(DataQualityRun.created_at.desc())))
+        .scalars()
+        .first()
+    )
 
     history = (
-        await db.execute(
-            select(DataQualityRun).where(*org_filter_run).order_by(DataQualityRun.created_at.desc()).limit(limit)
+        (
+            await db.execute(
+                select(DataQualityRun).where(*org_filter_run).order_by(DataQualityRun.created_at.desc()).limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     severity_counts = dict(
         (
@@ -172,8 +178,10 @@ async def data_quality_issues(
     from app.api.deps import is_super_admin
 
     org_clause = [] if is_super_admin(user) else [DataQualityIssue.org_id == user.org_id]
-    stmt = select(DataQualityIssue).where(*org_clause).order_by(
-        DataQualityIssue.created_at.desc(), DataQualityIssue.row_count.desc()
+    stmt = (
+        select(DataQualityIssue)
+        .where(*org_clause)
+        .order_by(DataQualityIssue.created_at.desc(), DataQualityIssue.row_count.desc())
     )
     count_stmt = select(func.count()).select_from(DataQualityIssue).where(*org_clause)
 
@@ -191,9 +199,7 @@ async def data_quality_issues(
         count_stmt = count_stmt.where(DataQualityIssue.table_name == table)
 
     total = (await db.execute(count_stmt)).scalar_one()
-    rows = (
-        await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))
-    ).scalars().all()
+    rows = (await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))).scalars().all()
 
     return {
         "items": [IssueOut.model_validate(r).model_dump() for r in rows],

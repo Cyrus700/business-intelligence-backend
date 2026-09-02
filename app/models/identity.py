@@ -27,9 +27,13 @@ class Organization(Base, TimestampMixin):
     # Approval workflow (system admin must approve new businesses)
     status: Mapped[str] = mapped_column(default="pending")  # pending | approved | rejected
     approved_at: Mapped[datetime | None]
-    approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL"))
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
     rejected_at: Mapped[datetime | None]
-    rejected_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL"))
+    rejected_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
     rejection_reason: Mapped[str | None]
 
 
@@ -70,9 +74,7 @@ class OrganizationInvite(Base):
     __tablename__ = "organization_invites"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
-    )
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
     email: Mapped[str | None]
     role: Mapped[str] = mapped_column(default="analyst")
     token: Mapped[str] = mapped_column(unique=True)  # opaque hex, delivered via API / email
@@ -98,9 +100,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("profiles.id", ondelete="SET NULL")
-    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("profiles.id", ondelete="SET NULL"))
     action: Mapped[str]
     entity: Mapped[str | None]
     entity_id: Mapped[str | None]

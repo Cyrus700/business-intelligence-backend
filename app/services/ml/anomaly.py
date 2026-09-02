@@ -52,15 +52,11 @@ def detect_frame(frame: pd.DataFrame, season: str = "weekly") -> pd.DataFrame:
 
     if season == "weekly":
         group = df["ds"].dt.dayofweek
-        df["expected"] = df.groupby(group)["y"].transform(
-            lambda s: s.rolling(8, min_periods=3).median().shift(1)
-        )
+        df["expected"] = df.groupby(group)["y"].transform(lambda s: s.rolling(8, min_periods=3).median().shift(1))
         df["z"] = _robust_z(STL(df["y"], period=7, robust=True).fit().resid)
     else:  # monthly
         group = df["ds"].dt.day
-        df["expected"] = df.groupby(group)["y"].transform(
-            lambda s: s.rolling(4, min_periods=2).median().shift(1)
-        )
+        df["expected"] = df.groupby(group)["y"].transform(lambda s: s.rolling(4, min_periods=2).median().shift(1))
         df["z"] = _robust_z((df["y"] - df["expected"]).fillna(0.0))
 
     df["pct_dev"] = (df["y"] - df["expected"]) / df["expected"].replace(0, np.nan)
@@ -121,9 +117,7 @@ async def explain_contributors(db: AsyncSession, metric: str, day: date, org_id=
                 Product.__table__, (Product.id == SalesTransaction.product_id) & (Product.org_id == org_id)
             )
         else:
-            source = SalesTransaction.__table__.outerjoin(
-                Product.__table__, Product.id == SalesTransaction.product_id
-            )
+            source = SalesTransaction.__table__.outerjoin(Product.__table__, Product.id == SalesTransaction.product_id)
         date_col, value_col = SalesTransaction.txn_date, SalesTransaction.total_amount
     elif metric == "expense_total":
         dimensions = (("category", Expense.category),)
@@ -236,11 +230,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
     q = select(Anomaly).where(Anomaly.metric == metric)
     if org_id is not None:
         q = q.where(Anomaly.org_id == org_id)
-    existing = {
-        (a.metric, a.context.get("date"))
-        for a in (await db.execute(q)).scalars()
-        if a.context
-    }
+    existing = {(a.metric, a.context.get("date")) for a in (await db.execute(q)).scalars() if a.context}
     created = 0
     for _, row in flagged.iterrows():
         dat = row["ds"].date()
@@ -251,9 +241,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
         context: dict[str, Any] = {
             "date": day,
             "direction": direction,
-            "pct_deviation": None
-            if pd.isna(row["pct_dev"])
-            else round(float(row["pct_dev"]) * 100, 1),
+            "pct_deviation": None if pd.isna(row["pct_dev"]) else round(float(row["pct_dev"]) * 100, 1),
             "methods": {
                 "robust_zscore": round(float(row["z"]), 2),
                 "isolation_forest": round(float(row["if_score"]), 4),
@@ -264,9 +252,7 @@ async def scan_target(db: AsyncSession, target: str, lookback_days: int | None =
             Anomaly(
                 metric=metric,
                 observed_value=round(float(row["y"]), 2),
-                expected_value=None
-                if pd.isna(row["expected"])
-                else round(float(row["expected"]), 2),
+                expected_value=None if pd.isna(row["expected"]) else round(float(row["expected"]), 2),
                 deviation_score=round(float(abs(row["z"])), 2),
                 severity=row["severity"],
                 context=context,

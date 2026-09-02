@@ -166,7 +166,11 @@ async def google_callback(
                 ).scalar_one_or_none()
                 org_id = legacy_org.id if legacy_org else None
         # Platform super-admin if ADMIN_EMAIL; otherwise use invited role if present
-        role_for_new = "admin" if is_admin_login else (invited_role if org_id is not None and 'invited_role' in locals() and invited_role else "analyst")
+        role_for_new = (
+            "admin"
+            if is_admin_login
+            else (invited_role if org_id is not None and "invited_role" in locals() and invited_role else "analyst")
+        )
         profile = Profile(
             id=profile_id,
             email=normalized_google_email,
@@ -209,7 +213,9 @@ async def google_callback(
             await db.commit()
             await db.refresh(profile)
 
-    token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id)
+    token = sign_token(
+        profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
+    )
 
     frontend_url = s.frontend_url
     resp = RedirectResponse(
@@ -262,7 +268,7 @@ async def get_preferences(user: CurrentUser) -> PreferencesOut:
 
 @router.patch("/me/preferences", response_model=PreferencesOut)
 async def update_preferences(body: PreferencesIn, user: CurrentUser, db: DbSession) -> PreferencesOut:
-    current = (user.preferences or {})
+    current = user.preferences or {}
     current.update(body.model_dump(exclude_unset=True))
     user.preferences = current
     await db.commit()
@@ -369,6 +375,7 @@ async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: B
         s = _re.sub(r"[^a-z0-9]+", "-", s)
         s = _re.sub(r"-{2,}", "-", s).strip("-")
         return (s or "org")[:64]
+
     base_slug = _slugify(normalized)
     slug = base_slug
     for _ in range(5):
@@ -419,7 +426,9 @@ async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: B
 
     # Auto-approve path (dev / ADMIN_EMAIL): immediate login
     if auto_approve:
-        token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id)
+        token = sign_token(
+            profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
+        )
         try:
             from app.services.email.service import send_welcome_email
 
@@ -438,7 +447,9 @@ async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: B
     try:
         from app.services.email.service import send_business_pending_admin_email, send_business_verification_email
 
-        background_tasks.add_task(send_business_verification_email, profile.email, org.name, verification_token, profile.full_name)
+        background_tasks.add_task(
+            send_business_verification_email, profile.email, org.name, verification_token, profile.full_name
+        )
         background_tasks.add_task(send_business_pending_admin_email, org.name, profile.email, profile.full_name)
     except Exception:
         logger.exception("failed to queue business approval emails for %s", profile.email)
@@ -462,8 +473,12 @@ async def verify_email(body: VerifyEmailBody, db: DbSession, background_tasks: B
         raise HTTPException(400, "Invalid or expired verification token")
     if profile.email_verified:
         return {"message": "Email already verified. Awaiting System Admin approval."}
-    if profile.email_verification_expires_at and profile.email_verification_expires_at < datetime.now(UTC).replace(tzinfo=None):
-        raise HTTPException(400, "Verification token expired. Please request a new one via POST /auth/resend-verification.")
+    if profile.email_verification_expires_at and profile.email_verification_expires_at < datetime.now(UTC).replace(
+        tzinfo=None
+    ):
+        raise HTTPException(
+            400, "Verification token expired. Please request a new one via POST /auth/resend-verification."
+        )
     profile.email_verified = True
     profile.email_verified_at = datetime.now(UTC).replace(tzinfo=None)
     profile.email_verification_token = None
@@ -475,14 +490,20 @@ async def verify_email(body: VerifyEmailBody, db: DbSession, background_tasks: B
 
         org = await db.get(Organization, profile.org_id) if profile.org_id else None
         if org:
-            background_tasks.add_task(send_business_pending_confirmation_email, profile.email, org.name, profile.full_name)
+            background_tasks.add_task(
+                send_business_pending_confirmation_email, profile.email, org.name, profile.full_name
+            )
     except Exception:
         logger.exception("failed to queue pending confirmation for %s", profile.email)
-    return {"message": "Email verified successfully. Your business is pending System Admin approval. You'll receive an email once approved."}
+    return {
+        "message": "Email verified successfully. Your business is pending System Admin approval. You'll receive an email once approved."
+    }
 
 
 @router.post("/resend-verification")
-async def resend_verification(body: ResendVerificationBody, db: DbSession, background_tasks: BackgroundTasks) -> dict[str, str]:
+async def resend_verification(
+    body: ResendVerificationBody, db: DbSession, background_tasks: BackgroundTasks
+) -> dict[str, str]:
     """Resend verification email for pending business."""
     normalized = body.email.strip().lower()
     result = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized))
@@ -505,7 +526,9 @@ async def resend_verification(body: ResendVerificationBody, db: DbSession, backg
         from app.services.email.service import send_business_verification_email
 
         org_name = org.name if org else "your business"
-        background_tasks.add_task(send_business_verification_email, profile.email, org_name, new_token, profile.full_name)
+        background_tasks.add_task(
+            send_business_verification_email, profile.email, org_name, new_token, profile.full_name
+        )
     except Exception:
         logger.exception("failed to resend verification for %s", profile.email)
     return {"message": "Verification email sent. Please check your inbox."}
@@ -522,11 +545,21 @@ class ApproveBody(BaseModel):
 async def list_pending_organizations(db: DbSession, user: CurrentUser) -> list[OrganizationPendingOut]:
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")
-    rows = (await db.execute(select(Organization).where(Organization.status == "pending").order_by(Organization.created_at.desc()))).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(Organization).where(Organization.status == "pending").order_by(Organization.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     out: list[OrganizationPendingOut] = []
     for org in rows:
         # Fetch business admin contact for this org
-        admin = (await db.execute(select(Profile).where(Profile.org_id == org.id, Profile.role == "admin").limit(1))).scalar_one_or_none()
+        admin = (
+            await db.execute(select(Profile).where(Profile.org_id == org.id, Profile.role == "admin").limit(1))
+        ).scalar_one_or_none()
         if not admin:
             admin = (await db.execute(select(Profile).where(Profile.org_id == org.id).limit(1))).scalar_one_or_none()
         base = OrganizationPendingOut.model_validate(org)
@@ -537,7 +570,9 @@ async def list_pending_organizations(db: DbSession, user: CurrentUser) -> list[O
 
 
 @router.get("/admin/organizations", response_model=list[OrganizationOut])
-async def admin_list_all_organizations(db: DbSession, user: CurrentUser, status: str | None = Query(None, pattern="^(pending|approved|rejected)$")) -> list[OrganizationOut]:
+async def admin_list_all_organizations(
+    db: DbSession, user: CurrentUser, status: str | None = Query(None, pattern="^(pending|approved|rejected)$")
+) -> list[OrganizationOut]:
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")
     q = select(Organization).order_by(Organization.created_at.desc())
@@ -548,7 +583,9 @@ async def admin_list_all_organizations(db: DbSession, user: CurrentUser, status:
 
 
 @router.post("/admin/organizations/{org_id}/approve", response_model=OrganizationOut)
-async def approve_organization(org_id: UUID, db: DbSession, user: CurrentUser, background_tasks: BackgroundTasks) -> OrganizationOut:
+async def approve_organization(
+    org_id: UUID, db: DbSession, user: CurrentUser, background_tasks: BackgroundTasks
+) -> OrganizationOut:
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")
     org = await db.get(Organization, org_id)
@@ -565,7 +602,9 @@ async def approve_organization(org_id: UUID, db: DbSession, user: CurrentUser, b
     org.rejected_by = None
     org.rejection_reason = None
     # Activate the business admin profile
-    admin_profile = (await db.execute(select(Profile).where(Profile.org_id == org.id, Profile.role == "admin"))).scalars().first()
+    admin_profile = (
+        (await db.execute(select(Profile).where(Profile.org_id == org.id, Profile.role == "admin"))).scalars().first()
+    )
     # Fallback: any profile in org if admin role not found (should not happen)
     if not admin_profile:
         admin_profile = (await db.execute(select(Profile).where(Profile.org_id == org.id))).scalars().first()
@@ -583,7 +622,9 @@ async def approve_organization(org_id: UUID, db: DbSession, user: CurrentUser, b
         from app.services.email.service import send_business_approved_email
 
         if admin_profile:
-            background_tasks.add_task(send_business_approved_email, admin_profile.email, org.name, admin_profile.full_name)
+            background_tasks.add_task(
+                send_business_approved_email, admin_profile.email, org.name, admin_profile.full_name
+            )
         else:
             logger.warning("Approved org %s has no admin profile to notify", org.id)
     except Exception:
@@ -592,7 +633,9 @@ async def approve_organization(org_id: UUID, db: DbSession, user: CurrentUser, b
 
 
 @router.post("/admin/organizations/{org_id}/reject", response_model=OrganizationOut)
-async def reject_organization(org_id: UUID, body: ApproveBody, db: DbSession, user: CurrentUser, background_tasks: BackgroundTasks) -> OrganizationOut:
+async def reject_organization(
+    org_id: UUID, body: ApproveBody, db: DbSession, user: CurrentUser, background_tasks: BackgroundTasks
+) -> OrganizationOut:
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")
     org = await db.get(Organization, org_id)
@@ -618,7 +661,9 @@ async def reject_organization(org_id: UUID, body: ApproveBody, db: DbSession, us
         # Notify the business admin
         admin_profile = next((p for p in profiles if p.role == "admin"), profiles[0] if profiles else None)
         if admin_profile:
-            background_tasks.add_task(send_business_rejected_email, admin_profile.email, org.name, body.reason, admin_profile.full_name)
+            background_tasks.add_task(
+                send_business_rejected_email, admin_profile.email, org.name, body.reason, admin_profile.full_name
+            )
     except Exception:
         logger.exception("failed to queue rejection email for %s", org.id)
     return OrganizationOut.model_validate(org)
@@ -664,17 +709,25 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
         await db.flush()
         audit("auth.login_failed", profile.id)
         await db.commit()
-        raise HTTPException(403, "Your business is pending System Admin approval. Please verify your email and wait for approval. You'll receive an email once approved.")
+        raise HTTPException(
+            403,
+            "Your business is pending System Admin approval. Please verify your email and wait for approval. You'll receive an email once approved.",
+        )
     if org and org.status == "rejected" and not profile.is_super_admin:
         await db.flush()
         audit("auth.login_failed", profile.id)
         await db.commit()
-        raise HTTPException(403, f"Your business was rejected: {org.rejection_reason or 'Contact support for details.'}")
+        raise HTTPException(
+            403, f"Your business was rejected: {org.rejection_reason or 'Contact support for details.'}"
+        )
     if not getattr(profile, "email_verified", True) and not profile.is_super_admin:
         await db.flush()
         audit("auth.login_failed", profile.id)
         await db.commit()
-        raise HTTPException(403, "Please verify your email. Check your inbox for the verification link or request a new one via POST /auth/resend-verification.")
+        raise HTTPException(
+            403,
+            "Please verify your email. Check your inbox for the verification link or request a new one via POST /auth/resend-verification.",
+        )
     if not profile.is_active:
         await db.flush()
         audit("auth.login_failed", profile.id)
@@ -691,7 +744,9 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
     audit("auth.login", profile.id)
     await db.commit()
     org = await db.get(Organization, profile.org_id) if profile.org_id else None
-    token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id)
+    token = sign_token(
+        profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
+    )
     return AuthOut(
         token=token,
         user=ProfileOut.model_validate(profile),
@@ -813,7 +868,9 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
     await db.refresh(profile)
     org = await db.get(Organization, org_id) if org_id else None
 
-    token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id)
+    token = sign_token(
+        profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
+    )
 
     # Best-effort welcome email — never blocks signup or fails the request.
     try:
@@ -824,7 +881,9 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
         logger.exception("failed to queue welcome email for %s", profile.email)
 
     return AuthOut(
-        token=token, user=ProfileOut.model_validate(profile), organization=OrganizationOut.model_validate(org) if org else None
+        token=token,
+        user=ProfileOut.model_validate(profile),
+        organization=OrganizationOut.model_validate(org) if org else None,
     )
 
 
@@ -832,7 +891,9 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
 
 
 @router.post("/invite", response_model=OrganizationInviteOut, dependencies=[Depends(require_role("admin"))])
-async def create_invite(body: InviteCreateBody, db: DbSession, user: CurrentUser, background_tasks: BackgroundTasks) -> OrganizationInviteOut:
+async def create_invite(
+    body: InviteCreateBody, db: DbSession, user: CurrentUser, background_tasks: BackgroundTasks
+) -> OrganizationInviteOut:
     """Create an invite token for a new user to join the caller's org (admin only). Business must be approved."""
     from app.services import rbac as rbac_service
 
@@ -900,13 +961,17 @@ async def list_invites(db: DbSession, user: CurrentUser) -> list[OrganizationInv
     if not user.org_id:
         raise HTTPException(403, "Organization membership required")
     rows = (
-        await db.execute(
-            select(OrganizationInvite)
-            .where(OrganizationInvite.org_id == user.org_id)
-            .order_by(OrganizationInvite.created_at.desc())
-            .limit(100)
+        (
+            await db.execute(
+                select(OrganizationInvite)
+                .where(OrganizationInvite.org_id == user.org_id)
+                .order_by(OrganizationInvite.created_at.desc())
+                .limit(100)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [OrganizationInviteOut.model_validate(r) for r in rows]
 
 
@@ -957,9 +1022,7 @@ async def get_organization(org_id: UUID, db: DbSession, user: CurrentUser) -> Or
 
 
 @router.post("/forgot-password")
-async def forgot_password(
-    body: ForgotPasswordBody, db: DbSession, background_tasks: BackgroundTasks
-) -> dict[str, str]:
+async def forgot_password(body: ForgotPasswordBody, db: DbSession, background_tasks: BackgroundTasks) -> dict[str, str]:
     normalized_forgot = body.email.strip().lower()
     result = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_forgot))
     profile = result.scalar_one_or_none()
@@ -967,7 +1030,9 @@ async def forgot_password(
         return {"message": "If an account exists for this email, a reset link has been sent."}
 
     # Short-lived, purpose-bound reset token (30 min, purpose=reset)
-    reset_token = sign_reset_token(profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id)
+    reset_token = sign_reset_token(
+        profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
+    )
 
     settings = get_settings()
     if settings.smtp_host:
@@ -976,9 +1041,7 @@ async def forgot_password(
 
             # Background delivery so the endpoint returns quickly and timing
             # doesn't leak whether the address was real.
-            background_tasks.add_task(
-                send_password_reset_email, profile.email, reset_token, profile.full_name
-            )
+            background_tasks.add_task(send_password_reset_email, profile.email, reset_token, profile.full_name)
         except Exception:
             logger.exception("failed to queue reset email for %s", profile.email)
             # Don't fail the request — the user-facing contract is always the
@@ -1024,9 +1087,15 @@ async def reset_password(token: str, new_password: str, db: DbSession) -> AuthOu
     await db.commit()
     await db.refresh(profile)
 
-    new_token = sign_token(profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id)
+    new_token = sign_token(
+        profile.id, profile.email, profile.role, token_version=profile.token_version, org_id=profile.org_id
+    )
     org = await db.get(Organization, profile.org_id) if profile.org_id else None
-    return AuthOut(token=new_token, user=ProfileOut.model_validate(profile), organization=OrganizationOut.model_validate(org) if org else None)
+    return AuthOut(
+        token=new_token,
+        user=ProfileOut.model_validate(profile),
+        organization=OrganizationOut.model_validate(org) if org else None,
+    )
 
 
 PERMISSIONS_MATRIX: dict[str, list[str]] = {

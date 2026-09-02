@@ -15,8 +15,9 @@ app_metadata role claim; the service-role FastAPI connection bypasses RLS).
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "b7c1a4e8d2f3"
 down_revision: str | None = "a7c3f9e2b1d4"
@@ -28,8 +29,7 @@ ANY_ROLE = f"{ROLE} IN ('admin', 'manager', 'analyst')"
 ADMIN = f"{ROLE} = 'admin'"
 # org-scoped users see only their own org's data; unset org_id = default org
 ORG_ORG_JWT = (
-    "(auth.jwt() -> 'app_metadata' ->> 'org_id') IS NULL "
-    "OR org_id::text = (auth.jwt() -> 'app_metadata' ->> 'org_id')"
+    "(auth.jwt() -> 'app_metadata' ->> 'org_id') IS NULL OR org_id::text = (auth.jwt() -> 'app_metadata' ->> 'org_id')"
 )
 
 
@@ -45,13 +45,9 @@ def upgrade() -> None:
     )
 
     op.add_column("profiles", sa.Column("org_id", sa.UUID(), nullable=True))
-    op.create_foreign_key(
-        op.f("fk_profiles_org_id_organizations"), "profiles", "organizations", ["org_id"], ["id"]
-    )
+    op.create_foreign_key(op.f("fk_profiles_org_id_organizations"), "profiles", "organizations", ["org_id"], ["id"])
     op.create_index(op.f("ix_profiles_org_id"), "profiles", ["org_id"], unique=False)
-    op.add_column(
-        "profiles", sa.Column("token_version", sa.Integer(), server_default="0", nullable=False)
-    )
+    op.add_column("profiles", sa.Column("token_version", sa.Integer(), server_default="0", nullable=False))
 
     op.add_column("data_sources", sa.Column("org_id", sa.UUID(), nullable=True))
     op.create_foreign_key(
@@ -62,9 +58,7 @@ def upgrade() -> None:
         ["id"],
     )
     op.add_column("etl_jobs", sa.Column("org_id", sa.UUID(), nullable=True))
-    op.create_foreign_key(
-        op.f("fk_etl_jobs_org_id_organizations"), "etl_jobs", "organizations", ["org_id"], ["id"]
-    )
+    op.create_foreign_key(op.f("fk_etl_jobs_org_id_organizations"), "etl_jobs", "organizations", ["org_id"], ["id"])
     op.add_column("raw_uploads", sa.Column("org_id", sa.UUID(), nullable=True), schema="staging")
     op.create_foreign_key(
         op.f("fk_raw_uploads_org_id_organizations"),
@@ -78,9 +72,7 @@ def upgrade() -> None:
     op.add_column("ai_conversations", sa.Column("summary", sa.Text(), nullable=True))
 
     op.add_column("anomalies", sa.Column("correlation_id", sa.UUID(), nullable=True))
-    op.create_index(
-        op.f("ix_anomalies_correlation_id"), "anomalies", ["correlation_id"], unique=False
-    )
+    op.create_index(op.f("ix_anomalies_correlation_id"), "anomalies", ["correlation_id"], unique=False)
 
     op.create_table(
         "anomaly_feedback",
@@ -102,9 +94,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_anomaly_feedback")),
     )
-    op.create_index(
-        op.f("ix_anomaly_feedback_anomaly_id"), "anomaly_feedback", ["anomaly_id"], unique=False
-    )
+    op.create_index(op.f("ix_anomaly_feedback_anomaly_id"), "anomaly_feedback", ["anomaly_id"], unique=False)
     op.create_index(
         op.f("ix_anomaly_feedback_anomaly_created"),
         "anomaly_feedback",
@@ -139,12 +129,8 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), nullable=True),
         sa.Column("action", sa.String(), nullable=False),
         sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint(
-            "action IN ('accepted', 'dismissed')", name=op.f("ck_recommendation_feedback_valid_action")
-        ),
-        sa.CheckConstraint(
-            "LENGTH(rec_key) > 0", name=op.f("ck_recommendation_feedback_ck_rec_key_not_empty")
-        ),
+        sa.CheckConstraint("action IN ('accepted', 'dismissed')", name=op.f("ck_recommendation_feedback_valid_action")),
+        sa.CheckConstraint("LENGTH(rec_key) > 0", name=op.f("ck_recommendation_feedback_ck_rec_key_not_empty")),
         sa.ForeignKeyConstraint(
             ["user_id"], ["profiles.id"], name=op.f("fk_recommendation_feedback_user_id_profiles"), ondelete="SET NULL"
         ),
@@ -153,9 +139,7 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_rec_feedback_key_created"), "recommendation_feedback", ["rec_key", "created_at"], unique=False
     )
-    op.create_index(
-        op.f("ix_recommendation_feedback_rec_key"), "recommendation_feedback", ["rec_key"], unique=False
-    )
+    op.create_index(op.f("ix_recommendation_feedback_rec_key"), "recommendation_feedback", ["rec_key"], unique=False)
 
     op.create_table(
         "background_jobs",
@@ -176,42 +160,30 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_background_jobs")),
     )
-    op.create_index(
-        op.f("ix_background_jobs_pending"), "background_jobs", ["status", "run_at"], unique=False
-    )
+    op.create_index(op.f("ix_background_jobs_pending"), "background_jobs", ["status", "run_at"], unique=False)
 
     # ---- RLS for the new tables (defence-in-depth, same mechanism as Phase 6) ----
     op.execute("ALTER TABLE organizations ENABLE ROW LEVEL SECURITY")
     op.execute("CREATE POLICY org_read ON organizations FOR SELECT TO PUBLIC USING (true)")
     op.execute("CREATE POLICY org_admin_write ON organizations FOR ALL USING (true) WITH CHECK (true)")
-    op.execute(
-        "DROP POLICY IF EXISTS profiles_read_own_or_admin ON profiles"
-    )
+    op.execute("DROP POLICY IF EXISTS profiles_read_own_or_admin ON profiles")
     op.execute(
         "CREATE POLICY profiles_read_own_or_admin ON profiles FOR SELECT TO PUBLIC "
         f"USING ((id = auth.uid()) OR {ADMIN} OR {ORG_ORG_JWT})"
     )
     op.execute("ALTER TABLE anomaly_feedback ENABLE ROW LEVEL SECURITY")
+    op.execute(f"CREATE POLICY feedback_read_any_role ON anomaly_feedback FOR SELECT TO PUBLIC USING ({ANY_ROLE})")
     op.execute(
-        f"CREATE POLICY feedback_read_any_role ON anomaly_feedback FOR SELECT TO PUBLIC USING ({ANY_ROLE})"
-    )
-    op.execute(
-        "CREATE POLICY feedback_insert_any_role ON anomaly_feedback FOR INSERT TO PUBLIC "
-        f"WITH CHECK ({ANY_ROLE})"
+        f"CREATE POLICY feedback_insert_any_role ON anomaly_feedback FOR INSERT TO PUBLIC WITH CHECK ({ANY_ROLE})"
     )
     op.execute("ALTER TABLE model_drift ENABLE ROW LEVEL SECURITY")
-    op.execute(
-        f"CREATE POLICY drift_read_any_role ON model_drift FOR SELECT TO PUBLIC USING ({ANY_ROLE})"
-    )
+    op.execute(f"CREATE POLICY drift_read_any_role ON model_drift FOR SELECT TO PUBLIC USING ({ANY_ROLE})")
     op.execute("ALTER TABLE recommendation_feedback ENABLE ROW LEVEL SECURITY")
     op.execute(
         "CREATE POLICY recfb_read_own ON recommendation_feedback FOR SELECT TO PUBLIC "
         f"USING ((user_id = auth.uid()) OR {ADMIN})"
     )
-    op.execute(
-        "CREATE POLICY recfb_insert ON recommendation_feedback FOR INSERT TO PUBLIC "
-        f"WITH CHECK ({ANY_ROLE})"
-    )
+    op.execute(f"CREATE POLICY recfb_insert ON recommendation_feedback FOR INSERT TO PUBLIC WITH CHECK ({ANY_ROLE})")
     op.execute("ALTER TABLE background_jobs ENABLE ROW LEVEL SECURITY")
     op.execute(f"CREATE POLICY jobs_admin ON background_jobs FOR ALL TO PUBLIC USING ({ADMIN})")
 

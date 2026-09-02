@@ -7,9 +7,7 @@ from app.api.deps import CurrentUser, DbSession, require_role
 from app.models import AuditLog, Profile
 from app.schemas.identity import AuditLogOut
 
-router = APIRouter(
-    prefix="/audit-logs", tags=["audit"], dependencies=[Depends(require_role("admin"))]
-)
+router = APIRouter(prefix="/audit-logs", tags=["audit"], dependencies=[Depends(require_role("admin"))])
 
 
 @router.get("", response_model=list[AuditLogOut])
@@ -26,9 +24,7 @@ async def list_audit_logs(
     stmt = select(AuditLog).order_by(AuditLog.created_at.desc())
     if not is_super_admin(user):
         # Scope to current org: only logs where actor is in same org
-        stmt = stmt.where(
-            AuditLog.user_id.in_(select(Profile.id).where(Profile.org_id == user.org_id))
-        )
+        stmt = stmt.where(AuditLog.user_id.in_(select(Profile.id).where(Profile.org_id == user.org_id)))
     if action:
         stmt = stmt.where(AuditLog.action == action)
     if since:
@@ -62,9 +58,7 @@ async def list_role_changes(
                 select(AuditLog)
                 .where(
                     AuditLog.action.like("PATCH /api/v1/users/%"),
-                    AuditLog.user_id.in_(
-                        select(Profile.id).where(scope)
-                    ),
+                    AuditLog.user_id.in_(select(Profile.id).where(scope)),
                 )
                 .order_by(AuditLog.created_at.desc())
                 .limit(limit)

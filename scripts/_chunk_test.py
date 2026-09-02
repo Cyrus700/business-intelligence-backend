@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.services.ai.provider import AIMessage, get_ai_stream, SYSTEM_PROMPT_DASHBOARD
+from app.services.ai.provider import SYSTEM_PROMPT_DASHBOARD, AIMessage, get_ai_stream
 
 
 async def main() -> None:

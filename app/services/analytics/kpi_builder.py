@@ -65,7 +65,9 @@ async def rebuild_kpi_snapshots(db: AsyncSession, start: date, end: date, org_id
         for statement in _REBUILD_SQL.split(";"):
             if statement.strip():
                 # For legacy path, strip org_id condition (not ideal, but keeps old behavior)
-                legacy_stmt = statement.replace(" AND org_id = :org_id", "").replace(", org_id", "").replace(", :org_id", "")
+                legacy_stmt = (
+                    statement.replace(" AND org_id = :org_id", "").replace(", org_id", "").replace(", :org_id", "")
+                )
                 # Need to handle DELETE without org
                 if "DELETE" in legacy_stmt:
                     legacy_stmt = legacy_stmt.replace(" AND org_id = :org_id", "")

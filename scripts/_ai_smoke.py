@@ -12,9 +12,7 @@ import os
 import uuid
 
 os.environ.setdefault("ENV", "test")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:54329/bi_test"
-)
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:54329/bi_test")
 
 from app.core.database import dispose_engine, get_session_factory  # noqa: E402
 from app.models import Product, Profile, SalesTransaction  # noqa: E402
@@ -64,9 +62,7 @@ async def main() -> None:
     async with get_session_factory()() as session:
         user = await seed(session)
         for q in QUESTIONS:
-            result = await answer_question(
-                session, "admin", q, history=[AIMessage(role="user", content=q)], user=user
-            )
+            result = await answer_question(session, "admin", q, history=[AIMessage(role="user", content=q)], user=user)
             print("=" * 78)
             print("Q:", q)
             print(f"[source={result.source} tool_rounds={result.tool_calls}]")

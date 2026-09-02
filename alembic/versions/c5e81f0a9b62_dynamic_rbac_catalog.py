@@ -80,9 +80,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
         sa.UniqueConstraint("key", name="uq_permissions_key"),
-        sa.CheckConstraint(
-            "key ~ '^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$'", name="ck_permissions_key_format"
-        ),
+        sa.CheckConstraint("key ~ '^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$'", name="ck_permissions_key_format"),
     )
     op.create_index("ix_permissions_group_label", "permissions", ["group_label"])
 
@@ -172,10 +170,7 @@ def upgrade() -> None:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         for name, command, using, check in policies:
             with_check = f" WITH CHECK ({check})" if check else ""
-            op.execute(
-                f"CREATE POLICY {name} ON {table} FOR {command} "
-                f"TO PUBLIC USING ({using}){with_check}"
-            )
+            op.execute(f"CREATE POLICY {name} ON {table} FOR {command} TO PUBLIC USING ({using}){with_check}")
 
 
 def downgrade() -> None:
@@ -188,6 +183,5 @@ def downgrade() -> None:
     op.drop_table("permissions")
     op.drop_table("roles")
     op.execute(
-        "ALTER TABLE profiles ADD CONSTRAINT ck_profiles_valid_role "
-        "CHECK (role IN ('admin', 'manager', 'analyst'))"
+        "ALTER TABLE profiles ADD CONSTRAINT ck_profiles_valid_role CHECK (role IN ('admin', 'manager', 'analyst'))"
     )

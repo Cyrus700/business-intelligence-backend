@@ -45,14 +45,10 @@ async def test_chat_survives_a_poisoned_transaction(client, user_token, break_co
 async def test_user_message_survives_a_failed_answer(client, user_token, break_context):
     """The question is committed before generation, so it is never lost."""
     _, token = user_token
-    resp = await client.post(
-        "/api/v1/ai/chat", headers=auth(token), json={"message": "revenue please"}
-    )
+    resp = await client.post("/api/v1/ai/chat", headers=auth(token), json={"message": "revenue please"})
     conv_id = resp.json()["conversation_id"]
 
-    messages = await client.get(
-        f"/api/v1/ai/conversations/{conv_id}/messages", headers=auth(token)
-    )
+    messages = await client.get(f"/api/v1/ai/conversations/{conv_id}/messages", headers=auth(token))
     assert messages.status_code == 200
     roles = [m["role"] for m in messages.json()]
     assert "user" in roles

@@ -108,9 +108,7 @@ def extract_tabular(data: bytes, file_name: str) -> TabularExtract:
 
     if name.endswith(".xlsx"):
         if not data.startswith(b"PK\x03\x04"):
-            raise ValueError(
-                "file looks like an .xlsx but its content is not a ZIP/OOXML workbook"
-            )
+            raise ValueError("file looks like an .xlsx but its content is not a ZIP/OOXML workbook")
     elif name.endswith(".xls"):
         if not data.startswith(b"\xd0\xcf\x11\xe0"):
             raise ValueError("file looks like an .xls but its content is not an OLE2 workbook")
@@ -143,9 +141,7 @@ def extract_tabular(data: bytes, file_name: str) -> TabularExtract:
     if name.endswith(".csv"):
         encoding = _detect_encoding(data)
         if encoding == "cp1252":
-            warnings.append(
-                "file is not UTF-8 encoded (looks like Windows-1252/Latin-1); decoded automatically"
-            )
+            warnings.append("file is not UTF-8 encoded (looks like Windows-1252/Latin-1); decoded automatically")
         _detect_duplicate_header(data, encoding)
         try:
             frame = pd.read_csv(io.BytesIO(data), encoding=encoding)
@@ -167,9 +163,7 @@ def extract_tabular(data: bytes, file_name: str) -> TabularExtract:
     raise ValueError(f"unsupported file type: {file_name} (use .csv, .xlsx, .xls)")
 
 
-async def extract_rest_api(
-    config: dict[str, Any], client: httpx.AsyncClient | None = None
-) -> pd.DataFrame:
+async def extract_rest_api(config: dict[str, Any], client: httpx.AsyncClient | None = None) -> pd.DataFrame:
     """Pull JSON records from `config['url']`; optional dot-path `records_path`."""
     url = config.get("url")
     if not url:

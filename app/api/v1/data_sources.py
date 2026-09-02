@@ -19,12 +19,16 @@ async def list_sources(db: DbSession, user: CurrentUser) -> list[DataSourceOut]:
     from app.api.deps import org_predicate, user_org_id
 
     rows = (
-        await db.execute(
-            select(DataSource)
-            .where(org_predicate(DataSource.org_id, user_org_id(user)))
-            .order_by(DataSource.created_at)
+        (
+            await db.execute(
+                select(DataSource)
+                .where(org_predicate(DataSource.org_id, user_org_id(user)))
+                .order_by(DataSource.created_at)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [DataSourceOut.model_validate(r) for r in rows]
 
 
@@ -60,9 +64,7 @@ async def create_source(body: DataSourceIn, db: DbSession, user: CurrentUser) ->
 
 
 @router.patch("/{source_id}", response_model=DataSourceOut)
-async def update_source(
-    source_id: UUID, body: DataSourceUpdate, db: DbSession, user: CurrentUser
-) -> DataSourceOut:
+async def update_source(source_id: UUID, body: DataSourceUpdate, db: DbSession, user: CurrentUser) -> DataSourceOut:
     from app.api.deps import org_predicate, user_org_id
     from app.services.etl.ssrf import validate_public_http_url
 
@@ -84,9 +86,7 @@ async def update_source(
 
     source = (
         await db.execute(
-            select(DataSource).where(
-                DataSource.id == source_id, org_predicate(DataSource.org_id, user_org_id(user))
-            )
+            select(DataSource).where(DataSource.id == source_id, org_predicate(DataSource.org_id, user_org_id(user)))
         )
     ).scalar_one_or_none()
     if source is None:

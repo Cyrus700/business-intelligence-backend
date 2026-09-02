@@ -9,8 +9,9 @@ Create Date: 2026-08-19
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision: str = "f9c8e7d6a5b4"
 down_revision: str | None = "a1b2c3d4e5f6"
@@ -51,9 +52,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint("valid_status", "anomalies", type_="check")
-    op.create_check_constraint(
-        "valid_status", "anomalies", "status IN ('open', 'acknowledged', 'dismissed')"
-    )
+    op.create_check_constraint("valid_status", "anomalies", "status IN ('open', 'acknowledged', 'dismissed')")
     op.drop_column("anomalies", "resolved_by")
     op.drop_column("anomalies", "resolved_at")
     op.drop_column("anomalies", "explanation")

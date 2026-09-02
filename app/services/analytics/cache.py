@@ -25,6 +25,7 @@ class QueryCache:
 
     def _make_key(self, func_name: str, args: tuple, kwargs: dict) -> str:
         import json
+
         key_data = {"fn": func_name, "args": args, "kwargs": kwargs}
         return f"query:{func_name}:{hash(json.dumps(key_data, sort_keys=True, default=str))}"
 

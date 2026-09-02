@@ -27,9 +27,7 @@ class SupabaseAdmin:
             "Authorization": f"Bearer {settings.supabase_service_key}",
         }
 
-    async def create_user(
-        self, email: str, password: str, role: str, full_name: str | None
-    ) -> UUID:
+    async def create_user(self, email: str, password: str, role: str, full_name: str | None) -> UUID:
         payload: dict[str, Any] = {
             "email": email,
             "password": password,
@@ -38,9 +36,7 @@ class SupabaseAdmin:
             "user_metadata": {"full_name": full_name},
         }
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self._base}/admin/users", json=payload, headers=self._headers
-            )
+            resp = await client.post(f"{self._base}/admin/users", json=payload, headers=self._headers)
         if resp.status_code >= 400:
             raise SupabaseAdminError(f"Supabase user creation failed: {resp.text}")
         return UUID(resp.json()["id"])

@@ -5,7 +5,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.email import templates
-from app.services.email.service import is_configured, send_alert_email, send_email, send_password_reset_email, send_report_ready_email, send_welcome_email, stats_snapshot
+from app.services.email.service import (
+    is_configured,
+    send_alert_email,
+    send_email,
+    send_password_reset_email,
+    send_report_ready_email,
+    send_welcome_email,
+    stats_snapshot,
+)
 
 
 def test_password_reset_template():
@@ -24,21 +32,27 @@ def test_welcome_template():
 
 
 def test_alert_template():
-    subj, text, html = templates.alert_notification("Revenue anomaly", "revenue changed +60%", "https://app.example.com/dashboard/alerts")
+    subj, text, html = templates.alert_notification(
+        "Revenue anomaly", "revenue changed +60%", "https://app.example.com/dashboard/alerts"
+    )
     assert "Revenue anomaly" in subj
     assert "revenue changed" in text
     assert "dashboard" in html
 
 
 def test_report_ready_template():
-    subj, text, html = templates.report_ready("Monthly — Jan 2026", "2026-01-01", "2026-01-31", "pdf", "https://app.example.com/dashboard/reports")
+    subj, text, html = templates.report_ready(
+        "Monthly — Jan 2026", "2026-01-01", "2026-01-31", "pdf", "https://app.example.com/dashboard/reports"
+    )
     assert "Monthly" in subj
     assert "2026-01-01" in text
     assert "PDF" in html or "pdf" in html.lower()
 
 
 @pytest.mark.anyio
-async def test_send_email_skipped_when_no_smtp():
+async def test_send_email_skipped_when_no_smtp(monkeypatch):
+    # explicit: a developer .env with SMTP configured must not change the result
+    monkeypatch.setenv("SMTP_HOST", "")
     ok = await send_email("user@example.com", "Subject", "body", "<b>html</b>")
     assert ok is False
     snap = stats_snapshot()
@@ -108,8 +122,9 @@ async def test_helpers_delegate_to_send_email(monkeypatch):
 
 
 def test_header_injection_rejected():
-    from app.services.email.service import _sanitize_header
     import pytest
+
+    from app.services.email.service import _sanitize_header
 
     with pytest.raises(ValueError):
         _sanitize_header("bad\nInjection", "subject")
@@ -118,7 +133,7 @@ def test_header_injection_rejected():
 
 
 def test_email_rate_limit(monkeypatch):
-    from app.services.email.service import _reset_email_limiter, _check_email_rate_limit
+    from app.services.email.service import _check_email_rate_limit, _reset_email_limiter
 
     monkeypatch.setenv("EMAIL_RATE_LIMIT_PER_MINUTE", "2")
     from app.core.config import get_settings

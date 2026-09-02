@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, text
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 _report_sem = asyncio.Semaphore(2)
 AVG_REPORT_SECONDS = 7
+
 
 async def enqueue_report_job(
     db: AsyncSession,
@@ -56,50 +57,68 @@ async def enqueue_report_job(
     logger.info("enqueued report job %s for %s %s to %s", job.id, generated_by, period_start, period_end)
     return job
 
+
 async def get_queue_position(job_id: UUID, db: AsyncSession) -> tuple[int, int]:
     """Return (position, total) for a report job, 1-indexed among pending+claimed."""
     job = await db.get(BackgroundJob, job_id)
     if not job or job.name != "report_generate":
         return 0, 0
     # Count pending jobs with earlier run_at (fifo)
-    pending_before = (await db.execute(
-        select(func.count()).select_from(BackgroundJob).where(
-            BackgroundJob.name == "report_generate",
-            BackgroundJob.status == "pending",
-            BackgroundJob.run_at <= job.run_at,
-            BackgroundJob.id != job.id,
+    pending_before = (
+        await db.execute(
+            select(func.count())
+            .select_from(BackgroundJob)
+            .where(
+                BackgroundJob.name == "report_generate",
+                BackgroundJob.status == "pending",
+                BackgroundJob.run_at <= job.run_at,
+                BackgroundJob.id != job.id,
+            )
         )
-    )).scalar() or 0
-    pending_total = (await db.execute(
-        select(func.count()).select_from(BackgroundJob).where(
-            BackgroundJob.name == "report_generate",
-            BackgroundJob.status == "pending",
+    ).scalar() or 0
+    pending_total = (
+        await db.execute(
+            select(func.count())
+            .select_from(BackgroundJob)
+            .where(
+                BackgroundJob.name == "report_generate",
+                BackgroundJob.status == "pending",
+            )
         )
-    )).scalar() or 0
-    processing = (await db.execute(
-        select(func.count()).select_from(BackgroundJob).where(
-            BackgroundJob.name == "report_generate",
-            BackgroundJob.status == "claimed",
+    ).scalar() or 0
+    processing = (
+        await db.execute(
+            select(func.count())
+            .select_from(BackgroundJob)
+            .where(
+                BackgroundJob.name == "report_generate",
+                BackgroundJob.status == "claimed",
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
     # If this job is already claimed/processing, its position is processing count
     if job.status == "claimed":
         # Find its order among claimed
-        claimed_before = (await db.execute(
-            select(func.count()).select_from(BackgroundJob).where(
-                BackgroundJob.name == "report_generate",
-                BackgroundJob.status == "claimed",
-                BackgroundJob.run_at <= job.run_at,
+        claimed_before = (
+            await db.execute(
+                select(func.count())
+                .select_from(BackgroundJob)
+                .where(
+                    BackgroundJob.name == "report_generate",
+                    BackgroundJob.status == "claimed",
+                    BackgroundJob.run_at <= job.run_at,
+                )
             )
-        )).scalar() or 0
+        ).scalar() or 0
         return int(claimed_before), int(pending_total + processing)
     if job.status == "pending":
         return int(pending_before + processing + 1), int(pending_total + processing)
     return 0, 0
 
+
 async def _process_one_report_job(job: BackgroundJob) -> None:
     """Build a single report job. Called with the job already claimed (status=claimed)."""
-    from app.models import Report, Notification
+    from app.models import Notification, Report
     from app.services.reports import builder
     from app.services.storage import FileStorage, make_key
 
@@ -137,11 +156,13 @@ async def _process_one_report_job(job: BackgroundJob) -> None:
                 report_id = report.id
 
                 if generated_by:
-                    db.add(Notification(
-                        user_id=generated_by,
-                        title="Your report is ready",
-                        body=f"{title} — download it from the Reports page.",
-                    ))
+                    db.add(
+                        Notification(
+                            user_id=generated_by,
+                            title="Your report is ready",
+                            body=f"{title} — download it from the Reports page.",
+                        )
+                    )
                 await db.commit()
                 logger.info("report job %s succeeded report %s", job.id, report_id)
 
@@ -151,19 +172,30 @@ async def _process_one_report_job(job: BackgroundJob) -> None:
                 if j:
                     j.status = "succeeded"
                     j.finished_at = datetime.now(UTC)
-                    j.payload = {** (j.payload or {}), "report_id": str(report_id)}
+                    j.payload = {**(j.payload or {}), "report_id": str(report_id)}
                     await jdb.commit()
 
             if email_me and user_email:
                 try:
-                    from app.core.config import get_settings
                     from app.services.email.service import is_configured, send_report_ready_email
+
                     if not is_configured():
                         logger.warning("report %s SMTP not configured skip email %s", report_id, user_email)
                     else:
-                        mime = "application/pdf" if fmt == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        mime = (
+                            "application/pdf"
+                            if fmt == "pdf"
+                            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
                         fname = f"report-{period_start}-{period_end}.{fmt}"
-                        await send_report_ready_email(user_email, title, str(period_start), str(period_end), fmt, attachment=(fname, payload_bytes, mime))
+                        await send_report_ready_email(
+                            user_email,
+                            title,
+                            str(period_start),
+                            str(period_end),
+                            fmt,
+                            attachment=(fname, payload_bytes, mime),
+                        )
                 except Exception:
                     logger.exception("report email failed job %s", job.id)
 
@@ -179,6 +211,7 @@ async def _process_one_report_job(job: BackgroundJob) -> None:
                     await jdb.commit()
             raise
 
+
 async def claim_and_process_one() -> bool:
     """Try to claim one pending report job and process it. Returns True if a job was processed."""
     async with get_session_factory()() as db:
@@ -187,13 +220,15 @@ async def claim_and_process_one() -> bool:
         if not has_lock:
             return False
         try:
-            row = (await db.execute(
-                select(BackgroundJob)
-                .where(BackgroundJob.name == "report_generate", BackgroundJob.status == "pending")
-                .order_by(BackgroundJob.run_at)
-                .limit(1)
-                .with_for_update(skip_locked=True)
-            )).scalar_one_or_none()
+            row = (
+                await db.execute(
+                    select(BackgroundJob)
+                    .where(BackgroundJob.name == "report_generate", BackgroundJob.status == "pending")
+                    .order_by(BackgroundJob.run_at)
+                    .limit(1)
+                    .with_for_update(skip_locked=True)
+                )
+            ).scalar_one_or_none()
             if not row:
                 return False
             row.status = "claimed"
@@ -214,7 +249,9 @@ async def claim_and_process_one() -> bool:
     await _process_one_report_job(job)
     return True
 
+
 _report_claim_task: asyncio.Task | None = None
+
 
 async def _report_claim_loop(poll_interval: float = 1.0):
     while True:
@@ -230,11 +267,13 @@ async def _report_claim_loop(poll_interval: float = 1.0):
             logger.exception("report claim loop error")
             await asyncio.sleep(poll_interval)
 
+
 def start_report_claim_loop():
     global _report_claim_task
     if _report_claim_task is None or _report_claim_task.done():
         _report_claim_task = asyncio.create_task(_report_claim_loop(), name="report-claim-loop")
         logger.info("report claim loop started")
+
 
 def stop_report_claim_loop():
     global _report_claim_task

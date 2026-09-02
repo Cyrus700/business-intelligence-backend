@@ -114,9 +114,7 @@ async def diagnose_change(
         contributions = []
         for key, cur, prev in members:
             member_delta = cur - prev
-            contribution_pct = (
-                round(member_delta / delta * 100, 1) if delta else 0.0
-            )
+            contribution_pct = round(member_delta / delta * 100, 1) if delta else 0.0
             contributions.append(
                 MemberContribution(
                     key=key,
@@ -162,9 +160,7 @@ async def diagnose_change(
     }
 
 
-def _build_summary(
-    dim_results: dict[str, dict], delta: float, change_pct: float | None
-) -> dict:
+def _build_summary(dim_results: dict[str, dict], delta: float, change_pct: float | None) -> dict:
     """Pick primary/secondary factors across all dimensions."""
     candidates: list[tuple[float, str, str]] = []
     for dimension, info in dim_results.items():
@@ -183,14 +179,10 @@ def _build_summary(
     if primary and primary[0] >= _PRIMARY_SHARE * 100:
         sign = "+" if delta >= 0 else "−"
         primary_text = (
-            f"{primary[2].capitalize()} ({primary[1]}) accounts for "
-            f"{sign}{primary[0]:.0f}% of the {direction_word}"
+            f"{primary[2].capitalize()} ({primary[1]}) accounts for {sign}{primary[0]:.0f}% of the {direction_word}"
         )
     if secondary and secondary[0] >= 10:
-        secondary_text = (
-            f"{secondary[2].capitalize()} ({secondary[1]}) accounts for "
-            f"{secondary[0]:.0f}%"
-        )
+        secondary_text = f"{secondary[2].capitalize()} ({secondary[1]}) accounts for {secondary[0]:.0f}%"
 
     return {
         "direction": "down" if delta < 0 else "up",
@@ -257,15 +249,9 @@ async def _member_breakdown(
         if org_id:
             cur_conds.append(Expense.org_id == org_id)
             prev_conds.append(Expense.org_id == org_id)
-        current_q = (
-            select(key.label("key"), func.sum(Expense.amount).label("v"))
-            .where(and_(*cur_conds))
-            .group_by(key)
-        )
+        current_q = select(key.label("key"), func.sum(Expense.amount).label("v")).where(and_(*cur_conds)).group_by(key)
         previous_q = (
-            select(key.label("key"), func.sum(Expense.amount).label("v"))
-            .where(and_(*prev_conds))
-            .group_by(key)
+            select(key.label("key"), func.sum(Expense.amount).label("v")).where(and_(*prev_conds)).group_by(key)
         )
     else:
         if dimension == "product":
@@ -286,9 +272,7 @@ async def _member_breakdown(
         def build(d_from: date, d_to: date):
             stmt = (
                 select(key.label("key"), value_expr.label("v"))
-                .select_from(
-                    SalesTransaction.__table__.join(*join) if join else SalesTransaction.__table__
-                )
+                .select_from(SalesTransaction.__table__.join(*join) if join else SalesTransaction.__table__)
                 .where(and_(SalesTransaction.txn_date.between(d_from, d_to), *conditions))
                 .group_by(key)
             )
@@ -315,10 +299,7 @@ def _metric_expr(metric: str) -> tuple:
         )
     if metric == "gross_margin":
         return (
-            func.sum(
-                SalesTransaction.total_amount
-                - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
-            ),
+            func.sum(SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity),
             [(Product.__table__, Product.id == SalesTransaction.product_id)],
         )
     return func.sum(SalesTransaction.total_amount), []

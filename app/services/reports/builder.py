@@ -76,9 +76,7 @@ def _kpi_totals(kpis: pd.DataFrame) -> dict[str, float]:
     if kpis.empty:
         return {}
     sums = kpis.groupby("metric")["value"].sum()
-    return {
-        m: float(sums.get(m, 0)) for m in ("revenue", "orders", "expense_total", "gross_margin")
-    }
+    return {m: float(sums.get(m, 0)) for m in ("revenue", "orders", "expense_total", "gross_margin")}
 
 
 async def build_pdf(db: AsyncSession, start: date, end: date, title: str, org_id=None) -> bytes:

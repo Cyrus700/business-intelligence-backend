@@ -55,6 +55,7 @@ def test_day_bounds_are_half_open_and_cover_the_whole_day():
 
 # ── assistant window resolution ────────────────────────────────────────────
 
+
 def test_default_window_is_trailing_30_days_inclusive():
     date_from, date_to = _window({})
     assert date_to == business_today()

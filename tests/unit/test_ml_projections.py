@@ -37,9 +37,7 @@ def test_a_flat_series_projects_with_a_zero_width_band():
 
 def test_a_volatile_series_widens_the_band():
     start, end = date(2026, 6, 1), date(2026, 6, 30)
-    history = [
-        (start + timedelta(days=i), 1000.0 if i % 2 else 200.0) for i in range(10)
-    ]
+    history = [(start + timedelta(days=i), 1000.0 if i % 2 else 200.0) for i in range(10)]
     p = project_period(history, start, end, date(2026, 6, 10))
     assert p.upper_bound > p.projected_total > p.lower_bound
     assert p.lower_bound >= 0  # revenue cannot be projected negative
@@ -49,8 +47,7 @@ def test_weekday_profile_kicks_in_with_enough_history():
     """Weekends trade differently; a flat mean misprices whichever days remain."""
     start, end = date(2026, 6, 1), date(2026, 6, 30)
     history = [
-        (start + timedelta(days=i), 200.0 if (start + timedelta(days=i)).weekday() >= 5 else 1000.0)
-        for i in range(21)
+        (start + timedelta(days=i), 200.0 if (start + timedelta(days=i)).weekday() >= 5 else 1000.0) for i in range(21)
     ]
     p = project_period(history, start, end, start + timedelta(days=20))
     assert "weekday-adjusted" in p.method
@@ -79,8 +76,11 @@ def test_a_finished_period_has_nothing_left_to_project():
 def test_scenario_compounds_rather_than_adding_percentages():
     """+10% orders and +10% value is +21% revenue, not +20%."""
     sc = simulate(
-        revenue=100_000, orders=100, expenses=40_000,
-        orders_change_pct=10, aov_change_pct=10,
+        revenue=100_000,
+        orders=100,
+        expenses=40_000,
+        orders_change_pct=10,
+        aov_change_pct=10,
     )
     assert sc.scenario_revenue == pytest.approx(121_000)
     assert sc.revenue_delta == pytest.approx(21_000)

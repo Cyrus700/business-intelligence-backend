@@ -53,13 +53,7 @@ _PRIVATE_NETS = tuple(
 def _is_private_ip(ip_str: str) -> bool:
     ip = ipaddress.ip_address(ip_str)
     if isinstance(ip, ipaddress.IPv6Address):
-        return (
-            ip.is_loopback
-            or ip.is_link_local
-            or ip.is_unspecified
-            or ip.is_multicast
-            or ip in _PRIVATE_NETS
-        )
+        return ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast or ip in _PRIVATE_NETS
     return any(ip in net for net in _PRIVATE_NETS)
 
 
@@ -98,9 +92,7 @@ def validate_public_http_url(url: str) -> str:
         return url
     for addr in resolved:
         if _is_private_ip(addr):
-            raise ValueError(
-                f"REST source host '{host}' resolves to a private address {addr} (SSRF guard)"
-            )
+            raise ValueError(f"REST source host '{host}' resolves to a private address {addr} (SSRF guard)")
     return url
 
 
@@ -120,9 +112,7 @@ def validate_postgres_dsn(dsn: str) -> str:
 
     # SQLAlchemy async DSN: postgresql+asyncpg://user:pass@host:5432/db
     # urlparse needs a scheme it recognises — normalise to postgresql://
-    normalised = dsn.replace("postgresql+asyncpg://", "postgresql://").replace(
-        "postgresql+psycopg://", "postgresql://"
-    )
+    normalised = dsn.replace("postgresql+asyncpg://", "postgresql://").replace("postgresql+psycopg://", "postgresql://")
     parsed = urlparse(normalised)
     host = parsed.hostname
     if not host:

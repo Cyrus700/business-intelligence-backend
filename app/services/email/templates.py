@@ -7,7 +7,6 @@ deterministic for tests.
 
 from __future__ import annotations
 
-
 BRAND = "InsightFlow"
 COLOR_PRIMARY = "#0f172a"  # slate-900
 COLOR_ACCENT = "#0ea5e9"  # sky-500
@@ -95,7 +94,13 @@ def welcome(full_name: str | None, login_url: str) -> tuple[str, str, str]:
         <li>Schedule automated reports for your stakeholders</li>
       </ul>
     """
-    html = _wrap("Welcome to InsightFlow", "Your account is ready — sign in to get started", html_body, login_url, "Open dashboard →")
+    html = _wrap(
+        "Welcome to InsightFlow",
+        "Your account is ready — sign in to get started",
+        html_body,
+        login_url,
+        "Open dashboard →",
+    )
     return subject, text, html
 
 
@@ -191,7 +196,9 @@ def business_pending_confirmation(full_name: str | None, business_name: str) -> 
     return subject, text, html
 
 
-def business_admin_notification(business_name: str, business_email: str, contact_name: str | None, admin_url: str) -> tuple[str, str, str]:
+def business_admin_notification(
+    business_name: str, business_email: str, contact_name: str | None, admin_url: str
+) -> tuple[str, str, str]:
     subject = f"{BRAND} — New business pending approval: {business_name}"
     text = (
         f"New business registration pending approval:\n\n"
@@ -204,11 +211,13 @@ def business_admin_notification(business_name: str, business_email: str, contact
       <p style="margin:0 0 12px;color:{COLOR_PRIMARY};font-size:16px;font-weight:600;">{business_name} is awaiting approval</p>
       <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border:1px solid {COLOR_BORDER};border-radius:8px;overflow:hidden;margin:12px 0;">
         <tr><td style="padding:10px 14px;background:{COLOR_BG};font-size:12px;color:{COLOR_MUTED};">Business</td><td style="padding:10px 14px;font-size:13px;font-weight:600;">{business_name}</td></tr>
-        <tr><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:12px;color:{COLOR_MUTED};">Admin email</td><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:13px;">{contact_name or '—'} &lt;{business_email}&gt;</td></tr>
+        <tr><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:12px;color:{COLOR_MUTED};">Admin email</td><td style="padding:10px 14px;border-top:1px solid {COLOR_BORDER};font-size:13px;">{contact_name or "—"} &lt;{business_email}&gt;</td></tr>
       </table>
       <p style="margin:0;color:{COLOR_MUTED};font-size:13px;">Review and approve in the admin panel. Business Admin will be notified automatically.</p>
     """
-    html = _wrap("New business pending approval", f"{business_name} awaiting approval", html_body, admin_url, "Review in admin →")
+    html = _wrap(
+        "New business pending approval", f"{business_name} awaiting approval", html_body, admin_url, "Review in admin →"
+    )
     return subject, text, html
 
 
@@ -265,7 +274,9 @@ def business_rejected(full_name: str | None, business_name: str, reason: str | N
     return subject, text, html
 
 
-def invite_email(business_name: str, inviter_email: str, role: str, invite_url: str, invite_token: str) -> tuple[str, str, str]:
+def invite_email(
+    business_name: str, inviter_email: str, role: str, invite_url: str, invite_token: str
+) -> tuple[str, str, str]:
     subject = f"{BRAND} — You've been invited to join {business_name} as {role.title()}"
     text = (
         f"You've been invited to join '{business_name}' on {BRAND} as {role}.\n"
@@ -283,5 +294,11 @@ def invite_email(business_name: str, inviter_email: str, role: str, invite_url: 
       </table>
       <p style="margin:0;color:{COLOR_MUTED};font-size:12px;word-break:break-all;">Token: <span style="font-family:monospace;background:{COLOR_BG};padding:2px 6px;border-radius:4px;">{invite_token}</span></p>
     """
-    html = _wrap(f"You're invited to {business_name}", f"Join {business_name} as {role.title()}", html_body, invite_url, "Accept invite →")
+    html = _wrap(
+        f"You're invited to {business_name}",
+        f"Join {business_name} as {role.title()}",
+        html_body,
+        invite_url,
+        "Accept invite →",
+    )
     return subject, text, html

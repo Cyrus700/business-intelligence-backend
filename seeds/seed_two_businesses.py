@@ -22,14 +22,14 @@ Usage:
 
 Credentials printed at end; also usable via UI Register Business / Invite.
 """
-import asyncio
-import sys
+
 import argparse
-import json
+import asyncio
 import random
+import sys
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
-import uuid
 
 import bcrypt
 import numpy as np
@@ -37,11 +37,11 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select, text, func
+from sqlalchemy import func, select, text
+
 from app.core.database import get_session_factory
-from app.models import Organization, Profile, Product
-from app.models.warehouse import SalesTransaction, Expense, InventoryLevel
-from app.models.integration import DataSource, EtlJob
+from app.models import Organization, Product, Profile
+from app.models.warehouse import Expense, InventoryLevel, SalesTransaction
 from app.services.analytics.kpi_builder import rebuild_kpi_snapshots
 
 # --- Business definitions ---
@@ -106,6 +106,7 @@ FESTIVALS = [
     (date(2026, 10, 11), date(2026, 10, 20)),
 ]
 
+
 def festival_boost(d: date) -> float:
     for s, e in FESTIVALS:
         if s <= d <= e:
@@ -113,6 +114,7 @@ def festival_boost(d: date) -> float:
         if s - timedelta(days=10) <= d < s:
             return 1.4
     return 1.0
+
 
 ANOMALIES = [
     {"date": "2024-03-08", "factor": 4.0},
@@ -123,8 +125,10 @@ ANOMALY_BY_DATE = {a["date"]: a["factor"] for a in ANOMALIES}
 START = date(2023, 7, 1)
 END = date.today()
 
+
 def _hash(pw: str) -> str:
     return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
 
 async def ensure_org(name: str, slug: str) -> Organization:
     async with get_session_factory()() as s:
@@ -133,7 +137,9 @@ async def ensure_org(name: str, slug: str) -> Organization:
             print(f"Org exists: {org.name} ({org.slug}) id={org.id}")
             return org
         # also check by name case-insensitive
-        org2 = (await s.execute(select(Organization).where(func.lower(Organization.name) == name.lower()))).scalar_one_or_none()
+        org2 = (
+            await s.execute(select(Organization).where(func.lower(Organization.name) == name.lower()))
+        ).scalar_one_or_none()
         if org2:
             print(f"Org exists by name: {org2.name} id={org2.id}")
             return org2
@@ -144,9 +150,12 @@ async def ensure_org(name: str, slug: str) -> Organization:
         print(f"Created org: {org.name} ({org.slug}) id={org.id}")
         return org
 
+
 async def ensure_user(email: str, password: str, role: str, full_name: str, org_id, department="General") -> Profile:
     async with get_session_factory()() as s:
-        existing = (await s.execute(select(Profile).where(func.lower(Profile.email) == email.lower()))).scalar_one_or_none()
+        existing = (
+            await s.execute(select(Profile).where(func.lower(Profile.email) == email.lower()))
+        ).scalar_one_or_none()
         if existing:
             # update if org/role drift
             changed = False
@@ -186,9 +195,12 @@ async def ensure_user(email: str, password: str, role: str, full_name: str, org_
         print(f"Seeded {email} ({role}) org={org_id}")
         return profile
 
+
 async def ensure_products(org_id) -> dict[str, uuid.UUID]:
     async with get_session_factory()() as s:
-        existing = {p.sku: p.id for p in (await s.execute(select(Product).where(Product.org_id == org_id))).scalars().all()}
+        existing = {
+            p.sku: p.id for p in (await s.execute(select(Product).where(Product.org_id == org_id))).scalars().all()
+        }
         wanted = set(sku for sku, *_ in PRODUCTS)
         missing = wanted - set(existing.keys())
         for sku, name, cat, cost, price in PRODUCTS:
@@ -197,20 +209,28 @@ async def ensure_products(org_id) -> dict[str, uuid.UUID]:
                 s.add(p)
         if missing:
             await s.commit()
-            existing = {p.sku: p.id for p in (await s.execute(select(Product).where(Product.org_id == org_id))).scalars().all()}
+            existing = {
+                p.sku: p.id for p in (await s.execute(select(Product).where(Product.org_id == org_id))).scalars().all()
+            }
             print(f"Created {len(missing)} products for org {org_id}")
         else:
             print(f"Products already exist for org {org_id}: {len(existing)}")
         return existing
 
+
 async def count_sales(org_id) -> int:
     async with get_session_factory()() as s:
-        return (await s.execute(select(func.count()).select_from(SalesTransaction).where(SalesTransaction.org_id == org_id))).scalar_one()
+        return (
+            await s.execute(select(func.count()).select_from(SalesTransaction).where(SalesTransaction.org_id == org_id))
+        ).scalar_one()
+
 
 async def seed_business_data(business: dict, org_id, force: bool = False):
     cnt = await count_sales(org_id)
     if cnt > 100 and not force:
-        print(f"Business {business['name']} already has {cnt} sales rows — skipping generation (use --force to regenerate)")
+        print(
+            f"Business {business['name']} already has {cnt} sales rows — skipping generation (use --force to regenerate)"
+        )
         return
     if force and cnt > 0:
         # truncate only this org's data for regeneration (order matters due FK)
@@ -250,110 +270,162 @@ async def seed_business_data(business: dict, org_id, force: bool = False):
         if factor and random.random() < 0.7:
             n_orders = max(2, int(n_orders * factor * 0.6))
 
-        weights = np.array([1.0]*len(PRODUCTS))
+        weights = np.array([1.0] * len(PRODUCTS))
         weights /= weights.sum()
         for _ in range(n_orders):
             sku, name, cat, cost, price = PRODUCTS[int(rng.choice(len(PRODUCTS), p=weights))]
             cust, seg, city, region = biz_customers[int(rng.integers(len(biz_customers)))]
             qty = int(max(1, rng.poisson(6 if seg == "wholesale" else 2)))
-            discount = round(float(price * qty) * float(rng.choice([0,0,0,0.05,0.1])),2)
+            discount = round(float(price * qty) * float(rng.choice([0, 0, 0, 0.05, 0.1])), 2)
             total = price * qty - discount
             # row_hash per org - must be globally unique per row, so include uuid nonce
             if business["slug"] == "everest-retail":
                 total = round(total * 0.92, 2)  # slightly lower avg price for second business
-            sales_rows.append({
-                "txn_date": d,
-                "product_id": prod_map[sku],
-                "quantity": qty,
-                "unit_price": price,
-                "discount": discount,
-                "total_amount": total,
-                "channel": CHANNELS[seg],
-                "region": region,
-                "row_hash": f"{org_id.hex[:4]}-{uuid.uuid4().hex[:14]}-{d.isoformat()}",
-                "ingested_at": date.today(),
-            })
+            sales_rows.append(
+                {
+                    "txn_date": d,
+                    "product_id": prod_map[sku],
+                    "quantity": qty,
+                    "unit_price": price,
+                    "discount": discount,
+                    "total_amount": total,
+                    "channel": CHANNELS[seg],
+                    "region": region,
+                    "row_hash": f"{org_id.hex[:4]}-{uuid.uuid4().hex[:14]}-{d.isoformat()}",
+                    "ingested_at": date.today(),
+                }
+            )
         # expenses: similar but lighter
         if d.day == 1:
-            expense_rows.append({"expense_date": d, "category": "rent", "amount": 185000 if business["slug"]=="himalayan-traders" else 140000, "department": "operations"})
+            expense_rows.append(
+                {
+                    "expense_date": d,
+                    "category": "rent",
+                    "amount": 185000 if business["slug"] == "himalayan-traders" else 140000,
+                    "department": "operations",
+                }
+            )
         if d.day == 10:
-            expense_rows.append({"expense_date": d, "category": "utilities", "amount": max(500, round(float(rng.normal(38000,6000)),2)), "department": "operations"})
+            expense_rows.append(
+                {
+                    "expense_date": d,
+                    "category": "utilities",
+                    "amount": max(500, round(float(rng.normal(38000, 6000)), 2)),
+                    "department": "operations",
+                }
+            )
         if d.day == 25:
-            amt = round(520000 * (1 + 0.08*((d.year-2023)+d.month/12)),2)
-            if business["slug"]=="everest-retail":
-                amt = round(amt*0.85,2)
-            expense_rows.append({"expense_date": d, "category": "salaries", "amount": max(500, amt), "department": "hr"})
-        if d.weekday()==0 and rng.random()<0.7:
-            expense_rows.append({"expense_date": d, "category": "marketing", "amount": max(500, round(float(rng.normal(24000,9000)),2)), "department": "sales"})
-        if rng.random()<0.85:
-            expense_rows.append({"expense_date": d, "category": "logistics", "amount": max(500, round(float(rng.normal(9500,3200)),2)), "department": "operations"})
+            amt = round(520000 * (1 + 0.08 * ((d.year - 2023) + d.month / 12)), 2)
+            if business["slug"] == "everest-retail":
+                amt = round(amt * 0.85, 2)
+            expense_rows.append(
+                {"expense_date": d, "category": "salaries", "amount": max(500, amt), "department": "hr"}
+            )
+        if d.weekday() == 0 and rng.random() < 0.7:
+            expense_rows.append(
+                {
+                    "expense_date": d,
+                    "category": "marketing",
+                    "amount": max(500, round(float(rng.normal(24000, 9000)), 2)),
+                    "department": "sales",
+                }
+            )
+        if rng.random() < 0.85:
+            expense_rows.append(
+                {
+                    "expense_date": d,
+                    "category": "logistics",
+                    "amount": max(500, round(float(rng.normal(9500, 3200)), 2)),
+                    "department": "operations",
+                }
+            )
 
     # Bulk insert via ORM with org_id
     # Use chunks to avoid too large single commit
     async with get_session_factory()() as s:
         # sales
         for chunk_start in range(0, len(sales_rows), 2000):
-            chunk = sales_rows[chunk_start: chunk_start+2000]
+            chunk = sales_rows[chunk_start : chunk_start + 2000]
             for r in chunk:
                 # need ingest timestamp now, and source/etl null
-                s.add(SalesTransaction(
-                    txn_date=r["txn_date"],
-                    product_id=r["product_id"],
-                    quantity=r["quantity"],
-                    unit_price=r["unit_price"],
-                    discount=r["discount"],
-                    total_amount=r["total_amount"],
-                    channel=r["channel"],
-                    region=r["region"],
-                    row_hash=r["row_hash"],
-                    org_id=org_id,
-                ))
+                s.add(
+                    SalesTransaction(
+                        txn_date=r["txn_date"],
+                        product_id=r["product_id"],
+                        quantity=r["quantity"],
+                        unit_price=r["unit_price"],
+                        discount=r["discount"],
+                        total_amount=r["total_amount"],
+                        channel=r["channel"],
+                        region=r["region"],
+                        row_hash=r["row_hash"],
+                        org_id=org_id,
+                    )
+                )
             await s.flush()
         await s.commit()
         print(f"Inserted {len(sales_rows)} sales for {business['name']}")
 
         for chunk_start in range(0, len(expense_rows), 2000):
-            chunk = expense_rows[chunk_start: chunk_start+2000]
+            chunk = expense_rows[chunk_start : chunk_start + 2000]
             for r in chunk:
-                s.add(Expense(
-                    expense_date=r["expense_date"],
-                    category=r["category"],
-                    amount=r["amount"],
-                    department=r.get("department"),
-                    row_hash=f"{org_id.hex[:4]}-exp-{uuid.uuid4().hex[:14]}",
-                    org_id=org_id,
-                ))
+                s.add(
+                    Expense(
+                        expense_date=r["expense_date"],
+                        category=r["category"],
+                        amount=r["amount"],
+                        department=r.get("department"),
+                        row_hash=f"{org_id.hex[:4]}-exp-{uuid.uuid4().hex[:14]}",
+                        org_id=org_id,
+                    )
+                )
             await s.flush()
         await s.commit()
         print(f"Inserted {len(expense_rows)} expenses for {business['name']}")
 
         # inventory: monthly snapshots
         from collections import defaultdict
+
         sales_by_month_sku = defaultdict(int)
         for r in sales_rows:
             month = r["txn_date"].replace(day=1)
             sales_by_month_sku[(month, r["product_id"])] += r["quantity"]
-        stock = {sku: int(np.random.default_rng(business['seed']+1).integers(400,900)) for sku,_ in prod_map.items()}
+        stock = {
+            sku: int(np.random.default_rng(business["seed"] + 1).integers(400, 900)) for sku, _ in prod_map.items()
+        }
         # map product_id -> sku for lookup
-        id_to_sku = {v:k for k,v in prod_map.items()}
-        months = sorted(set(m for m,_ in sales_by_month_sku.keys()))
+        id_to_sku = {v: k for k, v in prod_map.items()}
+        months = sorted(set(m for m, _ in sales_by_month_sku.keys()))
         inv_rows = []
         for month in months:
-            snap = (month + pd.offsets.MonthEnd(0)).date() if month + pd.offsets.MonthEnd(0) <= pd.Timestamp(END) else END
+            snap = (
+                (month + pd.offsets.MonthEnd(0)).date() if month + pd.offsets.MonthEnd(0) <= pd.Timestamp(END) else END
+            )
             for pid in prod_map.values():
                 sku = id_to_sku[pid]
                 sold = sales_by_month_sku.get((month, pid), 0)
-                restock = int(sold * float(np.random.default_rng(business['seed']+2).uniform(0.85,1.2)))
+                restock = int(sold * float(np.random.default_rng(business["seed"] + 2).uniform(0.85, 1.2)))
                 stock[sku] = max(0, stock[sku] - sold + restock)
-                inv_rows.append({
-                    "snapshot_date": snap,
-                    "product_id": pid,
-                    "quantity_on_hand": stock[sku],
-                    "reorder_level": 120,
-                    "warehouse": "main",
-                })
+                inv_rows.append(
+                    {
+                        "snapshot_date": snap,
+                        "product_id": pid,
+                        "quantity_on_hand": stock[sku],
+                        "reorder_level": 120,
+                        "warehouse": "main",
+                    }
+                )
         for r in inv_rows:
-            s.add(InventoryLevel(snapshot_date=r["snapshot_date"], product_id=r["product_id"], quantity_on_hand=r["quantity_on_hand"], reorder_level=r["reorder_level"], warehouse=r["warehouse"], org_id=org_id))
+            s.add(
+                InventoryLevel(
+                    snapshot_date=r["snapshot_date"],
+                    product_id=r["product_id"],
+                    quantity_on_hand=r["quantity_on_hand"],
+                    reorder_level=r["reorder_level"],
+                    warehouse=r["warehouse"],
+                    org_id=org_id,
+                )
+            )
         await s.commit()
         print(f"Inserted {len(inv_rows)} inventory snapshots for {business['name']}")
 
@@ -363,6 +435,7 @@ async def seed_business_data(business: dict, org_id, force: bool = False):
         await rebuild_kpi_snapshots(s, min_d, max_d, org_id=org_id)
         await s.commit()
         print(f"Rebuilt kpi_snapshots for {business['name']} {min_d} -> {max_d}")
+
 
 async def main():
     parser = argparse.ArgumentParser()
@@ -386,29 +459,39 @@ async def main():
     for biz, org in orgs:
         await seed_business_data(biz, org.id, force=args.force)
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Seed complete. Credentials (isolated per business):")
-    print("="*70)
+    print("=" * 70)
     for biz, org in orgs:
         print(f"\nBusiness: {biz['name']}  slug={biz['slug']}  id={org.id}")
         for role, pw, _ in ROLES:
             email = f"{role}@{biz['email_domain']}"
             print(f"  {role:9} {email:35}  password: {pw}")
-        print(f"  → Login via UI: /login  or  Register Business is NOT needed (already seeded)")
-        print(f"  → Analytics: /dashboard (KPIs are org-scoped immediately)")
+        print("  → Login via UI: /login  or  Register Business is NOT needed (already seeded)")
+        print("  → Analytics: /dashboard (KPIs are org-scoped immediately)")
         print(f"  → Upload more data: /dashboard/data (rows will be tagged org_id={str(org.id)[:8]}...)")
     print("\nPlatform super-admin (if ADMIN_EMAIL set) sees all orgs via OrgSwitcher.")
-    print("Each business's analytics/AI are strictly isolated — verify by logging in as analyst@himalayan.example.com vs analyst@everest.example.com.")
-    print("="*70)
+    print(
+        "Each business's analytics/AI are strictly isolated — verify by logging in as analyst@himalayan.example.com vs analyst@everest.example.com."
+    )
+    print("=" * 70)
     # also print summary counts
     async with get_session_factory()() as s:
         for biz, org in orgs:
-            sc = (await s.execute(select(func.count()).select_from(SalesTransaction).where(SalesTransaction.org_id==org.id))).scalar_one()
-            ec = (await s.execute(select(func.count()).select_from(Expense).where(Expense.org_id==org.id))).scalar_one()
-            kc = (await s.execute(select(func.count()).select_from(text("kpi_snapshots").table_valued() if False else select(func.count()).select_from(text("kpi_snapshots")).where(text("org_id = :oid")).params(oid=str(org.id))))).scalar_one() if False else 0
+            sc = (
+                await s.execute(
+                    select(func.count()).select_from(SalesTransaction).where(SalesTransaction.org_id == org.id)
+                )
+            ).scalar_one()
+            ec = (
+                await s.execute(select(func.count()).select_from(Expense).where(Expense.org_id == org.id))
+            ).scalar_one()
             # kpi count via raw
-            kc2 = (await s.execute(text("SELECT count(*) FROM kpi_snapshots WHERE org_id = :oid"), {"oid": str(org.id)})).scalar_one()
+            kc2 = (
+                await s.execute(text("SELECT count(*) FROM kpi_snapshots WHERE org_id = :oid"), {"oid": str(org.id)})
+            ).scalar_one()
             print(f"{biz['slug']}: sales={sc} expenses={ec} kpi_snapshots={kc2}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

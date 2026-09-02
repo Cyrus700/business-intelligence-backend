@@ -6,11 +6,6 @@ baseline (same weekday, previous week). Candidates are compared by MAPE; the
 best is promoted and an ensemble (inverse-MAPE weighted) is also produced.
 """
 
-# Every candidate the engine can train. ``naive_seasonal`` is the floor that all
-# real models must beat; ETS and Theta add classical statistical alternatives so
-# the registry can pick the genuinely simplest adequate model (totos.md §13).
-CANDIDATE_NAMES = ("naive_seasonal", "prophet", "arima", "ets", "theta")
-
 import logging
 import warnings
 from dataclasses import dataclass
@@ -22,6 +17,11 @@ import pandas as pd
 from app.services.ml.features import festival_flags
 
 logger = logging.getLogger(__name__)
+
+# Every candidate the engine can train. ``naive_seasonal`` is the floor that all
+# real models must beat; ETS and Theta add classical statistical alternatives so
+# the registry can pick the genuinely simplest adequate model (totos.md §13).
+CANDIDATE_NAMES = ("naive_seasonal", "prophet", "arima", "ets", "theta")
 
 HOLDOUT_DAYS = 90
 
@@ -135,9 +135,7 @@ class ProphetForecaster:
         # daily marketing spend, if the loader attached one; falls back to an
         # all-zero column so older callers (e.g. hand-built test frames) still work.
         self._has_marketing = "marketing" in train.columns
-        self._marketing_avg = (
-            float(train["marketing"].tail(90).mean()) if self._has_marketing else 0.0
-        )
+        self._marketing_avg = float(train["marketing"].tail(90).mean()) if self._has_marketing else 0.0
         if self._has_marketing:
             self._model.add_regressor("marketing")
         cols = ["ds", "y", "festival"] + (["marketing"] if self._has_marketing else [])
@@ -299,11 +297,7 @@ def evaluate_candidates(frame: pd.DataFrame) -> list[Evaluation]:
             forecaster.fit(train)
             preds = forecaster.predict(test["ds"].reset_index(drop=True))
             m = metrics(test["y"].to_numpy(), preds["yhat"].to_numpy())
-            params = (
-                {"order": str(getattr(forecaster, "order", ""))}
-                if name == "arima"
-                else {}
-            )
+            params = {"order": str(getattr(forecaster, "order", ""))} if name == "arima" else {}
             results.append(Evaluation(name, m, params))
         except Exception:
             logger.exception("candidate %s failed", name)
@@ -331,9 +325,7 @@ def make_forecaster(name: str) -> Forecaster:
     return forecaster
 
 
-def ensemble_forecast(
-    frame: pd.DataFrame, horizon: int, exclude: set[str] | None = None
-) -> pd.DataFrame:
+def ensemble_forecast(frame: pd.DataFrame, horizon: int, exclude: set[str] | None = None) -> pd.DataFrame:
     """Inverse-MAPE-weighted ensemble across all converged candidates.
 
     Each candidate point forecast is weighted by ``1/mape`` (so the most
@@ -343,8 +335,10 @@ def ensemble_forecast(
     """
     exclude = exclude or set()
     train, test = frame.iloc[:-HOLDOUT_DAYS], frame.iloc[-HOLDOUT_DAYS:]
-    future_ds = test["ds"].reset_index(drop=True).iloc[:horizon] if horizon <= len(test) else pd.Series(
-        pd.date_range(test["ds"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
+    future_ds = (
+        test["ds"].reset_index(drop=True).iloc[:horizon]
+        if horizon <= len(test)
+        else pd.Series(pd.date_range(test["ds"].iloc[-1] + pd.Timedelta(days=1), periods=horizon))
     )
     weights: list[float] = []
     yhats: list[np.ndarray] = []
@@ -366,9 +360,13 @@ def ensemble_forecast(
         except Exception:
             logger.exception("ensemble member %s failed", name)
     if not weights:
-        return NaiveSeasonal().fit(train) or pd.DataFrame()
-    w = np.array(weights) / sum(weights)
-    yhat = np.clip(np.tensordot(w, np.array(yhats), axes=(0, 0)), 0, None)
+        # Every candidate failed — fall back to the baseline so callers still
+        # get a forecast frame with the expected columns.
+        baseline = NaiveSeasonal()
+        baseline.fit(train)
+        return baseline.predict(future_ds)
+    norm_w = np.array(weights) / sum(weights)
+    yhat = np.clip(np.tensordot(norm_w, np.array(yhats), axes=(0, 0)), 0, None)
     lo = np.clip(np.min(np.array(los), axis=0), 0, None)
     hi = np.max(np.array(his), axis=0)
     return pd.DataFrame({"ds": future_ds.to_numpy(), "yhat": yhat, "lo": lo, "hi": hi})

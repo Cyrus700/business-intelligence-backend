@@ -50,9 +50,7 @@ def upgrade() -> None:
             "kind IN ('csv_upload', 'excel_upload', 'rest_api', 'postgres')",
             name=op.f("ck_data_sources_valid_kind"),
         ),
-        sa.CheckConstraint(
-            "status IN ('active', 'paused', 'error')", name=op.f("ck_data_sources_valid_status")
-        ),
+        sa.CheckConstraint("status IN ('active', 'paused', 'error')", name=op.f("ck_data_sources_valid_status")),
         sa.CheckConstraint(
             "target_domain IN ('sales', 'finance', 'inventory')",
             name=op.f("ck_data_sources_valid_domain"),
@@ -70,9 +68,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_kpi_snapshots")),
         sa.UniqueConstraint("snapshot_date", "metric", "dimensions", name="uq_kpi_point"),
     )
-    op.create_index(
-        "ix_kpi_snapshots_date_metric", "kpi_snapshots", ["snapshot_date", "metric"], unique=False
-    )
+    op.create_index("ix_kpi_snapshots_date_metric", "kpi_snapshots", ["snapshot_date", "metric"], unique=False)
     op.create_table(
         "ml_models",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -115,9 +111,7 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint(
-            "role IN ('admin', 'manager', 'analyst')", name=op.f("ck_profiles_valid_role")
-        ),
+        sa.CheckConstraint("role IN ('admin', 'manager', 'analyst')", name=op.f("ck_profiles_valid_role")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_profiles")),
         sa.UniqueConstraint("email", name=op.f("uq_profiles_email")),
     )
@@ -159,9 +153,7 @@ def upgrade() -> None:
         sa.Column("context", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("status", sa.String(), nullable=False),
         sa.Column("acknowledged_by", sa.UUID(), nullable=True),
-        sa.CheckConstraint(
-            "severity IN ('low', 'medium', 'high')", name=op.f("ck_anomalies_valid_severity")
-        ),
+        sa.CheckConstraint("severity IN ('low', 'medium', 'high')", name=op.f("ck_anomalies_valid_severity")),
         sa.CheckConstraint(
             "status IN ('open', 'acknowledged', 'dismissed')",
             name=op.f("ck_anomalies_valid_status"),
@@ -206,12 +198,8 @@ def upgrade() -> None:
         sa.Column("rows_loaded", sa.Integer(), nullable=True),
         sa.Column("rows_rejected", sa.Integer(), nullable=True),
         sa.Column("log", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.CheckConstraint(
-            "status IN ('running', 'succeeded', 'failed')", name=op.f("ck_etl_jobs_valid_status")
-        ),
-        sa.CheckConstraint(
-            "trigger IN ('manual', 'schedule', 'upload')", name=op.f("ck_etl_jobs_valid_trigger")
-        ),
+        sa.CheckConstraint("status IN ('running', 'succeeded', 'failed')", name=op.f("ck_etl_jobs_valid_status")),
+        sa.CheckConstraint("trigger IN ('manual', 'schedule', 'upload')", name=op.f("ck_etl_jobs_valid_trigger")),
         sa.ForeignKeyConstraint(
             ["data_source_id"],
             ["data_sources.id"],
@@ -240,9 +228,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_forecasts")),
         sa.UniqueConstraint("model_id", "target", "forecast_date", name="uq_forecast_point"),
     )
-    op.create_index(
-        "ix_forecasts_target_date", "forecasts", ["target", "forecast_date"], unique=False
-    )
+    op.create_index("ix_forecasts_target_date", "forecasts", ["target", "forecast_date"], unique=False)
     op.create_table(
         "inventory_levels",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -265,13 +251,9 @@ def upgrade() -> None:
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_inventory_levels")),
-        sa.UniqueConstraint(
-            "snapshot_date", "product_id", "warehouse", name="uq_inventory_snapshot"
-        ),
+        sa.UniqueConstraint("snapshot_date", "product_id", "warehouse", name="uq_inventory_snapshot"),
     )
-    op.create_index(
-        "ix_inventory_snapshot_date", "inventory_levels", ["snapshot_date"], unique=False
-    )
+    op.create_index("ix_inventory_snapshot_date", "inventory_levels", ["snapshot_date"], unique=False)
     op.create_table(
         "reports",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -376,9 +358,7 @@ def upgrade() -> None:
             "insight_type IN ('trend', 'forecast', 'anomaly', 'comparison', 'recommendation')",
             name=op.f("ck_insights_valid_type"),
         ),
-        sa.CheckConstraint(
-            "severity IN ('info', 'warning', 'critical')", name=op.f("ck_insights_valid_severity")
-        ),
+        sa.CheckConstraint("severity IN ('info', 'warning', 'critical')", name=op.f("ck_insights_valid_severity")),
         sa.ForeignKeyConstraint(
             ["related_anomaly_id"],
             ["anomalies.id"],
@@ -439,12 +419,8 @@ def upgrade() -> None:
         sa.UniqueConstraint("row_hash", name=op.f("uq_sales_transactions_row_hash")),
     )
     op.create_index("ix_sales_txn_date", "sales_transactions", ["txn_date"], unique=False)
-    op.create_index(
-        "ix_sales_txn_date_product", "sales_transactions", ["txn_date", "product_id"], unique=False
-    )
-    op.create_index(
-        "ix_sales_txn_date_region", "sales_transactions", ["txn_date", "region"], unique=False
-    )
+    op.create_index("ix_sales_txn_date_product", "sales_transactions", ["txn_date", "product_id"], unique=False)
+    op.create_index("ix_sales_txn_date_region", "sales_transactions", ["txn_date", "region"], unique=False)
     op.create_table(
         "notifications",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -475,9 +451,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_notifications")),
     )
-    op.create_index(
-        "ix_notifications_user_unread", "notifications", ["user_id", "is_read"], unique=False
-    )
+    op.create_index("ix_notifications_user_unread", "notifications", ["user_id", "is_read"], unique=False)
     # ### end Alembic commands ###
 
 

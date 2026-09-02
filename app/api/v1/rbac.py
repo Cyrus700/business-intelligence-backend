@@ -72,17 +72,9 @@ async def _audit(
 
 async def _load_catalog(db: DbSession) -> tuple[list[Role], list[Permission], dict[str, set[str]]]:
     await _bootstrap_if_empty(db)
-    roles = (
-        (await db.execute(select(Role).order_by(Role.rank))).scalars().unique().all()
-    )
+    roles = (await db.execute(select(Role).order_by(Role.rank))).scalars().unique().all()
     permissions = (
-        (
-            await db.execute(
-                select(Permission).order_by(
-                    Permission.group_label, Permission.sort_order, Permission.key
-                )
-            )
-        )
+        (await db.execute(select(Permission).order_by(Permission.group_label, Permission.sort_order, Permission.key)))
         .scalars()
         .all()
     )
@@ -181,17 +173,12 @@ async def list_permissions(db: DbSession, user: CurrentUser) -> list[PermissionO
 
 
 @router.get("/audit", response_model=list[RbacAuditOut])
-async def rbac_audit(
-    db: DbSession, user: CanManage, limit: int = Query(50, ge=1, le=200)
-) -> list[RbacAuditOut]:
+async def rbac_audit(db: DbSession, user: CanManage, limit: int = Query(50, ge=1, le=200)) -> list[RbacAuditOut]:
     """Change history for the matrix itself — who granted what, when."""
     logs = (
         (
             await db.execute(
-                select(AuditLog)
-                .where(AuditLog.action == RBAC_ACTION)
-                .order_by(AuditLog.created_at.desc())
-                .limit(limit)
+                select(AuditLog).where(AuditLog.action == RBAC_ACTION).order_by(AuditLog.created_at.desc()).limit(limit)
             )
         )
         .scalars()
@@ -213,16 +200,13 @@ async def rbac_audit(
 # ── matrix editing ────────────────────────────────────────────────────────
 
 
-async def _apply_changes(
-    db: DbSession, actor: Profile, changes: list[GrantChange]
-) -> list[dict[str, Any]]:
+async def _apply_changes(db: DbSession, actor: Profile, changes: list[GrantChange]) -> list[dict[str, Any]]:
     roles = {r.name: r for r in (await db.execute(select(Role))).scalars().unique().all()}
     perms = {p.key: p for p in (await db.execute(select(Permission))).scalars().all()}
     policy = await rbac.get_policy(db, fresh=True)
 
     existing = {
-        (link.role_id, link.permission_id): link
-        for link in (await db.execute(select(RolePermission))).scalars().all()
+        (link.role_id, link.permission_id): link for link in (await db.execute(select(RolePermission))).scalars().all()
     }
 
     applied: list[dict[str, Any]] = []
@@ -232,12 +216,8 @@ async def _apply_changes(
         if role is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown role '{change.role}'")
         if perm is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, f"Unknown permission '{change.permission}'"
-            )
-        if not change.granted and change.permission in rbac.locked_permissions_for(
-            policy, role.name
-        ):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown permission '{change.permission}'")
+        if not change.granted and change.permission in rbac.locked_permissions_for(policy, role.name):
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 f"'{change.permission}' cannot be revoked from '{role.name}' — "
@@ -254,16 +234,12 @@ async def _apply_changes(
             existing[cell] = link
         else:
             await db.delete(existing.pop(cell))
-        applied.append(
-            {"role": role.name, "permission": perm.key, "granted": change.granted}
-        )
+        applied.append({"role": role.name, "permission": perm.key, "granted": change.granted})
     return applied
 
 
 @router.patch("/matrix", response_model=MatrixOut)
-async def update_matrix(
-    body: MatrixUpdate, db: DbSession, user: CanManage, request: Request
-) -> MatrixOut:
+async def update_matrix(body: MatrixUpdate, db: DbSession, user: CanManage, request: Request) -> MatrixOut:
     """Apply a batch of grant/revoke toggles atomically."""
     applied = await _apply_changes(db, user, body.changes)
     if applied:
@@ -293,9 +269,7 @@ async def replace_role_permissions(
     valid = {p.key for p in permissions}
     unknown = sorted(set(body.permissions) - valid)
     if unknown:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown permissions: {', '.join(unknown)}"
-        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown permissions: {', '.join(unknown)}")
 
     target = set(body.permissions)
     current = matrix.get(role.name, set())
@@ -324,9 +298,7 @@ async def replace_role_permissions(
 
 
 @router.post("/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
-async def create_role(
-    body: RoleCreate, db: DbSession, user: CanManage, request: Request
-) -> RoleOut:
+async def create_role(body: RoleCreate, db: DbSession, user: CanManage, request: Request) -> RoleOut:
     await _bootstrap_if_empty(db)
     if (await db.execute(select(Role).where(Role.name == body.name))).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, f"Role '{body.name}' already exists")
@@ -352,18 +324,11 @@ async def create_role(
     if body.clone_from:
         _, _, matrix = await _load_catalog(db)
         if body.clone_from not in matrix:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, f"Cannot clone unknown role '{body.clone_from}'"
-            )
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Cannot clone unknown role '{body.clone_from}'")
         keys = sorted(matrix[body.clone_from])
 
     if keys:
-        perms = {
-            p.key: p
-            for p in (
-                await db.execute(select(Permission).where(Permission.key.in_(keys)))
-            ).scalars()
-        }
+        perms = {p.key: p for p in (await db.execute(select(Permission).where(Permission.key.in_(keys)))).scalars()}
         unknown = sorted(set(keys) - perms.keys())
         if unknown:
             raise HTTPException(
@@ -371,11 +336,7 @@ async def create_role(
                 f"Unknown permissions: {', '.join(unknown)}",
             )
         for key in keys:
-            db.add(
-                RolePermission(
-                    role_id=role.id, permission_id=perms[key].id, granted_by=user.id
-                )
-            )
+            db.add(RolePermission(role_id=role.id, permission_id=perms[key].id, granted_by=user.id))
 
     await _audit(
         db,
@@ -396,18 +357,14 @@ async def create_role(
 
 
 @router.patch("/roles/{name}", response_model=RoleOut)
-async def update_role(
-    name: str, body: RoleUpdate, db: DbSession, user: CanManage, request: Request
-) -> RoleOut:
+async def update_role(name: str, body: RoleUpdate, db: DbSession, user: CanManage, request: Request) -> RoleOut:
     role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
     if role is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Role not found")
 
     changes = body.model_dump(exclude_unset=True)
     if role.is_system and changes.get("is_active") is False:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"'{role.name}' is a system role and cannot be deactivated"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, f"'{role.name}' is a system role and cannot be deactivated")
     if "rank" in changes and changes["rank"] != role.rank:
         clash = (
             await db.execute(select(Role).where(Role.rank == changes["rank"], Role.id != role.id))
@@ -442,12 +399,8 @@ async def delete_role(name: str, db: DbSession, user: CanManage, request: Reques
     if role is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Role not found")
     if role.is_system:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"'{role.name}' is a system role and cannot be deleted"
-        )
-    assigned = (
-        await db.execute(select(func.count()).select_from(Profile).where(Profile.role == name))
-    ).scalar_one()
+        raise HTTPException(status.HTTP_409_CONFLICT, f"'{role.name}' is a system role and cannot be deleted")
+    assigned = (await db.execute(select(func.count()).select_from(Profile).where(Profile.role == name))).scalar_one()
     if assigned:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -471,13 +424,9 @@ async def delete_role(name: str, db: DbSession, user: CanManage, request: Reques
 
 
 @router.post("/permissions", response_model=PermissionOut, status_code=status.HTTP_201_CREATED)
-async def create_permission(
-    body: PermissionCreate, db: DbSession, user: CanManage, request: Request
-) -> PermissionOut:
+async def create_permission(body: PermissionCreate, db: DbSession, user: CanManage, request: Request) -> PermissionOut:
     await _bootstrap_if_empty(db)
-    clash = (
-        await db.execute(select(Permission).where(Permission.key == body.key))
-    ).scalar_one_or_none()
+    clash = (await db.execute(select(Permission).where(Permission.key == body.key))).scalar_one_or_none()
     if clash is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Permission '{body.key}' already exists")
     perm = Permission(
@@ -529,22 +478,17 @@ async def update_permission(
 
 
 @router.delete("/permissions/{key:path}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_permission(
-    key: str, db: DbSession, user: CanManage, request: Request
-) -> None:
+async def delete_permission(key: str, db: DbSession, user: CanManage, request: Request) -> None:
     perm = (await db.execute(select(Permission).where(Permission.key == key))).scalar_one_or_none()
     if perm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Permission not found")
     if perm.is_system:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"'{key}' is enforced by the API and cannot be deleted — revoke it from every "
-            "role instead.",
+            f"'{key}' is enforced by the API and cannot be deleted — revoke it from every role instead.",
         )
     await db.execute(delete(RolePermission).where(RolePermission.permission_id == perm.id))
-    await _audit(
-        db, request, user, entity="permission", entity_id=key, detail={"deleted": {"key": key}}
-    )
+    await _audit(db, request, user, entity="permission", entity_id=key, detail={"deleted": {"key": key}})
     await db.delete(perm)
     await db.commit()
     rbac.invalidate()
@@ -577,11 +521,7 @@ async def reset_to_defaults(db: DbSession, user: CanManage, request: Request) ->
             continue
         await db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
         for key in sorted(desired):
-            db.add(
-                RolePermission(
-                    role_id=role.id, permission_id=perm_ids[key], granted_by=user.id
-                )
-            )
+            db.add(RolePermission(role_id=role.id, permission_id=perm_ids[key], granted_by=user.id))
         reverted.append(
             {
                 "role": name,
@@ -593,9 +533,7 @@ async def reset_to_defaults(db: DbSession, user: CanManage, request: Request) ->
         role.description = seed["description"]
         role.color = seed["color"]
 
-    await _audit(
-        db, request, user, entity="matrix", entity_id=None, detail={"reset_to_defaults": reverted}
-    )
+    await _audit(db, request, user, entity="matrix", entity_id=None, detail={"reset_to_defaults": reverted})
     await db.commit()
     rbac.invalidate()
     return await get_matrix(db, user)
@@ -608,10 +546,7 @@ async def sync_catalog(db: DbSession, user: CanManage, request: Request) -> Matr
     Run after a deploy that introduced new capabilities: the new keys appear in
     the matrix ungranted, so an admin decides who gets them.
     """
-    known = {
-        k
-        for (k,) in (await db.execute(select(Permission.key))).all()
-    }
+    known = {k for (k,) in (await db.execute(select(Permission.key))).all()}
     missing = [p for p in DEFAULT_PERMISSIONS if p["key"] not in known]
     for seed in missing:
         db.add(

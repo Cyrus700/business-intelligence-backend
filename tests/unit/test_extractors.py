@@ -54,9 +54,7 @@ def test_extract_csv_rejects_header_only():
 
 
 def test_extract_excel():
-    frame = pd.DataFrame(
-        {"date": ["2026-06-15"], "sku": ["BEV-001"], "quantity": [3], "unit_price": [320]}
-    )
+    frame = pd.DataFrame({"date": ["2026-06-15"], "sku": ["BEV-001"], "quantity": [3], "unit_price": [320]})
     buf = io.BytesIO()
     frame.to_excel(buf, index=False)
     extract = extract_tabular(buf.getvalue(), "sales.xlsx")
@@ -85,23 +83,17 @@ def test_extract_rejects_oversize():
 
 async def test_extract_rest_api_with_records_path():
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200, json={"data": {"rows": [{"date": "2026-06-15", "sku": "A", "quantity": 1}]}}
-        )
+        return httpx.Response(200, json={"data": {"rows": [{"date": "2026-06-15", "sku": "A", "quantity": 1}]}})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    frame = await extract_rest_api(
-        {"url": "https://pos.example.com/export", "records_path": "data.rows"}, client
-    )
+    frame = await extract_rest_api({"url": "https://pos.example.com/export", "records_path": "data.rows"}, client)
     await client.aclose()
     assert len(frame) == 1
     assert frame.iloc[0]["sku"] == "A"
 
 
 async def test_extract_rest_api_rejects_non_list():
-    client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True}))
-    )
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True})))
     with pytest.raises(ValueError, match="list of records"):
         await extract_rest_api({"url": "https://x.example.com"}, client)
     await client.aclose()

@@ -22,12 +22,12 @@ import socket
 import time
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from typing import Any, Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session_factory
 from app.models.jobs import BackgroundJob
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # In-memory metrics (also persisted per-run in background_jobs for durability)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class WorkerMetrics:
@@ -80,12 +81,15 @@ class WorkerMetrics:
             "per_job": self.per_job,
         }
 
+
 _metrics = WorkerMetrics()
 _worker_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:6]}"
 _semaphore: asyncio.Semaphore | None = None
 
+
 def worker_id() -> str:
     return _worker_id
+
 
 def get_metrics() -> dict[str, Any]:
     snap = _metrics.snapshot()
@@ -94,9 +98,11 @@ def get_metrics() -> dict[str, Any]:
     snap["hostname"] = socket.gethostname()
     return snap
 
+
 # ---------------------------------------------------------------------------
 # Retry policy
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class RetryPolicy:
@@ -110,6 +116,7 @@ class RetryPolicy:
         raw = min(self.base_delay_s * (2 ** (attempt - 1)), self.max_delay_s)
         return raw * (1 + random.uniform(-self.jitter, self.jitter))
 
+
 DEFAULT_RETRY = RetryPolicy()
 
 # ---------------------------------------------------------------------------
@@ -120,18 +127,23 @@ Handler = Callable[[dict[str, Any]], Awaitable[None]]
 
 _registry: dict[str, Handler] = {}
 
+
 def register(name: str) -> Callable[[Handler], Handler]:
     def deco(fn: Handler) -> Handler:
         _registry[name] = fn
         return fn
+
     return deco
+
 
 def list_handlers() -> list[str]:
     return sorted(_registry)
 
+
 # ---------------------------------------------------------------------------
 # Core execution — durable + retried
 # ---------------------------------------------------------------------------
+
 
 async def _execute_tracked(
     name: str,
@@ -183,15 +195,32 @@ async def _execute_tracked(
                         rec.status = "succeeded"
                         rec.finished_at = datetime.now(UTC)
                         await db.commit()
-                logger.info("worker %s job %s/%s succeeded in %.1fms (attempt %d)", _worker_id, name, job_id, duration * 1000, attempt)
+                logger.info(
+                    "worker %s job %s/%s succeeded in %.1fms (attempt %d)",
+                    _worker_id,
+                    name,
+                    job_id,
+                    duration * 1000,
+                    attempt,
+                )
                 return
 
-            except asyncio.TimeoutError as e:
+            except TimeoutError:
                 last_error = f"timeout after {timeout_s}s"
-                logger.warning("worker %s job %s/%s timeout (attempt %d/%d)", _worker_id, name, job_id, attempt, retry.max_attempts)
+                logger.warning(
+                    "worker %s job %s/%s timeout (attempt %d/%d)", _worker_id, name, job_id, attempt, retry.max_attempts
+                )
             except Exception as e:  # noqa: BLE001
                 last_error = f"{type(e).__name__}: {e}"
-                logger.warning("worker %s job %s/%s failed (attempt %d/%d): %s", _worker_id, name, job_id, attempt, retry.max_attempts, last_error)
+                logger.warning(
+                    "worker %s job %s/%s failed (attempt %d/%d): %s",
+                    _worker_id,
+                    name,
+                    job_id,
+                    attempt,
+                    retry.max_attempts,
+                    last_error,
+                )
 
             if attempt >= retry.max_attempts:
                 duration = time.perf_counter() - start
@@ -204,7 +233,14 @@ async def _execute_tracked(
                         rec.last_error = last_error
                         rec.finished_at = datetime.now(UTC)
                         await db.commit()
-                logger.error("worker %s job %s/%s dead-lettered after %d attempts: %s", _worker_id, name, job_id, attempt, last_error)
+                logger.error(
+                    "worker %s job %s/%s dead-lettered after %d attempts: %s",
+                    _worker_id,
+                    name,
+                    job_id,
+                    attempt,
+                    last_error,
+                )
                 return
 
             # retry
@@ -218,9 +254,11 @@ async def _execute_tracked(
             logger.info("worker %s job %s/%s retrying in %.1fs", _worker_id, name, job_id, delay)
             await asyncio.sleep(delay)
 
+
 # ---------------------------------------------------------------------------
 # Public surface — what scheduler + ad-hoc callers use
 # ---------------------------------------------------------------------------
+
 
 async def submit(
     name: str,
@@ -239,9 +277,18 @@ async def submit(
     if handler is None:
         raise ValueError(f"unknown worker job {name!r}; registered: {list_handlers()}")
     task = asyncio.create_task(_execute_tracked(name, payload or {}, handler, retry or DEFAULT_RETRY, timeout_s))
+
     # detach done callback so unhandled exceptions are logged
-    task.add_done_callback(lambda t: t.exception() and logger.exception("worker task %s raised", name, exc_info=t.exception()))
+    def _log_failure(t: asyncio.Task) -> None:
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.error("worker task %s raised", name, exc_info=exc)
+
+    task.add_done_callback(_log_failure)
     return task
+
 
 async def submit_and_wait(
     name: str,
@@ -253,6 +300,7 @@ async def submit_and_wait(
     t = await submit(name, payload, timeout_s=timeout_s)
     await t
 
+
 # ---------------------------------------------------------------------------
 # Legacy claim loop — for horizontally scaled deployments that poll
 # background_jobs rows enqueued by other instances. Kept dormant in single-node dev
@@ -260,6 +308,7 @@ async def submit_and_wait(
 # ---------------------------------------------------------------------------
 
 _claim_task: asyncio.Task | None = None
+
 
 async def _claim_loop(poll_interval_s: float = 2.0) -> None:
     while True:
@@ -300,10 +349,12 @@ async def _claim_loop(poll_interval_s: float = 2.0) -> None:
             logger.exception("claim loop error")
         await asyncio.sleep(poll_interval_s)
 
+
 def start_claim_loop() -> None:
     global _claim_task
     if _claim_task is None or _claim_task.done():
         _claim_task = asyncio.create_task(_claim_loop(), name="worker-claim-loop")
+
 
 def stop_claim_loop() -> None:
     global _claim_task

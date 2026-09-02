@@ -20,11 +20,7 @@ async def seed_sales_history() -> date:
         for i in range(60, 0, -1):
             d = today - timedelta(days=i)
             value = 10000 + (i % 7) * 100
-            db.add(
-                KpiSnapshot(
-                    snapshot_date=d, metric="revenue", dimensions={}, value=value
-                )
-            )
+            db.add(KpiSnapshot(snapshot_date=d, metric="revenue", dimensions={}, value=value))
             db.add(
                 SalesTransaction(
                     txn_date=d,
@@ -37,11 +33,7 @@ async def seed_sales_history() -> date:
                 )
             )
         # Spike day: one region contributes 180k of the 200k total.
-        db.add(
-            KpiSnapshot(
-                snapshot_date=spike_day, metric="revenue", dimensions={}, value=200000
-            )
-        )
+        db.add(KpiSnapshot(snapshot_date=spike_day, metric="revenue", dimensions={}, value=200000))
         db.add(
             SalesTransaction(
                 txn_date=spike_day,
@@ -88,10 +80,7 @@ async def test_anomaly_detection_stores_contributor_explanation(client, user_tok
     assert explanation["primary"]["key"] == "Sudurpashchim"
     assert explanation["primary"]["share_pct"] > 30
     assert len(explanation["contributors"]) >= 2
-    assert any(
-        c["dimension"] == "channel" and c["key"] == "wholesale"
-        for c in explanation["contributors"]
-    )
+    assert any(c["dimension"] == "channel" and c["key"] == "wholesale" for c in explanation["contributors"])
 
 
 async def test_anomaly_resolution_lifecycle(client, manager_token):

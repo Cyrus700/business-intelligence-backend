@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from app.core.request_context import current_request_id
 
-
 SENSITIVE_KEYS = {"password", "passwd", "secret", "token", "authorization", "api_key", "apikey", "dsn", "smtp_password"}
+
 
 def _redact(obj: object) -> object:
     if isinstance(obj, dict):
@@ -39,7 +39,9 @@ class JsonFormatter(logging.Formatter):
             payload["exc"] = exc_text
         extra = getattr(record, "extra_fields", None)
         if isinstance(extra, dict):
-            payload.update(_redact(extra))  # type: ignore[arg-type]
+            redacted = _redact(extra)
+            if isinstance(redacted, dict):
+                payload.update(redacted)
         request_id = current_request_id()
         if request_id:
             payload["request_id"] = request_id

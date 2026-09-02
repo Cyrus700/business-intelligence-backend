@@ -38,7 +38,9 @@ async def run_frame_pipeline(
     """Run the transform+load stages on an already-extracted DataFrame."""
     # org_id is trusted from current_user, never client-supplied
     if org_id is None:
-        raise ValueError("Organization context required for business data — your account has no workspace. Register a business or request an invite.")
+        raise ValueError(
+            "Organization context required for business data — your account has no workspace. Register a business or request an invite."
+        )
     # If source_id is given, org_id must match the source's org (enforced by caller)
     if source_id is not None:
         src = await db.get(DataSource, source_id)

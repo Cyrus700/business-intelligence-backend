@@ -34,9 +34,7 @@ async def _validate_role(db: DbSession, role: str) -> None:
             f"Unknown role '{role}'. Defined roles: {known}",
         )
     if not info.is_active:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"Role '{role}' is deactivated and cannot be assigned"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Role '{role}' is deactivated and cannot be assigned")
 
 
 async def _org_scoped_stmt(db: DbSession, user: Profile) -> Any:
@@ -67,12 +65,10 @@ async def list_users(
     count_q = select(func.count()).select_from(base.subquery())
     total = (await db.execute(count_q)).scalar_one()
     rows = (
-        await db.execute(
-            base.order_by(Profile.created_at)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-    ).scalars().all()
+        (await db.execute(base.order_by(Profile.created_at).offset((page - 1) * page_size).limit(page_size)))
+        .scalars()
+        .all()
+    )
     return {
         "items": [ProfileOut.model_validate(r).model_dump() for r in rows],
         "total": total,
@@ -89,9 +85,7 @@ async def get_user(user_id: UUID, db: DbSession, user: CurrentUser) -> ProfileOu
         profile = await db.get(Profile, user_id)
     else:
         scope = org_predicate(Profile.org_id, user.org_id)
-        profile = (
-            await db.execute(select(Profile).where(Profile.id == user_id, scope))
-        ).scalar_one_or_none()
+        profile = (await db.execute(select(Profile).where(Profile.id == user_id, scope))).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return ProfileOut.model_validate(profile)
@@ -148,7 +142,11 @@ async def create_user(
 
 @router.patch("/{user_id}", response_model=ProfileOut)
 async def update_user(
-    user_id: UUID, body: UserUpdate, db: DbSession, admin_api: AdminApi, request: Request,
+    user_id: UUID,
+    body: UserUpdate,
+    db: DbSession,
+    admin_api: AdminApi,
+    request: Request,
     user: CurrentUser,
 ) -> ProfileOut:
     from app.api.deps import is_super_admin, org_predicate
@@ -157,11 +155,7 @@ async def update_user(
         profile = await db.get(Profile, user_id)
     else:
         profile = (
-            await db.execute(
-                select(Profile).where(
-                    Profile.id == user_id, org_predicate(Profile.org_id, user.org_id)
-                )
-            )
+            await db.execute(select(Profile).where(Profile.id == user_id, org_predicate(Profile.org_id, user.org_id)))
         ).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")

@@ -36,7 +36,7 @@ def _public_dns(*args, **kwargs):
             socket.SocketKind.SOCK_STREAM,
             6,
             "",
-            ( "93.184.216.34", 443),
+            ("93.184.216.34", 443),
         )
     ]
 
@@ -61,7 +61,7 @@ def test_private_dns_resolution_blocked(monkeypatch) -> None:
 
     fake = [
         (socket.AddressFamily.AF_INET, socket.SocketKind.SOCK_STREAM, 6, "", ("127.0.0.1", 443)),
-        (socket.AddressFamily.AF_INET, socket.SocketKind.SOCK_STREAM, 6, "", ( "93.184.216.34", 443)),
+        (socket.AddressFamily.AF_INET, socket.SocketKind.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
     ]
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: fake)
     with pytest.raises(ValueError, match="private address"):
@@ -75,9 +75,7 @@ def test_public_dns_resolution_allowed(monkeypatch) -> None:
         (socket.AddressFamily.AF_INET, socket.SocketKind.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
     ]
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: fake)
-    assert validate_public_http_url("https://public.example.com/data") == (
-        "https://public.example.com/data"
-    )
+    assert validate_public_http_url("https://public.example.com/data") == ("https://public.example.com/data")
 
 
 async def test_rest_api_source_with_private_url_rejected(client, admin_token):
@@ -116,9 +114,7 @@ async def test_rest_api_source_with_public_url_created(client, admin_token, monk
     monkeypatch.setattr(
         socket,
         "getaddrinfo",
-        lambda *a, **k: [
-            (socket.AddressFamily.AF_INET, socket.SocketKind.SOCK_STREAM, 6, "", ("93.184.216.34", 443))
-        ],
+        lambda *a, **k: [(socket.AddressFamily.AF_INET, socket.SocketKind.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
     )
     try:
         resp = await client.post(

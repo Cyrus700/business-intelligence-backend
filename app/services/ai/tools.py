@@ -177,10 +177,7 @@ async def _no_data(db: AsyncSession, date_from: date, date_to: date, what: str, 
         )
     note = ""
     if date_to > last:
-        note = (
-            f" Note the window runs past the last loaded day ({last}), so any "
-            "later days are simply not loaded yet."
-        )
+        note = f" Note the window runs past the last loaded day ({last}), so any later days are simply not loaded yet."
     return (
         f"{what.capitalize()} for {date_from} → {date_to} is genuinely zero — the "
         f"window is inside the loaded range ({first} → {last}), there were no "
@@ -189,6 +186,7 @@ async def _no_data(db: AsyncSession, date_from: date, date_to: date, what: str, 
 
 
 # ── executors ──────────────────────────────────────────────────────────────
+
 
 async def _query_kpis(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     from app.services.analytics.queries import kpi_summary
@@ -219,9 +217,7 @@ async def _sales_by_dimension(db: AsyncSession, user: Profile, **kwargs: Any) ->
     limit = max(1, min(int(kwargs.get("limit") or 5), 15))
     lines = [f"Top {dim} revenue {date_from} → {date_to}:"]
     for r in rows[:limit]:
-        lines.append(
-            f"- {r['key']}: {r['revenue']:,.0f} ({r['share_pct']}% share, {r['orders']} orders)"
-        )
+        lines.append(f"- {r['key']}: {r['revenue']:,.0f} ({r['share_pct']}% share, {r['orders']} orders)")
     return "\n".join(lines)
 
 
@@ -271,14 +267,14 @@ async def _forecast(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     mq = select(MlModel).where(MlModel.target == target, MlModel.is_active.is_(True))
     if oid is not None:
         mq = mq.where(MlModel.org_id == oid)
-    model = ((await db.execute(mq.order_by(MlModel.trained_at.desc()).limit(1))).scalars().first())
+    model = (await db.execute(mq.order_by(MlModel.trained_at.desc()).limit(1))).scalars().first()
     if model is None:
         return f"No trained forecast model for {target} yet."
     horizon = max(1, min(int(kwargs.get("horizon") or 30), 90))
     fq = select(Forecast).where(Forecast.model_id == model.id).order_by(Forecast.forecast_date).limit(horizon)
     if oid is not None:
         fq = fq.where(Forecast.org_id == oid)
-    rows = ((await db.execute(fq)).scalars().all())
+    rows = (await db.execute(fq)).scalars().all()
     if not rows:
         return f"Model for {target} has no projections."
     total = sum(float(r.yhat) for r in rows)
@@ -370,10 +366,7 @@ async def _inventory(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     as_of_txt = f" as of {as_of}" if as_of else ""
     lines = [f"Inventory{as_of_txt} ({len(rows)} item(s) below reorder):"]
     for r in rows[:limit]:
-        lines.append(
-            f"- {r['product'] or r['sku']}: {r['quantity_on_hand']} on hand, "
-            f"reorder at {r['reorder_level']}"
-        )
+        lines.append(f"- {r['product'] or r['sku']}: {r['quantity_on_hand']} on hand, reorder at {r['reorder_level']}")
     return "\n".join(lines)
 
 
@@ -432,8 +425,7 @@ async def _explain_change(db: AsyncSession, user: Profile, **kwargs: Any) -> str
     change = f"{b.change_pct:+.1f}%" if b.change_pct is not None else "n/a"
     lines = [
         f"Revenue movement by {dim}: {date_from} → {date_to} vs {prev_from} → {prev_to}",
-        f"- total now {_npr(b.total_current)}, was {_npr(b.total_previous)} "
-        f"({_npr(b.total_delta)}, {change})",
+        f"- total now {_npr(b.total_current)}, was {_npr(b.total_previous)} ({_npr(b.total_delta)}, {change})",
     ]
     if b.drivers:
         lines.append("Pushed it up:")
@@ -477,8 +469,7 @@ async def _revenue_bridge(db: AsyncSession, user: Profile, **kwargs: Any) -> str
     )
     return "\n".join(
         [
-            f"Revenue bridge {date_from} → {date_to} vs the preceding period "
-            f"({bridge.verdict}):",
+            f"Revenue bridge {date_from} → {date_to} vs the preceding period ({bridge.verdict}):",
             f"- revenue {_npr(bridge.revenue_previous)} → {_npr(bridge.revenue_current)} "
             f"({_npr(bridge.revenue_delta)})",
             f"- orders {_npr(bridge.orders_previous)} → {_npr(bridge.orders_current)}; "
@@ -559,8 +550,7 @@ async def _simulate(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     )
     if orders_pct == 0 and aov_pct == 0 and expense_pct == 0:
         return (
-            "No change was specified. Pass orders_change_pct, aov_change_pct or "
-            "expense_change_pct to model a scenario."
+            "No change was specified. Pass orders_change_pct, aov_change_pct or expense_change_pct to model a scenario."
         )
 
     sc = await simulate_current_period(
@@ -582,12 +572,10 @@ async def _simulate(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
             f"expenses {expense_pct:+.1f}%):",
             f"- revenue {_npr(sc.baseline_revenue)} → {_npr(sc.scenario_revenue)} "
             f"({_npr(sc.revenue_delta)}, {d['delta']['revenue_pct']}%)",
-            f"- profit {_npr(sc.baseline_profit)} → {_npr(sc.scenario_profit)} "
-            f"({_npr(sc.profit_delta)})",
+            f"- profit {_npr(sc.baseline_profit)} → {_npr(sc.scenario_profit)} ({_npr(sc.profit_delta)})",
             f"- orders {_npr(sc.baseline_orders)} → {_npr(sc.scenario_orders)}; "
             f"avg order value {_npr(sc.baseline_aov)} → {_npr(sc.scenario_aov)}",
-            "- modelled as revenue = orders x average order value; it assumes nothing "
-            "else moves.",
+            "- modelled as revenue = orders x average order value; it assumes nothing else moves.",
         ]
     )
 
@@ -598,8 +586,7 @@ async def _coverage(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
         return "The warehouse is empty — no data has been loaded yet."
     lines = [
         f"Today is {c['today']} ({c['timezone']}).",
-        f"Warehouse covers {c['first_date']} → {c['last_date']} "
-        f"({c['days_behind']} day(s) behind today).",
+        f"Warehouse covers {c['first_date']} → {c['last_date']} ({c['days_behind']} day(s) behind today).",
     ]
     for name in ("sales", "expenses", "inventory"):
         b = c[name]
@@ -608,9 +595,7 @@ async def _coverage(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
             continue
         ingested = b["last_ingested_at"]
         stamp = f", last upload {ingested:%Y-%m-%d %H:%M}" if ingested else ""
-        lines.append(
-            f"- {name}: {b['row_count']:,} rows, {b['first_date']} → {b['last_date']}{stamp}"
-        )
+        lines.append(f"- {name}: {b['row_count']:,} rows, {b['first_date']} → {b['last_date']}{stamp}")
     return "\n".join(lines)
 
 
@@ -625,7 +610,14 @@ async def _business_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     org = await db.get(Organization, oid)
     if not org:
         return f"No organization found for org_id {oid}."
-    lines = [f"Business / workspace: **{org.name}**", f"- Name: {org.name}", f"- ID: {org.id}", f"- Slug: {org.slug or '—'}", f"- Is legacy: {org.is_legacy}", f"- Signed-in: {user.email} ({user.role})"]
+    lines = [
+        f"Business / workspace: **{org.name}**",
+        f"- Name: {org.name}",
+        f"- ID: {org.id}",
+        f"- Slug: {org.slug or '—'}",
+        f"- Is legacy: {org.is_legacy}",
+        f"- Signed-in: {user.email} ({user.role})",
+    ]
     try:
         c = await data_coverage(db, org_id=oid)
         if c["first_date"]:
@@ -698,8 +690,7 @@ TOOLS: dict[str, AITool] = {
     "query_timeseries": AITool(
         name="query_timeseries",
         description=(
-            "Daily/weekly/monthly time series for revenue, orders, avg order value or expenses — "
-            "for trend questions."
+            "Daily/weekly/monthly time series for revenue, orders, avg order value or expenses — for trend questions."
         ),
         parameters={
             "type": "object",
@@ -1001,9 +992,7 @@ def _truncate(text: str, limit: int = MAX_TOOL_RESULT_CHARS) -> str:
     return f"{head}\n(result truncated — ask for a narrower range or a smaller limit)"
 
 
-async def dispatch_tool(
-    db: AsyncSession, user: Profile, name: str, arguments: dict[str, Any]
-) -> str:
+async def dispatch_tool(db: AsyncSession, user: Profile, name: str, arguments: dict[str, Any]) -> str:
     """Execute one tool call inside the current (read-only) request context."""
     tool = TOOLS.get(name)
     if tool is None:

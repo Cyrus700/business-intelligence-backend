@@ -9,22 +9,22 @@ Also covers registration atomicity and per-org scheduler iteration.
 
 Requires DB (TEST_DB_URL). Skipped automatically when DB not available (CI unit-only).
 """
+
 import uuid
-from datetime import date, timedelta, UTC, datetime
+from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import text, select
+from sqlalchemy import text
 
 from app.core.database import get_session_factory
-from app.models import Organization, Profile, SalesTransaction, Expense, DataSource, Insight, Notification, Conversation
 from app.core.security import sign_token
-from tests.conftest import auth, mint_token
+from app.models import Organization, Profile
+from tests.conftest import auth
 
 pytestmark = pytest.mark.integration
 
 
 async def _create_org(name: str, slug: str | None = None) -> Organization:
-    from sqlalchemy import text
 
     async with get_session_factory()() as db:
         org = Organization(name=name, slug=slug or name.lower().replace(" ", "-"), is_legacy=False)
@@ -35,10 +35,9 @@ async def _create_org(name: str, slug: str | None = None) -> Organization:
 
 
 async def _create_profile(email: str, role: str, org_id, is_super_admin=False) -> tuple[Profile, str]:
-    from uuid import uuid5, NAMESPACE_URL
+    from uuid import NAMESPACE_URL, uuid5
 
     pid = uuid5(NAMESPACE_URL, f"email://{email}")
-    profile = Profile(id=pid, email=email, full_name=f"Test {role}", role=role, org_id=org_id, is_active=True, is_super_admin=is_super_admin)
     async with get_session_factory()() as db:
         # Use upsert to be idempotent for re-runs
         await db.execute(
@@ -46,7 +45,14 @@ async def _create_profile(email: str, role: str, org_id, is_super_admin=False) -
                 "INSERT INTO profiles (id, email, full_name, role, org_id, is_active, is_super_admin, token_version) "
                 "VALUES (:id, :email, :name, :role, :org, true, :super, 0) ON CONFLICT (id) DO UPDATE SET org_id=EXCLUDED.org_id, is_super_admin=EXCLUDED.is_super_admin"
             ),
-            {"id": str(pid), "email": email, "name": f"Test {role}", "role": role, "org": str(org_id) if org_id else None, "super": is_super_admin},
+            {
+                "id": str(pid),
+                "email": email,
+                "name": f"Test {role}",
+                "role": role,
+                "org": str(org_id) if org_id else None,
+                "super": is_super_admin,
+            },
         )
         await db.commit()
         # Re-fetch via ORM for convenience
@@ -130,9 +136,14 @@ async def test_client_supplied_org_id_ignored(client, two_orgs):
     manager_a, tok_a = await _create_profile(f"mgr-a-{uuid.uuid4().hex[:4]}@example.com", "manager", org_a.id)
     # Try to create a data source claiming to be in Org B (forged)
     # Even if body contains org_id of B, the server must ignore it and use caller's org
-    resp = await client.post(
+    await client.post(
         "/api/v1/data-sources",
-        json={"name": f"src-forged-{uuid.uuid4().hex[:6]}", "kind": "csv_upload", "target_domain": "sales", "config": {}},
+        json={
+            "name": f"src-forged-{uuid.uuid4().hex[:6]}",
+            "kind": "csv_upload",
+            "target_domain": "sales",
+            "config": {},
+        },
         headers=auth(tok_a),
     )
     # Admin only for data-sources, so manager gets 403; but if they were admin, org would still be forced to A
@@ -141,7 +152,12 @@ async def test_client_supplied_org_id_ignored(client, two_orgs):
     # Admin A tries to create a user claiming org_b
     resp2 = await client.post(
         "/api/v1/users",
-        json={"email": f"victim-{uuid.uuid4().hex[:6]}@example.com", "password": "Test12345", "role": "analyst", "org_id": str(org_b.id)},
+        json={
+            "email": f"victim-{uuid.uuid4().hex[:6]}@example.com",
+            "password": "Test12345",
+            "role": "analyst",
+            "org_id": str(org_b.id),
+        },
         headers=auth(tok_admin_a),
     )
     if resp2.status_code == 201:
@@ -167,18 +183,27 @@ async def test_register_org_atomicity(client):
 
     # Duplicate org name should 409 and not create second user
     dup_email = f"owner2-{uuid.uuid4().hex[:6]}@example.com"
-    resp2 = await client.post("/api/v1/auth/register-org", json={"org_name": org_name, "email": dup_email, "password": "Test12345"})
+    resp2 = await client.post(
+        "/api/v1/auth/register-org", json={"org_name": org_name, "email": dup_email, "password": "Test12345"}
+    )
     assert resp2.status_code == 409
 
     # Duplicate email should 409
-    resp3 = await client.post("/api/v1/auth/register-org", json={"org_name": f"Other-{uuid.uuid4().hex[:6]}", "email": email, "password": "Test12345"})
+    resp3 = await client.post(
+        "/api/v1/auth/register-org",
+        json={"org_name": f"Other-{uuid.uuid4().hex[:6]}", "email": email, "password": "Test12345"},
+    )
     assert resp3.status_code == 409
 
     # Ensure org not duplicated and user not duplicated
     async with get_session_factory()() as db:
-        count_org = (await db.execute(text("SELECT COUNT(*) FROM organizations WHERE name = :n"), {"n": org_name})).scalar_one()
+        count_org = (
+            await db.execute(text("SELECT COUNT(*) FROM organizations WHERE name = :n"), {"n": org_name})
+        ).scalar_one()
         assert count_org == 1
-        count_user = (await db.execute(text("SELECT COUNT(*) FROM profiles WHERE email = :e"), {"e": email})).scalar_one()
+        count_user = (
+            await db.execute(text("SELECT COUNT(*) FROM profiles WHERE email = :e"), {"e": email})
+        ).scalar_one()
         assert count_user == 1
 
 
@@ -186,34 +211,42 @@ async def test_invite_flow(client):
     """Admin creates invite, new user joins via invite_token, lands in same org."""
     org_name = f"InviteOrg-{uuid.uuid4().hex[:6]}"
     admin_email = f"adm-inv-{uuid.uuid4().hex[:6]}@example.com"
-    resp = await client.post("/api/v1/auth/register-org", json={"org_name": org_name, "email": admin_email, "password": "Test12345"})
+    resp = await client.post(
+        "/api/v1/auth/register-org", json={"org_name": org_name, "email": admin_email, "password": "Test12345"}
+    )
     assert resp.status_code == 201
     admin_tok = resp.json()["token"]
     org_id = resp.json()["organization"]["id"]
 
     # Admin creates invite
     invite_email = f"newuser-{uuid.uuid4().hex[:6]}@example.com"
-    inv_resp = await client.post("/api/v1/auth/invite", json={"email": invite_email, "role": "analyst"}, headers=auth(admin_tok))
+    inv_resp = await client.post(
+        "/api/v1/auth/invite", json={"email": invite_email, "role": "analyst"}, headers=auth(admin_tok)
+    )
     assert inv_resp.status_code == 200, inv_resp.text
     token = inv_resp.json()["token"]
 
     # New user signs up with token
     signup_resp = await client.post(
-        "/api/v1/auth/signup", json={"email": invite_email, "password": "Test12345", "full_name": "Invited Analyst", "invite_token": token}
+        "/api/v1/auth/signup",
+        json={"email": invite_email, "password": "Test12345", "full_name": "Invited Analyst", "invite_token": token},
     )
     assert signup_resp.status_code == 201, signup_resp.text
     assert signup_resp.json()["user"]["org_id"] == org_id
     assert signup_resp.json()["user"]["role"] == "analyst"
 
     # Reuse same token should 409 (already accepted)
-    dup_resp = await client.post("/api/v1/auth/signup", json={"email": f"other-{uuid.uuid4().hex[:6]}@example.com", "password": "Test12345", "invite_token": token})
+    dup_resp = await client.post(
+        "/api/v1/auth/signup",
+        json={"email": f"other-{uuid.uuid4().hex[:6]}@example.com", "password": "Test12345", "invite_token": token},
+    )
     assert dup_resp.status_code in (409, 404, 422)
 
 
 async def test_scheduler_per_org_iterates(monkeypatch):
     """Scheduler jobs iterate per-org, not just global."""
+
     from app.workers import scheduler as sched
-    from unittest.mock import AsyncMock
 
     # Mock Organization rows
     org_ids = [uuid.uuid4(), uuid.uuid4()]

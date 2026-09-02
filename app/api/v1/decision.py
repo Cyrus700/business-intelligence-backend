@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
@@ -13,7 +13,7 @@ from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
 from app.core.clock import business_today
 from app.models import AlertRule, Insight, Notification, Profile, Report, ReportSchedule
 from app.services.reports.schedule import compute_next_run
-from app.services.storage import FileStorage, make_key
+from app.services.storage import FileStorage
 
 router = APIRouter(tags=["decision-support"], dependencies=[Depends(get_current_user)])
 
@@ -144,9 +144,7 @@ async def list_rules(db: DbSession, user: CurrentUser) -> list[AlertRuleOut]:
 @manager_router.post("", response_model=AlertRuleOut, status_code=status.HTTP_201_CREATED)
 async def create_rule(body: AlertRuleIn, db: DbSession, user: CurrentUser) -> AlertRuleOut:
     if body.condition != "anomaly_detected" and body.threshold is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "threshold is required for this condition"
-        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "threshold is required for this condition")
     rule = AlertRule(**body.model_dump(), created_by=user.id, org_id=user.org_id)
     db.add(rule)
     await db.commit()
@@ -291,18 +289,12 @@ class ReportJobOut(BaseModel):
     dependencies=[Depends(require_role("manager"))],
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def generate_report(
-    body: ReportRequest, db: DbSession, user: CurrentUser
-) -> ReportJobOut:
+async def generate_report(body: ReportRequest, db: DbSession, user: CurrentUser) -> ReportJobOut:
     """Enqueue a report build. Returns 202 with queue position. Worker builds it with concurrency 2.
 
     When 100 managers POST at once, each INSERT is fast and the worker drains the queue
     sequentially, so the API never blocks and the UI can show Queued → Processing → Completed.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     if body.period_end < body.period_start:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "period_end before period_start")
     title = f"Business summary {body.period_start:%d %b %Y} – {body.period_end:%d %b %Y}"
@@ -343,19 +335,22 @@ async def list_report_jobs(
     """List report jobs — super-admin sees all, business admin sees own org's jobs, others see own only."""
     from sqlalchemy import select as sa_select
 
+    from app.api.deps import is_super_admin
     from app.models.jobs import BackgroundJob
     from app.services.reports.queue import get_queue_position
-    from app.api.deps import is_super_admin
 
-    stmt = sa_select(BackgroundJob).where(BackgroundJob.name == "report_generate").order_by(BackgroundJob.run_at.desc()).limit(limit)
+    stmt = (
+        sa_select(BackgroundJob)
+        .where(BackgroundJob.name == "report_generate")
+        .order_by(BackgroundJob.run_at.desc())
+        .limit(limit)
+    )
     if is_super_admin(user):
         pass  # super sees all
     elif user.role == "admin":
         # Business admin: see jobs of users in same org (via profiles)
         stmt = stmt.where(
-            BackgroundJob.payload["generated_by"].astext.in_(
-                sa_select(Profile.id).where(Profile.org_id == user.org_id)
-            )
+            BackgroundJob.payload["generated_by"].astext.in_(sa_select(Profile.id).where(Profile.org_id == user.org_id))
         )
     else:
         # Manager/analyst: only own jobs
@@ -442,11 +437,7 @@ async def download_report(report_id: UUID, db: DbSession, user: CurrentUser) -> 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
     if not is_super_admin(user) and report.org_id != user.org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
-    key = (
-        report.s3_key.split("var/uploads/")[-1]
-        if "var/uploads/" in report.s3_key
-        else report.s3_key
-    )
+    key = report.s3_key.split("var/uploads/")[-1] if "var/uploads/" in report.s3_key else report.s3_key
     payload = FileStorage().load(key)
     media = (
         "application/pdf"
@@ -527,9 +518,7 @@ async def list_schedules(db: DbSession, user: CurrentUser) -> list[ReportSchedul
 
 
 @schedule_router.post("", response_model=ReportScheduleOut, status_code=status.HTTP_201_CREATED)
-async def create_schedule(
-    body: ReportScheduleIn, db: DbSession, user: CurrentUser
-) -> ReportScheduleOut:
+async def create_schedule(body: ReportScheduleIn, db: DbSession, user: CurrentUser) -> ReportScheduleOut:
     body.validate_day()
     today = business_today()
     schedule = ReportSchedule(

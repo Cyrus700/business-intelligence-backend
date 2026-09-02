@@ -150,7 +150,10 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
     result.errors = errors or None
     logger.info(
         "post-load refresh over %s → %s (lookback %dd): %s",
-        start, end, lookback, result.as_log(),
+        start,
+        end,
+        lookback,
+        result.as_log(),
     )
     return result
 

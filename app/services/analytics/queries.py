@@ -40,9 +40,7 @@ class Filters:
 
     @property
     def has_dimensions(self) -> bool:
-        return any(
-            (self.region, self.channel, self.category, self.regions, self.channels, self.categories)
-        )
+        return any((self.region, self.channel, self.category, self.regions, self.channels, self.categories))
 
     def previous_period(self) -> tuple[date, date]:
         span = (self.date_to - self.date_from).days + 1
@@ -65,20 +63,12 @@ def _sales_conditions(f: Filters, date_from: date, date_to: date) -> list:
         cat_filter = Product.category.in_(f.categories)
         if f.org_id is not None:
             cat_filter = (Product.category.in_(f.categories)) & (Product.org_id == f.org_id)
-        conditions.append(
-            SalesTransaction.product_id.in_(
-                select(Product.id).where(cat_filter)
-            )
-        )
+        conditions.append(SalesTransaction.product_id.in_(select(Product.id).where(cat_filter)))
     elif f.category:
         cat_filter = Product.category == f.category
         if f.org_id is not None:
             cat_filter = (Product.category == f.category) & (Product.org_id == f.org_id)
-        conditions.append(
-            SalesTransaction.product_id.in_(
-                select(Product.id).where(cat_filter)
-            )
-        )
+        conditions.append(SalesTransaction.product_id.in_(select(Product.id).where(cat_filter)))
     return conditions
 
 
@@ -87,9 +77,7 @@ def _org_filter(col, org_id: UUID | None) -> list:
 
 
 @cached_query(ttl_seconds=30)
-async def _sales_kpis(
-    db: AsyncSession, f: Filters, date_from: date, date_to: date
-) -> dict[str, float]:
+async def _sales_kpis(db: AsyncSession, f: Filters, date_from: date, date_to: date) -> dict[str, float]:
     stmt = (
         select(
             func.coalesce(func.sum(SalesTransaction.total_amount), 0).label("revenue"),
@@ -97,17 +85,12 @@ async def _sales_kpis(
             func.coalesce(func.avg(SalesTransaction.total_amount), 0).label("avg_order_value"),
             func.coalesce(
                 func.sum(
-                    SalesTransaction.total_amount
-                    - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+                    SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
                 ),
                 0,
             ).label("gross_margin"),
         )
-        .select_from(
-            SalesTransaction.__table__.outerjoin(
-                Product.__table__, Product.id == SalesTransaction.product_id
-            )
-        )
+        .select_from(SalesTransaction.__table__.outerjoin(Product.__table__, Product.id == SalesTransaction.product_id))
         .where(and_(*_sales_conditions(f, date_from, date_to)))
     )
     row = (await db.execute(stmt)).one()
@@ -140,12 +123,8 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
     # thresholds come from kpi_definitions, editable by admins.
     def_stmt = select(KpiDefinition).where(KpiDefinition.is_active.is_(True))
     if f.org_id is not None:
-        def_stmt = def_stmt.where(
-            or_(KpiDefinition.org_id == f.org_id, KpiDefinition.org_id.is_(None))
-        )
-    definitions = {
-        d.metric: d for d in (await db.execute(def_stmt)).scalars()
-    }
+        def_stmt = def_stmt.where(or_(KpiDefinition.org_id == f.org_id, KpiDefinition.org_id.is_(None)))
+    definitions = {d.metric: d for d in (await db.execute(def_stmt)).scalars()}
 
     cards = []
     for metric, value in current.items():
@@ -160,9 +139,7 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
         }
         if definition is not None:
             target = float(definition.target_value) if definition.target_value is not None else None
-            threshold = (
-                float(definition.threshold_low) if definition.threshold_low is not None else None
-            )
+            threshold = float(definition.threshold_low) if definition.threshold_low is not None else None
             card["label"] = definition.label
             card["unit"] = definition.unit
             card["target_value"] = target
@@ -170,11 +147,7 @@ async def kpi_summary(db: AsyncSession, f: Filters) -> list[dict]:
             if target is not None:
                 gap = value / target if target else None
                 if definition.higher_is_better:
-                    status = (
-                        "off_target"
-                        if gap and gap < 0.8
-                        else ("near_target" if gap and gap < 1.0 else "on_track")
-                    )
+                    status = "off_target" if gap and gap < 0.8 else ("near_target" if gap and gap < 1.0 else "on_track")
                 else:
                     status = "on_track" if value <= max(target, threshold or 0) else "near_target"
                 card["achievement_pct"] = round(gap * 100, 1) if gap is not None else None
@@ -206,9 +179,7 @@ async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity:
             "orders": func.count(SalesTransaction.id),
             "avg_order_value": func.avg(SalesTransaction.total_amount),
         }[metric]
-        bucket = cast(
-            func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date
-        )
+        bucket = cast(func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date)
         stmt = (
             select(bucket.label("period"), value_expr.label("value"))
             .where(and_(*_sales_conditions(f, f.date_from, f.date_to)))
@@ -284,9 +255,7 @@ async def sales_transactions(
         conditions.append(Product.sku == sku)
     if search:
         q = f"%{search}%"
-        conditions.append(
-            or_(Product.name.ilike(q), Customer.name.ilike(q), SalesTransaction.channel.ilike(q))
-        )
+        conditions.append(or_(Product.name.ilike(q), Customer.name.ilike(q), SalesTransaction.channel.ilike(q)))
     base = (
         select(
             SalesTransaction.id,
@@ -330,9 +299,7 @@ async def sales_transactions(
     # Tie-breaker for stable pagination
     order2 = SalesTransaction.id.desc() if desc else SalesTransaction.id.asc()
 
-    rows = (
-        await db.execute(base.order_by(order, order2).offset((page - 1) * page_size).limit(page_size))
-    ).all()
+    rows = (await db.execute(base.order_by(order, order2).offset((page - 1) * page_size).limit(page_size))).all()
     items = [
         {
             **dict(r._mapping),
@@ -385,15 +352,10 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
             sales_month.label("month"),
             func.sum(SalesTransaction.total_amount).label("revenue"),
             func.sum(
-                SalesTransaction.total_amount
-                - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+                SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
             ).label("gross_margin"),
         )
-        .select_from(
-            SalesTransaction.__table__.outerjoin(
-                Product.__table__, Product.id == SalesTransaction.product_id
-            )
-        )
+        .select_from(SalesTransaction.__table__.outerjoin(Product.__table__, Product.id == SalesTransaction.product_id))
         .where(and_(*sales_conds))
         .group_by(sales_month)
         .subquery()
@@ -415,9 +377,7 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
             func.coalesce(revenue_q.c.gross_margin, 0).label("gross_margin"),
             func.coalesce(expense_q.c.expenses, 0).label("expenses"),
         )
-        .select_from(
-            revenue_q.outerjoin(expense_q, revenue_q.c.month == expense_q.c.month, full=True)
-        )
+        .select_from(revenue_q.outerjoin(expense_q, revenue_q.c.month == expense_q.c.month, full=True))
         .order_by("month")
     )
     rows = (await db.execute(stmt)).all()
@@ -442,6 +402,7 @@ async def data_coverage(db: AsyncSession, org_id=None) -> dict:
     loaded", and will confidently report 0 for both. Also surfaces the newest
     ingestion timestamp so the UI can show data freshness.
     """
+
     def _org_cond(col, oid):
         return [col == oid] if oid is not None else []
 

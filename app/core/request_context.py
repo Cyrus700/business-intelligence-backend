@@ -33,11 +33,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         incoming = request.headers.get(REQUEST_ID_HEADER)
-        request_id = (
-            incoming.strip()[:64]
-            if incoming and incoming.strip()
-            else uuid.uuid4().hex[:16]
-        )
+        request_id = incoming.strip()[:64] if incoming and incoming.strip() else uuid.uuid4().hex[:16]
         token = _request_id.set(request_id)
         request.state.request_id = request_id
         try:
