@@ -181,6 +181,8 @@ async def google_callback(
         # Try invite-based org assignment first (for team invites via Google)
         org_id: UUID | None = None
         invited_role = "analyst"
+        # keep invite reference to mark accepted after profile is persisted (FK)
+        pending_inv: OrganizationInvite | None = None
         if invite_token_from_state:
             inv = (
                 await db.execute(select(OrganizationInvite).where(OrganizationInvite.token == invite_token_from_state))
@@ -189,10 +191,8 @@ async def google_callback(
                 if not inv.email or inv.email.strip().lower() == normalized_google_email:
                     org_id = inv.org_id
                     invited_role = inv.role
-                    # Mark personal invites as used; open invites stay reusable
                     if inv.email is not None:
-                        inv.accepted_at = datetime.now(UTC).replace(tzinfo=None)
-                        inv.accepted_by = profile_id
+                        pending_inv = inv
         personal = False
         if org_id is None:
             # No invite: the operator lands in the legacy org, everyone else
@@ -223,6 +223,10 @@ async def google_callback(
             email_verified_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db.add(profile)
+        await db.flush()
+        if pending_inv is not None:
+            pending_inv.accepted_at = datetime.now(UTC).replace(tzinfo=None)
+            pending_inv.accepted_by = profile_id
         await db.commit()
         await db.refresh(profile)
         if is_admin_login:
@@ -1046,6 +1050,7 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
         email_verified_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(profile)
+    await db.flush()
     # Mark invite accepted — only for personal invites; open (email=None) invites stay reusable
     if invite and invite.email is not None:
         invite.accepted_at = datetime.now(UTC).replace(tzinfo=None)
