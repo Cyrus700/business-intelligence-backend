@@ -52,14 +52,65 @@ class NaiveSeasonal:
         self._tail = train.set_index("ds")["y"]
 
     def predict(self, future_ds: pd.Series) -> pd.DataFrame:
+        # Defensive copy — ensure we have a Series with a unique DatetimeIndex.
+        # Duplicate snapshot dates (e.g. re-uploads) would otherwise make
+        # history.get(ref) return a Series and float(Series) raises TypeError.
         history = self._tail.copy()
+        if isinstance(history, pd.DataFrame):
+            # squeeze single-column frame to Series
+            history = history.squeeze(axis=1)  # type: ignore[assignment]
+        if isinstance(history, pd.Series) and history.index.duplicated().any():
+            # keep last value per day (re-uploads overwrite)
+            history = history.groupby(level=0).last()
+        # ensure index is datetime for reliable lookup
+        try:
+            history.index = pd.to_datetime(history.index)
+        except Exception:
+            pass
         preds = []
         for ds in future_ds:
-            ref = ds - pd.Timedelta(days=7)
-            value = float(history.get(ref, history.iloc[-7:].mean()))
-            preds.append(value)
-            history[ds] = value  # rolling: later horizons reference predictions
-        return pd.DataFrame({"ds": future_ds, "yhat": preds, "lo": np.nan, "hi": np.nan})
+            ref = pd.Timestamp(ds) - pd.Timedelta(days=7)
+            candidate = None
+            # Series.get returns Series when index has duplicates — handle explicitly
+            try:
+                candidate = history.get(ref)  # type: ignore[call-overload]
+            except Exception:
+                candidate = None
+            if candidate is None or (isinstance(candidate, pd.Series) and candidate.empty):
+                # fallback: trailing 7-day mean
+                fallback = history.iloc[-7:].mean()
+                # mean() on a Series is scalar, on DataFrame is Series — normalise
+                if isinstance(fallback, pd.Series):
+                    fallback = fallback.mean()
+                candidate = fallback
+            # candidate may still be a Series (duplicate index hit)
+            if isinstance(candidate, pd.Series):
+                # average duplicates; squeeze to scalar
+                try:
+                    candidate = candidate.mean()
+                except Exception:
+                    candidate = candidate.iloc[0] if len(candidate) else np.nan
+                if isinstance(candidate, pd.Series):
+                    candidate = candidate.iloc[0] if len(candidate) else np.nan
+            try:
+                value = float(candidate)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                # last resort: coerce via numpy
+                arr = np.asarray(candidate).flatten()
+                value = float(arr[0]) if arr.size else float("nan")
+            if pd.isna(value):
+                # if still NaN (e.g. empty history), fall back to overall mean or 0
+                try:
+                    overall = history.mean()
+                    if isinstance(overall, pd.Series):
+                        overall = overall.mean()
+                    value = float(overall) if not pd.isna(overall) else 0.0
+                except Exception:
+                    value = 0.0
+            preds.append(float(value))
+            # rolling: later horizons may reference earlier predictions
+            history.loc[pd.Timestamp(ds)] = float(value)
+        return pd.DataFrame({"ds": pd.Series(future_ds.to_numpy()), "yhat": preds, "lo": np.nan, "hi": np.nan})
 
 
 class ProphetForecaster:

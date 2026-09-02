@@ -1,7 +1,10 @@
-from typing import Annotated, Any
+import io
+from datetime import date, timedelta
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
+import pandas as pd
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession, require_role
@@ -20,6 +23,73 @@ router = APIRouter(
     tags=["data-integration"],
     dependencies=[Depends(require_role("manager"))],
 )
+
+
+def _sample_rows(domain: str) -> list[list[str]]:
+    """Header + example rows per domain. Dates are relative to today so the
+    sample always passes validation."""
+    today = date.today()
+
+    def d(days_back: int) -> str:
+        return (today - timedelta(days=days_back)).isoformat()
+
+    return {
+        "sales": [
+            ["date", "sku", "product_name", "category", "quantity", "unit_price",
+             "discount", "customer", "channel", "region"],
+            [d(5), "DRY-001", "Basmati Rice 25kg", "Staples", 5, 3600, 0,
+             "Bhatbhateni Retail KTM", "wholesale", "Bagmati"],
+            [d(4), "BEV-001", "Everest Tea 500g", "Beverages", 12, 320, 20,
+             "Namaste Mart", "retail", "Bagmati"],
+            [d(3), "SNK-001", "Wai Wai Noodles (30pk)", "Snacks", 8, 640, 0,
+             "Daraz Online Nepal", "online", "Bagmati"],
+            [d(2), "HHD-001", "Detergent Powder 3kg", "Household", 6, 620, 0,
+             "Gurung Kirana Pasal", "retail", "Gandaki"],
+            [d(1), "ELC-002", "Electric Kettle 2L", "Electronics", 2, 2350, 50,
+             "Everest Traders", "wholesale", "Koshi"],
+        ],
+        "finance": [
+            ["date", "category", "amount", "department", "description"],
+            [d(5), "rent", 75000, "Operations", "Warehouse rent"],
+            [d(4), "salaries", 215000, "HR", "Monthly payroll"],
+            [d(3), "utilities", 18250, "Operations", "Electricity bill"],
+            [d(2), "marketing", 45000, "Marketing", "Festival campaign ads"],
+            [d(1), "logistics", 23000, "Logistics", "Delivery fleet fuel"],
+        ],
+        "inventory": [
+            ["date", "sku", "product_name", "quantity_on_hand", "reorder_level", "warehouse"],
+            [d(2), "DRY-001", "Basmati Rice 25kg", 240, 60, "main"],
+            [d(2), "BEV-001", "Everest Tea 500g", 150, 40, "main"],
+            [d(2), "SNK-001", "Wai Wai Noodles (30pk)", 90, 50, "main"],
+            [d(2), "ELC-001", "Rice Cooker 1.8L", 12, 8, "main"],
+            [d(2), "FES-001", "Diyo & Batti Set", 35, 20, "main"],
+        ],
+    }[domain]
+
+
+@router.get("/samples/{domain}")
+async def sample_template(
+    domain: TargetDomain,
+    format: Literal["csv", "xlsx"] = Query("csv"),
+) -> Response:
+    """Download a ready-to-use sample template (header + example rows) for a domain."""
+    rows = _sample_rows(domain)
+    filename = f"sample_{domain}.{format}"
+    if format == "csv":
+        content = "\n".join(",".join(str(c) for c in row) for row in rows).encode("utf-8-sig")
+        media_type = "text/csv"
+    else:
+        frame = pd.DataFrame(rows[1:], columns=rows[0])
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            frame.to_excel(writer, index=False, sheet_name=domain.title())
+        content = buffer.getvalue()
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _report(
