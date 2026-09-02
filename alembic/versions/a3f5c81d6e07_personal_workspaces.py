@@ -16,11 +16,14 @@ depends_on = None
 
 
 def upgrade():
+    # The DB-level default stays. Deploys are not atomic: while the old image is
+    # still serving, it INSERTs organizations without this column, and a NOT NULL
+    # column with no default turns every business registration into a 500 until
+    # the new build lands. ``is_legacy`` keeps its default for the same reason.
     op.add_column(
         "organizations",
         sa.Column("is_personal", sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
-    op.alter_column("organizations", "is_personal", server_default=None)
 
 
 def downgrade():
