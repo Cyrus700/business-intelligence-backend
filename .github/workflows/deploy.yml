@@ -34,6 +34,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Set OWNER_LC
+        run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
@@ -71,7 +74,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.BACKEND_IMAGE }}:${{ github.sha }},${{ env.BACKEND_IMAGE }}:latest
+          tags: ghcr.io/${{ env.OWNER_LC }}/bi-backend:${{ github.sha }},ghcr.io/${{ env.OWNER_LC }}/bi-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
@@ -113,12 +116,13 @@ jobs:
         env:
           TAG: ${{ github.sha }}
         run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -s <<EOSSH
           set -euo pipefail
           cd ~/app
           # Ensure compose exists (monorepo or backend-only)
           if [ -f deploy/docker-compose.prod.yml ]; then COMPOSE="deploy/docker-compose.prod.yml"; else COMPOSE="business-intelligence-backend/deploy/docker-compose.prod.yml"; fi
-          echo "Using \$COMPOSE"
+          echo "Using \$COMPOSE owner $OWNER_LC"
           # Free-tier: 2GB swap already created by ec2-init.sh
           free -h
           # Ensure .env exists
@@ -128,11 +132,12 @@ jobs:
           fi
           # Pull GHCR (public) — no build on 1GB
           export TAG=$TAG
-          # Update compose image tag
-          sed -i "s|image: .*bi-backend:.*|image: ghcr.io/${{ github.repository_owner }}/bi-backend:$TAG|" \$COMPOSE || true
+          export OWNER_LC=$OWNER_LC
+          # Update compose image tag (lowercase)
+          sed -i "s|image: .*bi-backend:.*|image: ghcr.io/$OWNER_LC/bi-backend:$TAG|" \$COMPOSE || true
           if grep -q "ghcr.io" \$COMPOSE; then
-            if [ -f ~/ghcr.token ]; then cat ~/ghcr.token | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin || true; fi
-            docker compose -f \$COMPOSE pull api || docker pull ghcr.io/${{ github.repository_owner }}/bi-backend:$TAG
+            if [ -f ~/ghcr.token ]; then cat ~/ghcr.token | docker login ghcr.io -u $OWNER_LC --password-stdin || true; fi
+            docker compose -f \$COMPOSE pull api || docker pull ghcr.io/$OWNER_LC/bi-backend:$TAG
           else
             docker compose -f \$COMPOSE build api
           fi
