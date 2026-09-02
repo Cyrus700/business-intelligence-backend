@@ -667,11 +667,11 @@ async def admin_list_all_organizations(
     # Status breakdown for the current search (ignoring the status filter itself, but keeping search)
     counts: dict[str, int] = {"pending": 0, "approved": 0, "rejected": 0, "total": 0}
     for st in ("pending", "approved", "rejected"):
-        q = select(func.count()).select_from(Organization).where(Organization.status == st)
+        status_q = select(func.count()).select_from(Organization).where(Organization.status == st)
         if search:
             s2 = f"%{search.strip()}%"
-            q = q.where(or_(Organization.name.ilike(s2), Organization.slug.ilike(s2)))
-        cnt = (await db.execute(q)).scalar_one() or 0
+            status_q = status_q.where(or_(Organization.name.ilike(s2), Organization.slug.ilike(s2)))
+        cnt = (await db.execute(status_q)).scalar_one() or 0
         counts[st] = int(cnt)
     counts["total"] = sum(counts[k] for k in ("pending", "approved", "rejected"))
 
@@ -681,11 +681,11 @@ async def admin_list_all_organizations(
     if page > pages:
         page = pages
     offset = (page - 1) * page_size
-    q = base.order_by(Organization.created_at.desc()).offset(offset).limit(page_size)
-    rows = (await db.execute(q)).scalars().all()
+    paged_q = base.order_by(Organization.created_at.desc()).offset(offset).limit(page_size)
+    rows = (await db.execute(paged_q)).scalars().all()
 
     # Enrich with contact + member count (batch queries)
-    org_ids = [o.id for o in rows]
+    org_ids: list[UUID] = [o.id for o in rows]
     member_counts: dict[UUID, int] = {}
     contacts: dict[UUID, Profile | None] = {}
     if org_ids:
