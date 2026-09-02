@@ -30,11 +30,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
-        title="BI & Decision Support Dashboard API",
+        title="InsightFlow API — BI & Decision Support",
         version="0.1.0",
         description=(
-            "Backend for the AI-Driven Cloud-Based Business Intelligence and "
-            "Decision Support Dashboard (FYP — Sairash Budhathoki, NP069813)."
+            "Backend for InsightFlow — AI-Driven Cloud BI & Decision Support Dashboard "
+            "(FYP — Sairash Budhathoki, NP069813)."
         ),
         lifespan=lifespan,
         # Hide framework details from attackers

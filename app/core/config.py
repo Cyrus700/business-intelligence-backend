@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_user: str = Field(default="")
     smtp_password: str = Field(default="")
-    smtp_from: str = Field(default="Sairash BI <alerts@saurash.local>")
+    smtp_from: str = Field(default="InsightFlow <alerts@insightflow.local>")
     smtp_timeout: int = Field(default=15, ge=5, le=60, description="SMTP socket timeout (seconds)")
     smtp_max_retries: int = Field(default=2, ge=0, le=5)
     email_rate_limit_per_minute: int = Field(default=10, ge=1, le=100, description="Max emails per recipient per minute")

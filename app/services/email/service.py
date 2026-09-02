@@ -108,7 +108,7 @@ def _send_sync(
     user = s.smtp_user.strip()
     # Gmail App Passwords are displayed as "abcd efgh ijkl mnop" but must be sent without spaces
     password = s.smtp_password.strip().replace(" ", "")
-    from_raw = s.smtp_from.strip() or "Sairash BI <alerts@sairash.local>"
+    from_raw = s.smtp_from.strip() or "InsightFlow <alerts@insightflow.local>"
     timeout = timeout or int(getattr(s, "smtp_timeout", 15))
 
     to = _validate_recipient(to)

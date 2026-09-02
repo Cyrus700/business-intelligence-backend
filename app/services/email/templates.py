@@ -8,7 +8,7 @@ deterministic for tests.
 from __future__ import annotations
 
 
-BRAND = "Sairash BI"
+BRAND = "InsightFlow"
 COLOR_PRIMARY = "#0f172a"  # slate-900
 COLOR_ACCENT = "#0ea5e9"  # sky-500
 COLOR_BG = "#f8fafc"
@@ -95,7 +95,7 @@ def welcome(full_name: str | None, login_url: str) -> tuple[str, str, str]:
         <li>Schedule automated reports for your stakeholders</li>
       </ul>
     """
-    html = _wrap("Welcome to Sairash BI", "Your account is ready — sign in to get started", html_body, login_url, "Open dashboard →")
+    html = _wrap("Welcome to InsightFlow", "Your account is ready — sign in to get started", html_body, login_url, "Open dashboard →")
     return subject, text, html
 
 

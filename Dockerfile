@@ -33,11 +33,12 @@ RUN groupadd -r api --gid 1001 && useradd -r -g api --uid 1001 api \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /app/var/uploads && chown -R api:api /app
 
-# Copy venv + app from builder (link for speed)
-COPY --from=builder --link --chown=api:api /app/.venv /app/.venv
-COPY --from=builder --link --chown=api:api /app/app /app/app
-COPY --from=builder --link --chown=api:api /app/alembic /app/alembic
-COPY --from=builder --link --chown=api:api /app/alembic.ini /app/alembic.ini
+# Copy venv + app from builder
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/app /app/app
+COPY --from=builder /app/alembic /app/alembic
+COPY --from=builder /app/alembic.ini /app/alembic.ini
+RUN chown -R api:api /app/.venv /app/app /app/alembic /app/alembic.ini
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
