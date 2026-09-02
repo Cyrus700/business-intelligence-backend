@@ -55,6 +55,44 @@ _KEYWORDS: dict[Intent, tuple[str, ...]] = {
         "tenants registered",
         "businesses are there",
         "business are there",
+        # status-specific (must also hit PLATFORM so filter can be extracted later)
+        "how many approved",
+        "how many pending",
+        "how many rejected",
+        "how many legacy",
+        "how many personal",
+        "number of approved",
+        "number of pending",
+        "number of rejected",
+        "count approved",
+        "count pending",
+        "count rejected",
+        "total approved",
+        "total pending",
+        "total rejected",
+        "approved businesses",
+        "pending businesses",
+        "rejected businesses",
+        "approved business",
+        "pending business",
+        "rejected business",
+        "approved organization",
+        "pending organization",
+        "rejected organization",
+        # common typos — keep detection precise even with misspelling
+        "aprrved",
+        "apprved",
+        "approveed",
+        "rejeect",
+        "rejeected",
+        "rejefct",
+        "rejefect",
+        "pendng",
+        "pendding",
+        "bussiness",
+        "bussines",
+        "busines",
+        "orgnization",
     ),
     Intent.USERS: (
         "how many users",
@@ -189,11 +227,33 @@ _GREETING_RE = re.compile(
 )
 
 
+def _is_platform_typo(q: str) -> bool:
+    """Catch PLATFORM with typos that exact keywords miss.
+
+    Handles: how many / total / count / number of + appro* / pend* / rejec*
+    even when misspelled (aprrved, rejeect, rejefct, pendng).
+    """
+    if any(p in q for p in ("how many", "how much", "count", "total", "number of", "are there", "registered")):
+        if re.search(r"approv|apprv|aprrv|pend|rejec|rejfe|bussin|orgniza", q):
+            return True
+        # bare status words with typo roots also count as platform
+        if re.search(r"\b(approv\w*|aprrv\w*|pend\w*|rejec\w*|rejfe\w*)\b", q):
+            return True
+    # fallback: any platform root + status root
+    if re.search(r"business|organization|organisation|workspace|tenant", q) and re.search(
+        r"approv|aprrv|pend|rejec|rejfe", q
+    ):
+        return True
+    return False
+
+
 def detect_intent(question: str) -> Intent:
     q = question.lower()
     for intent, keywords in _KEYWORDS.items():
         if any(k in q for k in keywords):
             return intent
+    if _is_platform_typo(q):
+        return Intent.PLATFORM
     if _GREETING_RE.search(q):
         return Intent.GREETING
     return Intent.UNKNOWN

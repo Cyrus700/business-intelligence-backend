@@ -640,50 +640,75 @@ async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> 
 
     is_super = bool(getattr(user, "is_super_admin", False))
     oid = _org_id_for(user)
-    status_filter = kwargs.get("status")
+    raw_status = kwargs.get("status")
+    # typo-tolerant normalization: aprrved→approved, rejeect→rejected, etc.
+    if isinstance(raw_status, str):
+        low = raw_status.lower()
+        if any(r in low for r in ("appr", "aprv", "aprr")):
+            raw_status = "approved"
+        elif "rej" in low:
+            raw_status = "rejected"
+        elif "pend" in low:
+            raw_status = "pending"
+        elif "legacy" in low:
+            raw_status = "legacy"
+        elif "personal" in low:
+            raw_status = "personal"
+    status_filter = raw_status
     detail = bool(kwargs.get("detail"))
 
     if is_super or oid is None:
-        # Platform-wide live counts
+        # If a specific status was requested (approved/pending/rejected), return precise single-line answer
+        # — this is what makes "how many approved" accurate and not verbose.
+        if status_filter in ("approved", "pending", "rejected", "legacy", "personal"):
+            if status_filter == "legacy":
+                cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))).scalar() or 0
+                total = (await db.execute(select(func.count()).select_from(Organization))).scalar() or 0
+                return f"**{cnt}** businesses are **legacy** (of **{total}** total, live)."
+            if status_filter == "personal":
+                cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))).scalar() or 0
+                total = (await db.execute(select(func.count()).select_from(Organization))).scalar() or 0
+                return f"**{cnt}** businesses are **personal** workspaces (of **{total}** total, live)."
+            cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.status == status_filter))).scalar() or 0
+            total = (await db.execute(select(func.count()).select_from(Organization))).scalar() or 0
+            # precise first sentence
+            out = f"**{cnt}** businesses are **{status_filter}** (of **{total}** total, live)."
+            if detail:
+                rows = (
+                    await db.execute(
+                        select(Organization).where(Organization.status == status_filter).order_by(Organization.created_at.desc()).limit(15)
+                    )
+                ).scalars().all()
+                if rows:
+                    out += "\n| Business | Created |\n|---|---|\n" + "\n".join(
+                        f"| {o.name} | {o.created_at.date().isoformat() if getattr(o,'created_at',None) else '—'} |" for o in rows
+                    )
+            return out
+
+        # Platform-wide live counts — no KPI/revenue dump
         base = select(func.count()).select_from(Organization)
-        if status_filter:
-            base = base.where(Organization.status == str(status_filter))
         total = (await db.execute(base)).scalar() or 0
 
         # Breakdown by status — always live
-        statuses = ["approved", "pending", "rejected"]
-        breakdown = []
-        for s in statuses:
-            cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.status == s))).scalar() or 0
-            breakdown.append(f"{s}: {cnt}")
+        counts: dict[str, int] = {}
+        for s in ["approved", "pending", "rejected"]:
+            counts[s] = (await db.execute(select(func.count()).select_from(Organization).where(Organization.status == s))).scalar() or 0
 
-        legacy = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))).scalar() or 0
-        personal = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))).scalar() or 0
-
-        users_total = (await db.execute(select(func.count()).select_from(ProfileM))).scalar() or 0
-        active_users = (await db.execute(select(func.count()).select_from(ProfileM).where(ProfileM.is_active.is_(True)))).scalar() or 0
-
+        # Precise first line — no revenue or other KPIs
         lines = [
-            f"Platform businesses (organizations) — live count: **{total}**",
-            f"- By status: {', '.join(breakdown)}",
-            f"- Legacy: {legacy} · Personal workspaces: {personal}",
-            f"- Users: {users_total} total, {active_users} active",
+            f"There are **{total}** businesses registered (live).",
+            f"- Approved: **{counts['approved']}** · Pending: **{counts['pending']}** · Rejected: **{counts['rejected']}**",
         ]
         if detail:
             limit = max(1, min(int(kwargs.get("limit") or 10), 25))
             rows = (await db.execute(select(Organization).order_by(Organization.created_at.desc()).limit(limit))).scalars().all()
             if rows:
-                lines.append(f"- Latest {len(rows)} businesses:")
+                lines.append("")
+                lines.append("| Business | Status | Created |")
+                lines.append("|---|---|---|")
                 for o in rows:
                     created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
-                    lines.append(f"  - {o.name} (status={o.status}, legacy={o.is_legacy}, personal={o.is_personal}, created={created})")
-        # live freshness: newest org
-        try:
-            newest = (await db.execute(select(Organization).order_by(Organization.created_at.desc()).limit(1))).scalar_one_or_none()
-            if newest and getattr(newest, "created_at", None):
-                lines.append(f"- Newest registration: {newest.name} on {newest.created_at:%Y-%m-%d %H:%M}")
-        except Exception:
-            pass
+                    lines.append(f"| {o.name} | {o.status} | {created} |")
         return "\n".join(lines)
 
     # Isolated business user — never expose platform total

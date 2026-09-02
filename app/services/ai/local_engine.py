@@ -546,10 +546,34 @@ async def _thanks(db: AsyncSession, f: Filters, q: str) -> str:
     )
 
 
+def _extract_platform_status(q: str) -> str | None:
+    """Extract status filter from free-text, typo-tolerant.
+
+    Returns one of: approved | pending | rejected | legacy | personal | None
+    Handles misspellings: aprrved, rejeect, rejefct, pendng etc via substring roots.
+    """
+    ql = q.lower()
+    # approved variants: appr, aprr, aprv, approov — catch all appr/aprr/aprv roots
+    if any(root in ql for root in ("appr", "aprv", "aprr", "approv")):
+        return "approved"
+    if "rej" in ql:  # covers rejected, rejeect, rejefct, rejeefect, rejact etc
+        return "rejected"
+    if "pend" in ql:  # pending, pendng, pendding
+        return "pending"
+    if "legacy" in ql:
+        return "legacy"
+    if "personal" in ql:
+        return "personal"
+    return None
+
+
 async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
-    """Live platform stats — how many businesses / users are registered."""
-    # Detect whether this is a platform counting question already handled here
-    # so the handler can be reused from _business as well.
+    """Live platform stats — precise answer, no KPI dump.
+
+    If question contains a status (approved/pending/rejected with typos), returns
+    a single-number precise answer for that status. Otherwise returns total
+    breakdown. Always concise.
+    """
     try:
         from sqlalchemy import func as _func
         from sqlalchemy import select as _select
@@ -557,9 +581,55 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
         from app.models.identity import Organization, Profile
 
         is_super = f.org_id is None
-        # For super-admin (org_id None) we count the whole platform live.
-        # For isolated users we still answer precisely: they have exactly one
-        # workspace and we explain the isolation rather than leaking others.
+        ql = q.lower()
+        wants_list = any(w in ql for w in ("list", "show", "detail", "names", "which"))
+        status_filter = _extract_platform_status(q)
+        # Status-specific precise path — super-admin only; isolated users get isolation note with their own status
+        if status_filter and is_super:
+            # precise single-status count, typo-tolerant
+            if status_filter in ("approved", "pending", "rejected"):
+                cnt = (
+                    await db.execute(
+                        _select(_func.count()).select_from(Organization).where(Organization.status == status_filter)
+                    )
+                ).scalar() or 0
+                total = (await db.execute(_select(_func.count()).select_from(Organization))).scalar() or 0
+                lines = [
+                    f"**{cnt}** businesses are **{status_filter}** (of **{total}** total, live).",
+                ]
+                if wants_list:
+                    rows = (
+                        await db.execute(
+                            _select(Organization)
+                            .where(Organization.status == status_filter)
+                            .order_by(Organization.created_at.desc())
+                            .limit(15)
+                        )
+                    ).scalars().all()
+                    if rows:
+                        lines.append("")
+                        lines.append(f"| Business | Status | Created |")
+                        lines.append(f"|---|---|---|")
+                        for o in rows:
+                            created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
+                            lines.append(f"| {o.name} | {o.status} | {created} |")
+                    else:
+                        lines.append(f"No businesses with status `{status_filter}` right now.")
+                else:
+                    lines.append(f"Ask `list {status_filter} businesses` to see names.")
+                return "\n".join(lines)
+            if status_filter == "legacy":
+                cnt = (
+                    await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))
+                ).scalar() or 0
+                return f"**{cnt}** businesses are **legacy** workspaces (live)."
+            if status_filter == "personal":
+                cnt = (
+                    await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))
+                ).scalar() or 0
+                return f"**{cnt}** businesses are **personal** workspaces (live)."
+
+        # General total breakdown — concise, no revenue/top-products
         if is_super:
             org_total = (await db.execute(_select(_func.count()).select_from(Organization))).scalar() or 0
             approved = (
@@ -571,41 +641,27 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
             rejected = (
                 await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "rejected"))
             ).scalar() or 0
-            # Personal vs business workspaces
-            personal = (
-                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))
-            ).scalar() or 0
-            legacy = (
-                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))
-            ).scalar() or 0
-            users_total = (await db.execute(_select(_func.count()).select_from(Profile))).scalar() or 0
-            active_users = (
-                await db.execute(_select(_func.count()).select_from(Profile).where(Profile.is_active.is_(True)))
-            ).scalar() or 0
-            # List latest orgs
-            rows = (
-                await db.execute(_select(Organization).order_by(Organization.created_at.desc()).limit(8))
-            ).scalars().all()
+            # Validation: total should equal sum; if gap, explain
+            calc = approved + pending + rejected
             lines = [
-                f"### Businesses — Platform Total: **{org_total}** registered",
-                "",
-                f"- **Total workspaces (businesses):** {org_total}",
-                f"  - Approved: {approved} · Pending: {pending} · Rejected: {rejected}",
-                f"  - Personal workspaces: {personal} · Legacy: {legacy}",
-                f"- **Users on platform:** {users_total} (active: {active_users})",
-                "",
+                f"There are **{org_total}** businesses registered (live).",
+                f"- Approved: **{approved}** · Pending: **{pending}** · Rejected: **{rejected}**",
             ]
-            if rows:
-                lines.append("| Business | Status | Personal | Created |")
-                lines.append("|---|---|---|---|")
-                for o in rows:
-                    created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
-                    pers = "yes" if getattr(o, "is_personal", False) else "no"
-                    lines.append(f"| {o.name} | {o.status} | {pers} | {created} |")
-                if org_total > len(rows):
-                    lines.append(f"\n…and {org_total - len(rows)} more. Open **Businesses** or **Admin Center** for the full directory.")
-            lines.append("")
-            lines.append("**Suggested action:** open **Businesses** to approve pending workspaces or **Users** to manage members — these counts are live from the database right now.")
+            if calc != org_total:
+                lines.append(f"  — note: {org_total - calc} in other/unknown status")
+            if wants_list:
+                rows = (
+                    await db.execute(_select(Organization).order_by(Organization.created_at.desc()).limit(15))
+                ).scalars().all()
+                if rows:
+                    lines.append("")
+                    lines.append("| Business | Status | Created |")
+                    lines.append("|---|---|---|")
+                    for o in rows:
+                        created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
+                        lines.append(f"| {o.name} | {o.status} | {created} |")
+            else:
+                lines.append("Ask `list businesses` to see names.")
             return "\n".join(lines)
         # Isolated user — they asked "how many businesses are there?" The
         # truthful answer is one (their own), plus isolation explanation.

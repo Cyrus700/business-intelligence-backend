@@ -365,19 +365,15 @@ async def answer_question(
         logger.error("Local engine failed: %s", e)
         await _reset_transaction(db)
 
-    # Last resort. The snapshot was already read successfully at the top of
-    # this function, so hand it over rather than an apology — a user asking
-    # about revenue is better served by real KPIs than by "try again".
-    return AnswerResult(reply=_snapshot_fallback(business_context), source="local")
+    # Last resort. Intent-aware: for count questions, never dump revenue/top-products.
+    return AnswerResult(reply=_snapshot_fallback(business_context, intent), source="local")
 
 
-def _snapshot_fallback(business_context: str) -> str:
-    """Last-resort live digest — never an apology dump, always understandable.
+def _snapshot_fallback(business_context: str, intent: "Intent | None" = None) -> str:
+    """Last-resort live digest — intent-aware, never an apology dump.
 
-    This only runs when both the LLM and the local engine failed. Instead of
-    'I could not compose...' we still give the live warehouse picture plus a
-    precise nudge so the next question succeeds — every question gets a real
-    answer.
+    For PLATFORM/USERS/CATALOG we return ONLY the relevant live line, not the
+    full KPI dump that makes 'how many business are there' inaccurate.
     """
     if not business_context.strip():
         return (
@@ -385,7 +381,19 @@ def _snapshot_fallback(business_context: str) -> str:
             "moment. If this persists, check the **Data** page to confirm a source is connected. "
             "You can also ask 'what tables do you have?' to see the live catalog."
         )
-    # Keep the live numbers but wrap them as a proper update, not a failure notice
+    # Intent-aware filter — for count questions, strip revenue/top-product noise
+    if intent in (Intent.PLATFORM, Intent.USERS):
+        for line in business_context.splitlines():
+            if "Platform businesses registered:" in line:
+                # Keep live counts only, precise
+                return (
+                    f"{line.strip()}\n\n"
+                    "**Suggested action:** ask `how many approved` / `how many rejected` / `how many pending` or `list businesses` for names — all live."
+                )
+        # fallback if pattern not found
+        return "There are live businesses registered — ask `how many businesses are there` again to get the precise live count."
+
+    # Default: keep live numbers but wrap as proper update, not failure notice
     return (
         "Here's the live picture straight from your warehouse right now — every number below is real:\n\n"
         f"{business_context}\n\n"
@@ -423,7 +431,8 @@ _DETAIL_RE = re.compile(
     r"|\bhow many\b|\bhow much\b|\bcount\b|\btotal\b|\bregistered\b|\bdirectory\b|\blist all\b"
     r"|\btables?\b|\bschema\b|\bcatalog\b|\bdataset\b|\bdatabase\b|\bcolumns?\b"
     r"|\bwhat data\b|\bavailable data\b|\bsample\b"
-    r"|\baverage\b|\bmean\b|\bmedian\b|\bsum\b|\bquantity\b|\bdiscount\b|\bamount\b|\bvalue\b|\bprice\b|\bmetric\b|\bstatistics?\b|\bstats\b|\bfigures?\b",
+    r"|\baverage\b|\bmean\b|\bmedian\b|\bsum\b|\bquantity\b|\bdiscount\b|\bamount\b|\bvalue\b|\bprice\b|\bmetric\b|\bstatistics?\b|\bstats\b|\bfigures?\b"
+    r"|\bapproved\b|\bappr?ved\b|\baprrved\b|\bpending\b|\bpendng\b|\brejected\b|\brejecc?ted\b|\brejef?ct\b|\blegacy\b|\bpersonal\b",
     re.IGNORECASE,
 )
 

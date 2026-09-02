@@ -82,7 +82,10 @@ async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DA
                 total_orgs = (await db.execute(_sel(_func.count()).select_from(_Org))).scalar() or 0
                 approved = (await db.execute(_sel(_func.count()).select_from(_Org).where(_Org.status == "approved"))).scalar() or 0
                 pending = (await db.execute(_sel(_func.count()).select_from(_Org).where(_Org.status == "pending"))).scalar() or 0
-                lines.append(f"- Platform businesses registered: **{total_orgs}** (approved {approved}, pending {pending}) — live right now")
+                rejected = (await db.execute(_sel(_func.count()).select_from(_Org).where(_Org.status == "rejected"))).scalar() or 0
+                lines.append(
+                    f"- Platform businesses registered: **{total_orgs}** (approved {approved}, pending {pending}, rejected {rejected}) — live right now"
+                )
             except Exception:
                 pass
         if user is not None:
