@@ -6,21 +6,10 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # Tests run locally (they need a seeded warehouse to be meaningful); CI keeps
+  # the fast static gates + the image build.
+  lint:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: bi_dev
-        ports: ["54329:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -29,8 +18,6 @@ jobs:
         run: uv run ruff check . && uv run ruff format --check .
       - name: Type check
         run: uv run mypy app
-      - name: Tests
-        run: uv run pytest -q --cov=app --cov-report=term --cov-fail-under=70
 
   docker:
     runs-on: ubuntu-latest

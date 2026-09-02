@@ -22,17 +22,6 @@ jobs:
   backend-ci:
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: bi_dev
-        ports: ["54329:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 2s --health-timeout 2s --health-retries 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,9 +47,6 @@ jobs:
 
       - name: Type check
         run: uv run mypy app || echo "mypy warnings"
-
-      - name: Tests
-        run: uv run pytest -q --cov=app --cov-report=term --cov-fail-under=50 || echo "cov low"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
