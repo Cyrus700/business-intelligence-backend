@@ -16,6 +16,23 @@ from app.core.request_context import RequestContextMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
+    # Self-heal missing is_personal column (personal workspaces migration)
+    # — makes fresh deploys / not-yet-migrated DBs work without manual alembic run.
+    if get_settings().env not in ("test", "ci"):
+        try:
+            from sqlalchemy import text
+
+            from app.core.database import get_engine
+
+            eng = get_engine()
+            async with eng.begin() as conn:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT false"
+                    )
+                )
+        except Exception:  # noqa: BLE001 — best-effort self-heal, migration is source of truth
+            pass
     if get_settings().env not in ("test", "ci"):
         from app.workers.scheduler import start_scheduler, stop_scheduler
 

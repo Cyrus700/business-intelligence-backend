@@ -698,10 +698,10 @@ async def admin_list_all_organizations(
         member_counts = {oid: int(cnt) for oid, cnt in mc_rows}
         # contacts: prefer admin role, else earliest profile
         all_profiles = (
-            await db.execute(
-                select(Profile).where(Profile.org_id.in_(org_ids)).order_by(Profile.created_at)
-            )
-        ).scalars().all()
+            (await db.execute(select(Profile).where(Profile.org_id.in_(org_ids)).order_by(Profile.created_at)))
+            .scalars()
+            .all()
+        )
         # group by org
         from collections import defaultdict
 
@@ -738,9 +738,7 @@ async def admin_list_all_organizations(
 
 
 @router.get("/admin/organizations/{org_id}", response_model=OrganizationWithContactOut)
-async def admin_get_organization(
-    org_id: UUID, db: DbSession, user: CurrentUser
-) -> OrganizationWithContactOut:
+async def admin_get_organization(org_id: UUID, db: DbSession, user: CurrentUser) -> OrganizationWithContactOut:
     """Detail view for a single business (System Admin only)."""
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")

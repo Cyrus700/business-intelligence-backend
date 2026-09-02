@@ -134,9 +134,7 @@ LANDING_DATA = {
 
 # Marketing copy is static, so let the CDN/browser hold it for an hour.
 _CONTENT_CACHE = "public, max-age=3600, stale-while-revalidate=86400"
-_LIVE_CACHE = (
-    f"public, max-age={CACHE_TTL_SECONDS}, stale-while-revalidate={CACHE_TTL_SECONDS * 5}"
-)
+_LIVE_CACHE = f"public, max-age={CACHE_TTL_SECONDS}, stale-while-revalidate={CACHE_TTL_SECONDS * 5}"
 
 
 @router.get("")
@@ -151,6 +149,4 @@ async def get_landing_live(db: DbSession):
     Public and unauthenticated, so it returns plumbing counters only — see the
     module docstring in services/analytics/landing_live.py before adding fields.
     """
-    return JSONResponse(
-        await build_live_metrics(db), headers={"Cache-Control": _LIVE_CACHE}
-    )
+    return JSONResponse(await build_live_metrics(db), headers={"Cache-Control": _LIVE_CACHE})
