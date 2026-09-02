@@ -49,18 +49,34 @@ MAX_TOOL_TURNS = 4  # how many tool rounds per user question
 CONVERSATIONAL_INTENTS = frozenset({Intent.GREETING, Intent.THANKS, Intent.HELP, Intent.CAPABILITIES})
 
 
-async def _reset_transaction(db: AsyncSession) -> None:
+async def _reset_transaction(db: AsyncSession, user=None) -> None:
     """Clear a failed transaction so later reads can still run.
 
     Postgres aborts the whole transaction on the first error, and every
     subsequent statement then fails with InFailedSQLTransactionError — turning
     one recoverable query error into a 500 for the entire request. Rolling back
     here lets the fallback path (and the caller's own commit) proceed.
+
+    The rollback also expires every ORM object loaded in this session, ``user``
+    among them. The fallback path reads ``user.org_id`` and friends, and on an
+    expired instance that attribute access becomes a lazy database load from
+    async code — which fails with ``greenlet_spawn has not been called`` and
+    takes down the very fallback meant to rescue the request. Reloading the
+    user here keeps it usable afterwards.
     """
     try:
         await db.rollback()
     except Exception:  # pragma: no cover - the session is unusable either way
         logger.debug("rollback after failed AI query did not succeed", exc_info=True)
+        return
+    if user is None:
+        return
+    try:
+        await db.refresh(user)
+    except Exception:
+        # Detached, deleted, or never persistent — the fallback still has the
+        # scalars the caller captured before anything failed.
+        logger.debug("could not refresh user after rollback", exc_info=True)
 
 
 @dataclass
@@ -183,7 +199,7 @@ async def _run_tool_loop(
         except Exception as e:  # noqa: PERF203 - provider failover is the point
             last_error = e
             logger.warning("tool loop failed on %s: %s", provider.circuit_name, e)
-            await _reset_transaction(db)
+            await _reset_transaction(db, user)
     if last_error:
         logger.warning("every provider failed the tool loop: %s", last_error)
     return "", 0, [], []
@@ -280,6 +296,7 @@ async def _verified(
     system_prompt: str,
     tool_calls: int,
     tool_names: list[str] | None = None,
+    user=None,
 ) -> AnswerResult | None:
     """Accept the reply only if its figures trace back to the evidence.
 
@@ -304,7 +321,7 @@ async def _verified(
         )
     except Exception as e:
         logger.warning("grounding repair round failed: %s", e)
-        await _reset_transaction(db)
+        await _reset_transaction(db, user)
         return None
 
     if not repaired.strip():
@@ -333,7 +350,7 @@ async def answer_question(
             )
         except Exception as e:
             logger.warning("Local conversational answer failed: %s", e)
-            await _reset_transaction(db)
+            await _reset_transaction(db, user)
 
     business_context = await build_business_context(db, user=user, org_id=org_id)
     system_prompt = _build_system_prompt(role, business_context, page, intent)
@@ -356,13 +373,13 @@ async def answer_question(
         reply, used, tool_evidence, tool_names = await _run_tool_loop(db, user, msgs, system_prompt, intent)
         if reply.strip():
             result = await _verified(
-                db, reply, baseline_evidence + tool_evidence, msgs, system_prompt, used, tool_names
+                db, reply, baseline_evidence + tool_evidence, msgs, system_prompt, used, tool_names, user
             )
             if result is not None:
                 return result
     except Exception as e:
         logger.warning("LLM tool loop failed; falling back: %s", e)
-        await _reset_transaction(db)
+        await _reset_transaction(db, user)
 
     settings = get_settings()
     if settings.groq_api_key or settings.gemini_api_key:
@@ -371,20 +388,20 @@ async def answer_question(
             if reply.strip():
                 # No tools ran here, so the snapshot is the only thing this
                 # answer could legitimately have come from.
-                result = await _verified(db, reply, baseline_evidence, msgs, system_prompt, 0)
+                result = await _verified(db, reply, baseline_evidence, msgs, system_prompt, 0, None, user)
                 if result is not None:
                     return result
         except Exception as e:
             logger.warning("LLM fallback to local engine: %s", e)
 
-    await _reset_transaction(db)
+    await _reset_transaction(db, user)
     try:
         reply = await local_answer(db, question, intent, org_id=org_id, user=user)
         if reply.strip():
             return AnswerResult(reply=reply, source="local")
     except Exception as e:
         logger.error("Local engine failed: %s", e)
-        await _reset_transaction(db)
+        await _reset_transaction(db, user)
 
     # Last resort. Intent-aware: for count questions, never dump revenue/top-products.
     return AnswerResult(reply=_snapshot_fallback(business_context, intent, question), source="local")
@@ -514,7 +531,7 @@ async def stream_answer(
             return
         except Exception as e:
             logger.warning("Local conversational answer failed: %s", e)
-            await _reset_transaction(db)
+            await _reset_transaction(db, user)
 
     if _needs_live_tools(question, intent):
         result = await answer_question(db, role, question, history, page, user=user)
@@ -540,7 +557,7 @@ async def stream_answer(
                 yield chunk
         except Exception as e:
             logger.warning("LLM streaming failed; switching to local engine: %s", e)
-            await _reset_transaction(db)
+            await _reset_transaction(db, user)
 
         # Streamed tokens are already on screen by the time the reply is whole,
         # so a bad figure cannot be swapped out — but it can be flagged. Saying
