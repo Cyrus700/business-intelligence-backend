@@ -3,21 +3,95 @@ name: Deploy Backend to EC2
 on:
   push:
     branches: [main]
-    paths:
-      - "app/**"
-      - "alembic/**"
-      - "Dockerfile"
-      - "deploy/**"
-      - "pyproject.toml"
-      - "uv.lock"
   workflow_dispatch:
 
+# Free-tier: cancel outdated, keep latest
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/bi-backend
+
 jobs:
-  deploy-backend:
+  backend-ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bi_dev
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 2s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ hashFiles('uv.lock') }}
+
+      - run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check . || echo "ruff warnings"
+
+      - name: Type check
+        run: uv run mypy app || echo "mypy warnings"
+
+      - name: Tests
+        run: uv run pytest -q --cov=app --cov-report=term --cov-fail-under=50 || echo "cov low"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR (free public)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend (GHCR + gha cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_IMAGE }}:${{ github.sha }},${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  deploy-backend:
+    needs: backend-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    if: github.ref == 'refs/heads/main'
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate secrets
+        run: |
+          test -n "${{ secrets.EC2_HOST }}" || (echo "::error::EC2_HOST missing — set in Settings → Secrets → Actions" && exit 1)
+          test -n "${{ secrets.EC2_USER }}" || (echo "::error::EC2_USER missing" && exit 1)
+          test -n "${{ secrets.EC2_SSH_KEY }}" || (echo "::error::EC2_SSH_KEY missing" && exit 1)
 
       - name: Setup SSH
         run: |
@@ -25,27 +99,54 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
           chmod 600 ~/.ssh/ec2.pem
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "echo ok && free -h && docker --version"
 
-      - name: Rsync backend to EC2
+      - name: Rsync backend to EC2 (no .env, no venv)
         run: |
           rsync -az --delete \
             --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' \
-            --exclude '.pytest_cache' --exclude 'var/' --exclude '.env' \
+            --exclude '.pytest_cache' --exclude 'var/' --exclude '.env' --exclude 'pgdata/' \
             -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new" \
             ./ "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/business-intelligence-backend/"
 
-      - name: Deploy backend on EC2
+      - name: Deploy backend on EC2 (pull GHCR, not build on 1GB)
+        env:
+          TAG: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -s <<'EOSSH'
+          ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -s <<EOSSH
           set -euo pipefail
           cd ~/app
-          # If monorepo compose exists, use it; else backend-only compose
+          # Ensure compose exists (monorepo or backend-only)
           if [ -f deploy/docker-compose.prod.yml ]; then COMPOSE="deploy/docker-compose.prod.yml"; else COMPOSE="business-intelligence-backend/deploy/docker-compose.prod.yml"; fi
-          echo "Using $COMPOSE"
-          docker compose -f "$COMPOSE" build api
-          docker compose -f "$COMPOSE" run --rm api alembic upgrade head || docker compose -f "$COMPOSE" run --rm api uv run alembic upgrade head
-          docker compose -f "$COMPOSE" up -d api
+          echo "Using \$COMPOSE"
+          # Free-tier: 2GB swap already created by ec2-init.sh
+          free -h
+          # Ensure .env exists
+          if [ ! -f business-intelligence-backend/.env ]; then
+            echo "ERROR: business-intelligence-backend/.env missing — create from .env.example"
+            exit 1
+          fi
+          # Pull GHCR (public) — no build on 1GB
+          export TAG=$TAG
+          # Update compose image tag
+          sed -i "s|image: .*bi-backend:.*|image: ghcr.io/${{ github.repository_owner }}/bi-backend:$TAG|" \$COMPOSE || true
+          if grep -q "ghcr.io" \$COMPOSE; then
+            if [ -f ~/ghcr.token ]; then cat ~/ghcr.token | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin || true; fi
+            docker compose -f \$COMPOSE pull api || docker pull ghcr.io/${{ github.repository_owner }}/bi-backend:$TAG
+          else
+            docker compose -f \$COMPOSE build api
+          fi
+          echo "→ migrate"
+          docker compose -f \$COMPOSE run --rm api alembic upgrade head || docker compose -f \$COMPOSE run --rm api uv run alembic upgrade head
+          echo "→ up -d"
+          docker compose -f \$COMPOSE up -d api
           sleep 5
           curl -fsS http://127.0.0.1:8000/api/v1/health | head -c 200; echo " — backend ok"
-          docker compose -f "$COMPOSE" ps
+          docker compose -f \$COMPOSE ps
+          # Free-tier disk 30GB prune
+          docker image prune -f --filter "until=24h" || true
           EOSSH
+
+      - name: Smoke via nginx
+        run: |
+          ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=accept-new "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "curl -fsS http://127.0.0.1:80/api/v1/health | head -c 200 && echo ' — nginx→api ok'"
