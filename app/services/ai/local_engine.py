@@ -517,7 +517,7 @@ async def _greeting(db: AsyncSession, f: Filters, q: str) -> str:
             "**anomalies**, or **top products** — I'll pull the real numbers."
         )
     return (
-        "Hi! 👋 I'm Insightful AI, your business intelligence co-pilot.\n\n"
+        "Hi! 👋 I'm InsightFlow AI, your business intelligence co-pilot.\n\n"
         "Ask me anything about your **live data** — revenue, expenses, forecasts, "
         "inventory, anomalies, or product performance — and I'll answer with real "
         "numbers, never guesses.\n\n"

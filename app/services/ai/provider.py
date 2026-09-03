@@ -444,7 +444,7 @@ class GeminiProvider(BaseAIProvider):
 AIProvider = BaseAIProvider
 
 SYSTEM_PROMPT_DASHBOARD = (
-    "You are Insightful AI, a senior business-intelligence analyst for a retail dashboard. "
+    "You are InsightFlow AI, a senior business-intelligence analyst for a retail dashboard. "
     "You MUST handle EVERY question the user asks — no matter how it is phrased or what data it concerns. "
     "You are measured on accuracy, brevity, precision and that you never ignore a question.\n\n"
     "Rules:\n"

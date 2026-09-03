@@ -13,7 +13,7 @@ LANDING_DATA = {
     "hero": {
         "eyebrow": "AI-driven cloud business intelligence",
         "title": ["One dashboard for", "every business decision."],
-        "subtitle": "Insightful brings your spreadsheets, databases and APIs into a single cloud dashboard, then uses AI to forecast trends, flag anomalies and explain what to do next.",
+        "subtitle": "InsightFlow brings your spreadsheets, databases and APIs into a single cloud dashboard, then uses AI to forecast trends, flag anomalies and explain what to do next.",
         "primaryCta": "Get started",
         "secondaryCta": "See how it works",
     },
@@ -59,7 +59,7 @@ LANDING_DATA = {
         {
             "no": "01",
             "title": "Connect your data",
-            "body": "Point Insightful at your spreadsheets, databases and APIs. Our ETL pipelines clean, standardise and centralise everything automatically.",
+            "body": "Point InsightFlow at your spreadsheets, databases and APIs. Our ETL pipelines clean, standardise and centralise everything automatically.",
         },
         {
             "no": "02",
@@ -110,7 +110,7 @@ LANDING_DATA = {
     "faqs": [
         {
             "q": "How is this affordable for a small business?",
-            "a": "Insightful is cloud-native and pay-as-you-go — there's no upfront hardware or licensing. You only pay for what you use, and there's a free tier to start.",
+            "a": "InsightFlow is cloud-native and pay-as-you-go — there's no upfront hardware or licensing. You only pay for what you use, and there's a free tier to start.",
         },
         {
             "q": "Is my data secure?",
