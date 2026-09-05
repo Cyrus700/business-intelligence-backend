@@ -33,6 +33,50 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
         except Exception:  # noqa: BLE001 — best-effort self-heal, migration is source of truth
             pass
+        # Self-heal RBAC: ensure compare:view permission exists and is granted to
+        # analyst / manager / admin (covers deployments that were migrated before
+        # the Compare feature). Idempotent — uses ON CONFLICT DO NOTHING.
+        try:
+            import uuid as _uuid
+
+            from sqlalchemy import text as sa_text
+
+            from app.core.database import get_engine as _get_eng
+            from app.core.rbac_defaults import DEFAULT_GRANTS, DEFAULT_PERMISSIONS
+
+            eng2 = _get_eng()
+            async with eng2.begin() as conn:
+                # Insert missing permissions
+                for perm in DEFAULT_PERMISSIONS:
+                    await conn.execute(
+                        sa_text(
+                            "INSERT INTO permissions (id, key, label, description, group_label, sort_order, is_system) "
+                            "VALUES (:id, :key, :label, :desc, :grp, :ord, true) "
+                            "ON CONFLICT (key) DO NOTHING"
+                        ),
+                        {
+                            "id": str(_uuid.uuid4()),
+                            "key": perm["key"],
+                            "label": perm["label"],
+                            "desc": perm["description"],
+                            "grp": perm["group_label"],
+                            "ord": perm["sort_order"],
+                        },
+                    )
+                # Grant missing grants to default roles (and any other missing grant)
+                for role_name, perms in DEFAULT_GRANTS.items():
+                    for pk in perms:
+                        await conn.execute(
+                            sa_text(
+                                "INSERT INTO role_permissions (id, role_id, permission_id) "
+                                "SELECT :id, r.id, p.id FROM roles r, permissions p "
+                                "WHERE r.name = :role AND p.key = :perm "
+                                "ON CONFLICT (role_id, permission_id) DO NOTHING"
+                            ),
+                            {"id": str(_uuid.uuid4()), "role": role_name, "perm": pk},
+                        )
+        except Exception:  # noqa: BLE001 — best-effort, RBAC sync endpoint is the manual fallback
+            pass
     if get_settings().env not in ("test", "ci"):
         from app.workers.scheduler import start_scheduler, stop_scheduler
 

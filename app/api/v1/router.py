@@ -7,6 +7,7 @@ from app.api.v1 import (
     analytics,
     audit,
     auth,
+    compare,
     data_sources,
     decision,
     etl,
@@ -40,3 +41,4 @@ api_router.include_router(recommendations.router)
 api_router.include_router(ai.router)
 api_router.include_router(quality.router)
 api_router.include_router(admin.router)
+api_router.include_router(compare.router)
