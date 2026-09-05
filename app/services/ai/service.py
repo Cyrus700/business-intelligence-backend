@@ -422,13 +422,17 @@ def _snapshot_fallback(business_context: str, intent: "Intent | None" = None, qu
         )
     # Intent-aware filter — for count/list questions, strip revenue/top-product noise
     if intent in (Intent.PLATFORM, Intent.USERS):
-        wants_list = bool(question and any(w in question.lower() for w in ("list", "show", "display", "names", "which")))
+        wants_list = bool(
+            question and any(w in question.lower() for w in ("list", "show", "display", "names", "which"))
+        )
         # list intent should not be answered with count-only fallback; guide to retry
         if wants_list:
             return (
                 "Listing businesses requires a live query — please retry `list businesses` or `list approved businesses` and I'll return the live table (names, status, created). "
                 "Counts right now are live from the snapshot:\n"
-                + next((l.strip() for l in business_context.splitlines() if "Platform businesses registered:" in l), "")
+                + next(
+                    (ln.strip() for ln in business_context.splitlines() if "Platform businesses registered:" in ln), ""
+                )
             )
         for line in business_context.splitlines():
             if "Platform businesses registered:" in line:

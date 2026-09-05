@@ -13,7 +13,6 @@ GET  /analytics/compare/meta — allowed metrics / dimensions / limits (for the 
 
 from __future__ import annotations
 
-import calendar
 import logging
 from datetime import date
 from typing import Any, Literal
@@ -44,6 +43,7 @@ router = APIRouter(
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────
+
 
 class CompareRequest(BaseModel):
     """Request to compare N periods.
@@ -151,6 +151,7 @@ def _build_periods(req: CompareRequest) -> list[dict[str, Any]]:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
+
 
 def _can_view_pnl(user: CurrentUser, db: DbSession) -> bool:
     """Analysts see aggregates but not P&L margins — check live policy."""

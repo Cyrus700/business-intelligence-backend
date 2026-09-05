@@ -12,7 +12,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai import AiRetentionSetting, Conversation
@@ -75,7 +75,9 @@ async def flush_expired_conversations(db: AsyncSession) -> int:
         if obj:
             await db.delete(obj)
     await db.flush()
-    logger.info("auto-flushed %d ai conversations older than %d days (cutoff %s)", len(expired), days, cutoff.date().isoformat())
+    logger.info(
+        "auto-flushed %d ai conversations older than %d days (cutoff %s)", len(expired), days, cutoff.date().isoformat()
+    )
     return len(expired)
 
 

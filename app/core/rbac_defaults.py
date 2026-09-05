@@ -85,7 +85,11 @@ DEFAULT_PERMISSIONS: list[PermissionSeed] = [
             ("dashboard:view", "View dashboard", "Access the main overview dashboard"),
             ("kpis:view", "View KPIs", "See KPI cards and summary metrics"),
             ("timeseries:view", "View timeseries", "View trend charts over time"),
-            ("compare:view", "Compare periods", "Compare 2+ months or years side-by-side with insights and AI suggestions"),
+            (
+                "compare:view",
+                "Compare periods",
+                "Compare 2+ months or years side-by-side with insights and AI suggestions",
+            ),
         ],
     ),
     *_perms(

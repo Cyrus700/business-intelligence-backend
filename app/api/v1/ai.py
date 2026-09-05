@@ -285,7 +285,6 @@ async def put_retention(
     user: CurrentUser,
 ) -> RetentionOut:
     """Set AI history retention — system admin only (week/month dynamic)."""
-    from app.api.deps import require_role
 
     # super-admin or admin role check — use same guard as /admin/*
     if not getattr(user, "is_super_admin", False) and user.role != "admin":
@@ -567,10 +566,7 @@ async def _followup_suggestions(question: str, answer: str) -> list[str]:
             [AIMessage(role="user", content=f"Question: {question}\n\nAnswer given:\n{answer[:1500]}")],
             system_prompt=_SUGGESTION_PROMPT,
         )
-        lines = [
-            re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", line).strip().strip('"')
-            for line in (raw or "").splitlines()
-        ]
+        lines = [re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", line).strip().strip('"') for line in (raw or "").splitlines()]
         picked = [line for line in lines if line.endswith("?") and 8 < len(line) <= 120][:3]
         if picked:
             return picked

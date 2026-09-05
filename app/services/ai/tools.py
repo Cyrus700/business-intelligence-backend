@@ -636,7 +636,8 @@ async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> 
     """
     from sqlalchemy import func, select
 
-    from app.models.identity import Organization, Profile as ProfileM
+    from app.models.identity import Organization
+    from app.models.identity import Profile as ProfileM
 
     is_super = bool(getattr(user, "is_super_admin", False))
     oid = _org_id_for(user)
@@ -662,26 +663,46 @@ async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> 
         # — this is what makes "how many approved" accurate and not verbose.
         if status_filter in ("approved", "pending", "rejected", "legacy", "personal"):
             if status_filter == "legacy":
-                cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))).scalar() or 0
+                cnt = (
+                    await db.execute(
+                        select(func.count()).select_from(Organization).where(Organization.is_legacy.is_(True))
+                    )
+                ).scalar() or 0
                 total = (await db.execute(select(func.count()).select_from(Organization))).scalar() or 0
                 return f"**{cnt}** businesses are **legacy** (of **{total}** total, live)."
             if status_filter == "personal":
-                cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))).scalar() or 0
+                cnt = (
+                    await db.execute(
+                        select(func.count()).select_from(Organization).where(Organization.is_personal.is_(True))
+                    )
+                ).scalar() or 0
                 total = (await db.execute(select(func.count()).select_from(Organization))).scalar() or 0
                 return f"**{cnt}** businesses are **personal** workspaces (of **{total}** total, live)."
-            cnt = (await db.execute(select(func.count()).select_from(Organization).where(Organization.status == status_filter))).scalar() or 0
+            cnt = (
+                await db.execute(
+                    select(func.count()).select_from(Organization).where(Organization.status == status_filter)
+                )
+            ).scalar() or 0
             total = (await db.execute(select(func.count()).select_from(Organization))).scalar() or 0
             # precise first sentence
             out = f"**{cnt}** businesses are **{status_filter}** (of **{total}** total, live)."
             if detail:
                 rows = (
-                    await db.execute(
-                        select(Organization).where(Organization.status == status_filter).order_by(Organization.created_at.desc()).limit(15)
+                    (
+                        await db.execute(
+                            select(Organization)
+                            .where(Organization.status == status_filter)
+                            .order_by(Organization.created_at.desc())
+                            .limit(15)
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 if rows:
                     out += "\n| Business | Created |\n|---|---|\n" + "\n".join(
-                        f"| {o.name} | {o.created_at.date().isoformat() if getattr(o,'created_at',None) else '—'} |" for o in rows
+                        f"| {o.name} | {o.created_at.date().isoformat() if getattr(o, 'created_at', None) else '—'} |"
+                        for o in rows
                     )
             return out
 
@@ -692,7 +713,9 @@ async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> 
         # Breakdown by status — always live
         counts: dict[str, int] = {}
         for s in ["approved", "pending", "rejected"]:
-            counts[s] = (await db.execute(select(func.count()).select_from(Organization).where(Organization.status == s))).scalar() or 0
+            counts[s] = (
+                await db.execute(select(func.count()).select_from(Organization).where(Organization.status == s))
+            ).scalar() or 0
 
         # Precise first line — no revenue or other KPIs
         lines = [
@@ -701,7 +724,11 @@ async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> 
         ]
         if detail:
             limit = max(1, min(int(kwargs.get("limit") or 10), 25))
-            rows = (await db.execute(select(Organization).order_by(Organization.created_at.desc()).limit(limit))).scalars().all()
+            rows = (
+                (await db.execute(select(Organization).order_by(Organization.created_at.desc()).limit(limit)))
+                .scalars()
+                .all()
+            )
             if rows:
                 lines.append("")
                 lines.append("| Business | Status | Created |")
@@ -715,7 +742,9 @@ async def _platform_overview(db: AsyncSession, user: Profile, **kwargs: Any) -> 
     org = await db.get(Organization, oid)
     name = org.name if org else f"org {oid}"
     # Count within org: users in this org (live)
-    users_in_org = (await db.execute(select(func.count()).select_from(ProfileM).where(ProfileM.org_id == oid))).scalar() or 0
+    users_in_org = (
+        await db.execute(select(func.count()).select_from(ProfileM).where(ProfileM.org_id == oid))
+    ).scalar() or 0
     return "\n".join(
         [
             f"You are in **{name}** — isolated workspace (1 business you can see).",
@@ -740,15 +769,19 @@ async def _catalog_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     is_super = bool(getattr(user, "is_super_admin", False))
 
     tables = (
-        await db.execute(
-            text(
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema='public' AND table_type='BASE TABLE' "
-                "AND table_name NOT LIKE 'alembic%' ORDER BY table_name LIMIT :lim"
-            ),
-            {"lim": limit},
+        (
+            await db.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public' AND table_type='BASE TABLE' "
+                    "AND table_name NOT LIKE 'alembic%' ORDER BY table_name LIMIT :lim"
+                ),
+                {"lim": limit},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     descriptions: dict[str, str] = {
         "organizations": "Businesses / workspaces (tenants) — one row per business",
@@ -796,7 +829,9 @@ async def _catalog_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
                     )
                 ).scalar()
                 if has_org and not is_super and oid is not None:
-                    cnt = (await db.execute(text(f'SELECT COUNT(*) FROM "{t}" WHERE org_id = :oid'), {"oid": str(oid)})).scalar()
+                    cnt = (
+                        await db.execute(text(f'SELECT COUNT(*) FROM "{t}" WHERE org_id = :oid'), {"oid": str(oid)})
+                    ).scalar()
                 else:
                     cnt = (await db.execute(text(f'SELECT COUNT(*) FROM "{t}"'))).scalar()
                 count_txt = str(cnt)
@@ -824,7 +859,9 @@ async def _catalog_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
         try:
             has_org_f = (
                 await db.execute(
-                    text("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=:t AND column_name='org_id' LIMIT 1"),
+                    text(
+                        "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=:t AND column_name='org_id' LIMIT 1"
+                    ),
                     {"t": focus},
                 )
             ).scalar()
@@ -832,7 +869,12 @@ async def _catalog_info(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
             col_names = [c for c, _ in cols if c not in sensitive]
             col_list = ", ".join(f'"{c}"' for c in col_names[:12])
             if has_org_f and not is_super and oid is not None:
-                rows = (await db.execute(text(f'SELECT {col_list} FROM "{focus}" WHERE org_id=:oid ORDER BY 1 DESC LIMIT 3'), {"oid": str(oid)})).all()
+                rows = (
+                    await db.execute(
+                        text(f'SELECT {col_list} FROM "{focus}" WHERE org_id=:oid ORDER BY 1 DESC LIMIT 3'),
+                        {"oid": str(oid)},
+                    )
+                ).all()
             else:
                 rows = (await db.execute(text(f'SELECT {col_list} FROM "{focus}" ORDER BY 1 DESC LIMIT 3'))).all()
             if rows:
@@ -870,11 +912,17 @@ async def _table_sample(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     # Disallow secret columns
     exclude = {"password_hash", "email_verification_token", "password"}
     cols = (
-        await db.execute(
-            text("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=:t ORDER BY ordinal_position"),
-            {"t": table},
+        (
+            await db.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=:t ORDER BY ordinal_position"
+                ),
+                {"t": table},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     cols = [c for c in cols if c not in exclude]
     if not cols:
         return f"Table `{table}` has no readable columns."
@@ -900,7 +948,11 @@ async def _table_sample(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     if cnt == 0:
         lines.append("No rows match — try widening filters or check the Data page.")
         return "\n".join(lines)
-    rows = (await db.execute(text(f'SELECT {col_list} FROM "{table}"{where_sql} ORDER BY 1 DESC LIMIT :lim'), {**params, "lim": limit})).all()
+    rows = (
+        await db.execute(
+            text(f'SELECT {col_list} FROM "{table}"{where_sql} ORDER BY 1 DESC LIMIT :lim'), {**params, "lim": limit}
+        )
+    ).all()
     lines.append(f"| {' | '.join(cols[:6])} |")
     lines.append("|" + "---|" * min(6, len(cols)))
     for r in rows[:limit]:
@@ -1277,7 +1329,10 @@ TOOLS: dict[str, AITool] = {
         parameters={
             "type": "object",
             "properties": {
-                "table": {"type": "string", "description": "Focus on one table to also list its live columns and sample rows."},
+                "table": {
+                    "type": "string",
+                    "description": "Focus on one table to also list its live columns and sample rows.",
+                },
                 "include_counts": {"type": "boolean", "default": True},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 60, "default": 40},
             },
@@ -1295,7 +1350,10 @@ TOOLS: dict[str, AITool] = {
         parameters={
             "type": "object",
             "properties": {
-                "table": {"type": "string", "description": "Exact table name in public schema, e.g. sales_transactions, organizations, products, or any future table."},
+                "table": {
+                    "type": "string",
+                    "description": "Exact table name in public schema, e.g. sales_transactions, organizations, products, or any future table.",
+                },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
             },
             "required": ["table"],
@@ -1345,7 +1403,7 @@ _DEFAULT_TOOLS: tuple[str, ...] = (
 )
 
 
-def _declare(tool: "Tool") -> dict[str, Any]:
+def _declare(tool: "AITool") -> dict[str, Any]:
     return {
         "type": "function",
         "function": {

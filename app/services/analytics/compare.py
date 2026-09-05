@@ -44,7 +44,14 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import business_today
-from app.services.analytics.queries import Filters, _expense_kpi, _sales_kpis, expenses_by_category, sales_by_dimension, kpi_timeseries
+from app.services.analytics.queries import (
+    Filters,
+    _expense_kpi,
+    _sales_kpis,
+    expenses_by_category,
+    kpi_timeseries,
+    sales_by_dimension,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +84,16 @@ _METRIC_UNITS: dict[str, str] = {
 _compare_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
-def _cache_key(org_id: UUID | None, periods: list[dict], metrics: list[str], dims: list[str], inc_ts: bool, ts_metric: str, ts_gran: str, can_pnl: bool) -> str:
+def _cache_key(
+    org_id: UUID | None,
+    periods: list[dict],
+    metrics: list[str],
+    dims: list[str],
+    inc_ts: bool,
+    ts_metric: str,
+    ts_gran: str,
+    can_pnl: bool,
+) -> str:
     payload = json.dumps(
         {
             "org": str(org_id) if org_id else None,
@@ -162,7 +178,11 @@ def _validate_periods(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Use month label when period is exactly one calendar month
         if span <= 31:
             try:
-                if d_from.day == 1 and d_to.day == calendar.monthrange(d_to.year, d_to.month)[1] and d_from.month == d_to.month:
+                if (
+                    d_from.day == 1
+                    and d_to.day == calendar.monthrange(d_to.year, d_to.month)[1]
+                    and d_from.month == d_to.month
+                ):
                     label = p.get("label") or d_from.strftime("%B %Y")
             except Exception:
                 pass
@@ -185,7 +205,7 @@ def _validate_periods(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
     overlaps: list[str] = []
     for i in range(len(out_sorted) - 1):
         if out_sorted[i]["to"] >= out_sorted[i + 1]["from"]:
-            overlaps.append(f"{out_sorted[i]['label']} overlaps {out_sorted[i+1]['label']}")
+            overlaps.append(f"{out_sorted[i]['label']} overlaps {out_sorted[i + 1]['label']}")
     if overlaps:
         logger.info("compare overlapping periods: %s", "; ".join(overlaps))
     # sort chronologically for stable charts
@@ -246,7 +266,9 @@ async def _period_dimension(
 ) -> list[dict[str, Any]]:
     if dimension == "expense_category":
         rows = await expenses_by_category(db, Filters(date_from=d_from, date_to=d_to, org_id=org_id))
-        return [{"key": r["key"], "revenue": r["revenue"], "orders": r["orders"], "share_pct": r["share_pct"]} for r in rows]
+        return [
+            {"key": r["key"], "revenue": r["revenue"], "orders": r["orders"], "share_pct": r["share_pct"]} for r in rows
+        ]
     dim = dimension
     if dim not in ("product", "category", "channel", "region"):
         raise ValueError(f"Unsupported dimension: {dimension}")
@@ -294,7 +316,11 @@ async def compare_periods(
     ``periods`` is a list of ``{from, to, label?}`` with ISO dates.
     ``metrics`` and ``dimensions`` are filtered to the allow-list.
     """
-    metrics = [m for m in (metrics or ["revenue", "orders", "avg_order_value", "gross_margin", "expense_total"]) if m in ALLOWED_METRICS]
+    metrics = [
+        m
+        for m in (metrics or ["revenue", "orders", "avg_order_value", "gross_margin", "expense_total"])
+        if m in ALLOWED_METRICS
+    ]
     if not can_view_pnl:
         metrics = [m for m in metrics if m not in ("expense_total", "net_profit", "gross_margin")]
         if not metrics:
@@ -312,7 +338,16 @@ async def compare_periods(
     n = len(validated)
 
     # Cache lookup
-    cache_key = _cache_key(org_id, validated, metrics, dimensions, include_timeseries, timeseries_metric, timeseries_granularity, can_view_pnl)
+    cache_key = _cache_key(
+        org_id,
+        validated,
+        metrics,
+        dimensions,
+        include_timeseries,
+        timeseries_metric,
+        timeseries_granularity,
+        can_view_pnl,
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
         # Return shallow copy with fresh generated_at
@@ -327,7 +362,11 @@ async def compare_periods(
     )
     period_payloads: list[dict[str, Any]] = []
     for p, vals in zip(validated, period_vals_list):
-        filtered_vals = {k: v for k, v in vals.items() if k in metrics or k in ("revenue_per_day", "orders_per_day", "expense_per_day", "net_per_day")}
+        filtered_vals = {
+            k: v
+            for k, v in vals.items()
+            if k in metrics or k in ("revenue_per_day", "orders_per_day", "expense_per_day", "net_per_day")
+        }
         # Always include per-day for the metrics that are selected
         period_payloads.append(
             {
@@ -346,7 +385,12 @@ async def compare_periods(
     for metric in metrics:
         values = [float(pp["_full_metrics"].get(metric, 0.0)) for pp in period_payloads]
         # per-day values for fair length comparison
-        per_day_vals = [float(pp["_full_metrics"].get(f"{metric}_per_day", pp["_full_metrics"].get(metric, 0.0) / pp["span_days"])) if pp["span_days"] else 0 for pp in period_payloads]
+        per_day_vals = [
+            float(pp["_full_metrics"].get(f"{metric}_per_day", pp["_full_metrics"].get(metric, 0.0) / pp["span_days"]))
+            if pp["span_days"]
+            else 0
+            for pp in period_payloads
+        ]
         # deltas vs first period and vs previous
         deltas_vs_first: list[float | None] = []
         pct_vs_first: list[float | None] = []
@@ -427,7 +471,7 @@ async def compare_periods(
                 shares.append(float(hit["share_pct"]) if hit and "share_pct" in hit else 0.0)
                 orders_list.append(int(hit["orders"]) if hit and "orders" in hit else 0)
                 span = validated[idx]["to"] - validated[idx]["from"]
-                days = (span.days + 1)
+                days = span.days + 1
                 per_day.append(round(v / days, 2) if days else 0)
             d_first = vals[-1] - vals[0] if n >= 2 else 0.0
             pct_first = (d_first / vals[0] * 100) if vals[0] else None
@@ -437,7 +481,11 @@ async def compare_periods(
             cv = (sd / mean_val * 100) if mean_val else None
             is_growing = all(vals[i] <= vals[i + 1] for i in range(len(vals) - 1)) if len(vals) > 1 else False
             is_declining = all(vals[i] >= vals[i + 1] for i in range(len(vals) - 1)) if len(vals) > 1 else False
-            trend = "growing" if is_growing and d_first != 0 else ("declining" if is_declining and d_first != 0 else "mixed")
+            trend = (
+                "growing"
+                if is_growing and d_first != 0
+                else ("declining" if is_declining and d_first != 0 else "mixed")
+            )
             series.append(
                 {
                     "key": key,
@@ -471,8 +519,12 @@ async def compare_periods(
                 "shares": [round(sum(s["shares"][i] for s in series[12:]), 1) for i in range(n)],
                 "orders": [sum(s["orders"][i] for s in series[12:]) for i in range(n)],
                 "delta_vs_first": round(rest_vals[-1] - rest_vals[0], 2) if n >= 2 else 0,
-                "pct_vs_first": round((rest_vals[-1] - rest_vals[0]) / rest_vals[0] * 100, 1) if n >= 2 and rest_vals[0] else None,
-                "direction": "up" if rest_vals[-1] > rest_vals[0] else ("down" if rest_vals[-1] < rest_vals[0] else "flat"),
+                "pct_vs_first": round((rest_vals[-1] - rest_vals[0]) / rest_vals[0] * 100, 1)
+                if n >= 2 and rest_vals[0]
+                else None,
+                "direction": "up"
+                if rest_vals[-1] > rest_vals[0]
+                else ("down" if rest_vals[-1] < rest_vals[0] else "flat"),
                 "trend": "mixed",
                 "total": round(sum(rest_vals), 2),
                 "avg": round(sum(rest_vals) / n, 2) if n else 0,
@@ -481,9 +533,17 @@ async def compare_periods(
             }
             top.append(other)
         totals_per_period = [sum(r["revenue"] for r in rows) for rows in per_period_rows]
-        per_day_totals = [round(t / validated[i]["to"].day if False else t / ((validated[i]["to"] - validated[i]["from"]).days + 1), 2) for i, t in enumerate(totals_per_period)]
+        per_day_totals = [
+            round(
+                t / validated[i]["to"].day if False else t / ((validated[i]["to"] - validated[i]["from"]).days + 1), 2
+            )
+            for i, t in enumerate(totals_per_period)
+        ]
         # actually per_day_totals correct calc:
-        per_day_totals = [round(t / ((validated[i]["to"] - validated[i]["from"]).days + 1), 2) for i, t in enumerate(totals_per_period)]
+        per_day_totals = [
+            round(t / ((validated[i]["to"] - validated[i]["from"]).days + 1), 2)
+            for i, t in enumerate(totals_per_period)
+        ]
         return dim, {
             "dimension": dim,
             "period_labels": [p["label"] for p in validated],
@@ -597,14 +657,18 @@ def _build_insights(
                 if pd_vals[0] and pd_vals[-1]:
                     pd_pct = (pd_vals[-1] - pd_vals[0]) / pd_vals[0] * 100
                     if abs(pd_pct - total_pct) > 5:
-                        stats[f"{metric}_per_day"] = f"Per-day {pd_vals[0]:,.0f} → {pd_vals[-1]:,.0f} ({pd_pct:+.1f}%) — length-adjusted"
+                        stats[f"{metric}_per_day"] = (
+                            f"Per-day {pd_vals[0]:,.0f} → {pd_vals[-1]:,.0f} ({pd_pct:+.1f}%) — length-adjusted"
+                        )
         # volatility insight
         vals = kc["values"]
         if len(vals) >= 3:
             up = all(vals[i] <= vals[i + 1] for i in range(len(vals) - 1))
             down = all(vals[i] >= vals[i + 1] for i in range(len(vals) - 1))
             if up and total_pct and abs(total_pct) >= 5:
-                highlights.append(f"{label} rose every period — consistent growth from {first_label} through {last_label}.")
+                highlights.append(
+                    f"{label} rose every period — consistent growth from {first_label} through {last_label}."
+                )
                 momentum.append(f"{label} momentum intact ({len(vals)} consecutive gains)")
             elif down and total_pct and abs(total_pct) >= 5:
                 watchouts.append(f"{label} fell every period — steady decline that needs attention.")
@@ -612,7 +676,9 @@ def _build_insights(
                 peak = max(vals)
                 trough = min(vals)
                 if peak and trough and (peak - trough) / peak > 0.15:
-                    stats[f"{metric}_volatility"] = f"Volatile: range {trough:,.0f} – {peak:,.0f} ({(peak - trough) / peak * 100:.0f}% swing, CV {kc.get('cv_pct','?')}%)"
+                    stats[f"{metric}_volatility"] = (
+                        f"Volatile: range {trough:,.0f} – {peak:,.0f} ({(peak - trough) / peak * 100:.0f}% swing, CV {kc.get('cv_pct', '?')}%)"
+                    )
                 # best vs worst
                 best = kc.get("best_period")
                 worst = kc.get("worst_period")
@@ -660,16 +726,22 @@ def _build_insights(
                         first_hhi = hhi
                     if idx == len(labels) - 1:
                         last_hhi = hhi
-                if 'first_hhi' in locals() and 'last_hhi' in locals():
+                if "first_hhi" in locals() and "last_hhi" in locals():
                     if last_hhi - first_hhi > 0.05:
-                        watchouts.append(f"Revenue is more concentrated in {dim} in {labels[-1]} than in {labels[0]} (HHI {first_hhi:.2f} → {last_hhi:.2f})")
+                        watchouts.append(
+                            f"Revenue is more concentrated in {dim} in {labels[-1]} than in {labels[0]} (HHI {first_hhi:.2f} → {last_hhi:.2f})"
+                        )
                     elif first_hhi - last_hhi > 0.05:
-                        drivers.append(f"Revenue spread is healthier in {dim} by {labels[-1]} (HHI {first_hhi:.2f} → {last_hhi:.2f})")
+                        drivers.append(
+                            f"Revenue spread is healthier in {dim} by {labels[-1]} (HHI {first_hhi:.2f} → {last_hhi:.2f})"
+                        )
         # high CV members
         high_cv = [s for s in series if s.get("cv_pct") is not None and s["cv_pct"] > 40]
         if high_cv:
             most_volatile = max(high_cv, key=lambda x: x["cv_pct"])
-            stats[f"{dim}_most_volatile"] = f"Most volatile {dim}: '{most_volatile['key']}' CV {most_volatile['cv_pct']}%"
+            stats[f"{dim}_most_volatile"] = (
+                f"Most volatile {dim}: '{most_volatile['key']}' CV {most_volatile['cv_pct']}%"
+            )
 
     # overall verdict
     revenue_kc = next((k for k in kpi_comparison if k["metric"] == "revenue"), None)
@@ -700,6 +772,7 @@ def _build_insights(
 
 # ── AI suggestions ──────────────────────────────────────────────────────────
 
+
 async def generate_ai_suggestions(
     *,
     comparison: dict[str, Any],
@@ -718,7 +791,10 @@ async def generate_ai_suggestions(
     insights = comparison.get("insights", {})
     dimensional = comparison.get("dimensional", {})
 
-    period_lines = [f"- {p['label']}: {p['from']} → {p['to']} ({p['span_days']} days, per-day revenue {p['metrics'].get('revenue_per_day', 'n/a')})" for p in periods]
+    period_lines = [
+        f"- {p['label']}: {p['from']} → {p['to']} ({p['span_days']} days, per-day revenue {p['metrics'].get('revenue_per_day', 'n/a')})"
+        for p in periods
+    ]
     kpi_lines: list[str] = []
     for kc in kpi_comparison:
         vals = " → ".join(f"{v:,.0f}" for v in kc["values"])
@@ -729,14 +805,19 @@ async def generate_ai_suggestions(
         if pd_vals:
             pd_str = " → ".join(f"{v:,.0f}/day" for v in pd_vals)
             pd_txt = f" | per-day: {pd_str}"
-        kpi_lines.append(f"- {kc['label']}: {vals} (Δ {kc['total_delta']:+,.0f}, {pct_txt}){pd_txt} CAGR {kc.get('cagr_pct','n/a')}%")
+        kpi_lines.append(
+            f"- {kc['label']}: {vals} (Δ {kc['total_delta']:+,.0f}, {pct_txt}){pd_txt} CAGR {kc.get('cagr_pct', 'n/a')}%"
+        )
 
     dim_lines: list[str] = []
     for dim, payload in dimensional.items():
         top = payload.get("series", [])[:3]
         if not top:
             continue
-        items = ", ".join(f"{s['key']} {s['values'][0]:,.0f}→{s['values'][-1]:,.0f} ({s['pct_vs_first'] if s['pct_vs_first'] is not None else 'n/a'}%, CV {s.get('cv_pct','?')}%)" for s in top)
+        items = ", ".join(
+            f"{s['key']} {s['values'][0]:,.0f}→{s['values'][-1]:,.0f} ({s['pct_vs_first'] if s['pct_vs_first'] is not None else 'n/a'}%, CV {s.get('cv_pct', '?')}%)"
+            for s in top
+        )
         dim_lines.append(f"- {dim}: {items}")
 
     deterministic_bullets = "\n".join(
@@ -749,7 +830,7 @@ async def generate_ai_suggestions(
         ]
     )
 
-    prompt = f"""You are a senior BI analyst writing for a {role} in {org_name or 'the business'}.
+    prompt = f"""You are a senior BI analyst writing for a {role} in {org_name or "the business"}.
 
 Compare these periods head-to-head and give concise, actionable takeaways.
 
@@ -795,7 +876,7 @@ Rules:
         settings = get_settings()
         has_provider = bool(settings.groq_api_key or settings.gemini_api_key)
         if has_provider:
-            from app.services.ai.provider import get_ai_response, AIMessage
+            from app.services.ai.provider import AIMessage, get_ai_response
 
             reply = await get_ai_response(
                 [AIMessage(role="user", content=prompt)],
@@ -831,9 +912,9 @@ Rules:
     narrative = (
         f"**Executive Summary**\n{fallback_sections['summary']}\n\n"
         f"**What drove the change**\n" + "\n".join(f"- {b}" for b in fallback_sections["what_drove"]) + "\n\n"
-        f"**Risks & watch-outs**\n" + "\n".join(f"- {b}" for b in fallback_sections["risks"]) + "\n\n"
-        f"**Opportunities**\n" + "\n".join(f"- {b}" for b in fallback_sections["opportunities"]) + "\n\n"
-        f"**Next actions**\n" + "\n".join(f"- {b}" for b in fallback_sections["next_actions"])
+        "**Risks & watch-outs**\n" + "\n".join(f"- {b}" for b in fallback_sections["risks"]) + "\n\n"
+        "**Opportunities**\n" + "\n".join(f"- {b}" for b in fallback_sections["opportunities"]) + "\n\n"
+        "**Next actions**\n" + "\n".join(f"- {b}" for b in fallback_sections["next_actions"])
     )
     return {
         "summary": fallback_sections["summary"],

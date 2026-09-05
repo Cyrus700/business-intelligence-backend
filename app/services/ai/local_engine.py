@@ -578,7 +578,7 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
         from sqlalchemy import func as _func
         from sqlalchemy import select as _select
 
-        from app.models.identity import Organization, Profile
+        from app.models.identity import Organization
 
         is_super = f.org_id is None
         ql = q.lower()
@@ -599,17 +599,21 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
                 ]
                 if wants_list:
                     rows = (
-                        await db.execute(
-                            _select(Organization)
-                            .where(Organization.status == status_filter)
-                            .order_by(Organization.created_at.desc())
-                            .limit(15)
+                        (
+                            await db.execute(
+                                _select(Organization)
+                                .where(Organization.status == status_filter)
+                                .order_by(Organization.created_at.desc())
+                                .limit(15)
+                            )
                         )
-                    ).scalars().all()
+                        .scalars()
+                        .all()
+                    )
                     if rows:
                         lines.append("")
-                        lines.append(f"| Business | Status | Created |")
-                        lines.append(f"|---|---|---|")
+                        lines.append("| Business | Status | Created |")
+                        lines.append("|---|---|---|")
                         for o in rows:
                             created = o.created_at.date().isoformat() if getattr(o, "created_at", None) else "—"
                             lines.append(f"| {o.name} | {o.status} | {created} |")
@@ -620,12 +624,16 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
                 return "\n".join(lines)
             if status_filter == "legacy":
                 cnt = (
-                    await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_legacy.is_(True)))
+                    await db.execute(
+                        _select(_func.count()).select_from(Organization).where(Organization.is_legacy.is_(True))
+                    )
                 ).scalar() or 0
                 return f"**{cnt}** businesses are **legacy** workspaces (live)."
             if status_filter == "personal":
                 cnt = (
-                    await db.execute(_select(_func.count()).select_from(Organization).where(Organization.is_personal.is_(True)))
+                    await db.execute(
+                        _select(_func.count()).select_from(Organization).where(Organization.is_personal.is_(True))
+                    )
                 ).scalar() or 0
                 return f"**{cnt}** businesses are **personal** workspaces (live)."
 
@@ -633,13 +641,19 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
         if is_super:
             org_total = (await db.execute(_select(_func.count()).select_from(Organization))).scalar() or 0
             approved = (
-                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "approved"))
+                await db.execute(
+                    _select(_func.count()).select_from(Organization).where(Organization.status == "approved")
+                )
             ).scalar() or 0
             pending = (
-                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "pending"))
+                await db.execute(
+                    _select(_func.count()).select_from(Organization).where(Organization.status == "pending")
+                )
             ).scalar() or 0
             rejected = (
-                await db.execute(_select(_func.count()).select_from(Organization).where(Organization.status == "rejected"))
+                await db.execute(
+                    _select(_func.count()).select_from(Organization).where(Organization.status == "rejected")
+                )
             ).scalar() or 0
             # Validation: total should equal sum; if gap, explain
             calc = approved + pending + rejected
@@ -651,8 +665,10 @@ async def _platform(db: AsyncSession, f: Filters, q: str) -> str:
                 lines.append(f"  — note: {org_total - calc} in other/unknown status")
             if wants_list:
                 rows = (
-                    await db.execute(_select(Organization).order_by(Organization.created_at.desc()).limit(15))
-                ).scalars().all()
+                    (await db.execute(_select(Organization).order_by(Organization.created_at.desc()).limit(15)))
+                    .scalars()
+                    .all()
+                )
                 if rows:
                     lines.append("")
                     lines.append("| Business | Status | Created |")
@@ -718,14 +734,18 @@ async def _catalog_handler(db: AsyncSession, f: Filters, q: str) -> str:
 
         # Dynamic discovery: ask postgres what tables actually exist right now
         tables = (
-            await db.execute(
-                _text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema='public' AND table_type='BASE TABLE' "
-                    "AND table_name NOT LIKE 'alembic%' ORDER BY table_name"
+            (
+                await db.execute(
+                    _text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema='public' AND table_type='BASE TABLE' "
+                        "AND table_name NOT LIKE 'alembic%' ORDER BY table_name"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         # Friendly descriptions for the warehouse; unknown tables get a generic line
         descriptions = {
@@ -782,7 +802,9 @@ async def _catalog_handler(db: AsyncSession, f: Filters, q: str) -> str:
                 ).scalar()
                 if has_org and f.org_id is not None:
                     count = (
-                        await db.execute(_text(f'SELECT COUNT(*) FROM "{t}" WHERE org_id = :oid'), {"oid": str(f.org_id)})
+                        await db.execute(
+                            _text(f'SELECT COUNT(*) FROM "{t}" WHERE org_id = :oid'), {"oid": str(f.org_id)}
+                        )
                     ).scalar()
                 else:
                     # super-admin sees full platform count; isolated user sees their slice if column exists else global count
@@ -812,7 +834,21 @@ async def _catalog_handler(db: AsyncSession, f: Filters, q: str) -> str:
 async def _business(db: AsyncSession, f: Filters, q: str) -> str:
     # If the question is really a count/listing, delegate to the platform handler
     ql = q.lower()
-    if any(k in ql for k in ("how many", "count", "total", "number of", "registered", "list", "directory", "all business", "all organization", "are there")):
+    if any(
+        k in ql
+        for k in (
+            "how many",
+            "count",
+            "total",
+            "number of",
+            "registered",
+            "list",
+            "directory",
+            "all business",
+            "all organization",
+            "are there",
+        )
+    ):
         return await _platform(db, f, q)
     # Otherwise accurate single-workspace identity — resolve org name from DB, never guess
     org_id = f.org_id
@@ -892,7 +928,11 @@ async def _update_handler(db: AsyncSession, f: Filters, q: str) -> str:
         if platform_line:
             lines.append(platform_line)
         if coverage and coverage.get("first_date"):
-            lines.append(f"- **Data freshness:** {coverage['first_date']} → {coverage['last_date']} ({coverage['days_behind']} day(s) behind today), last upload {coverage['last_ingested_at']:%Y-%m-%d %H:%M} " if coverage.get("last_ingested_at") else f"- **Warehouse:** {coverage['first_date']} → {coverage['last_date']}")
+            lines.append(
+                f"- **Data freshness:** {coverage['first_date']} → {coverage['last_date']} ({coverage['days_behind']} day(s) behind today), last upload {coverage['last_ingested_at']:%Y-%m-%d %H:%M} "
+                if coverage.get("last_ingested_at")
+                else f"- **Warehouse:** {coverage['first_date']} → {coverage['last_date']}"
+            )
         # KPIs with change
         for metric in ("revenue", "orders", "avg_order_value", "gross_margin", "expense_total"):
             c = cards.get(metric)
@@ -929,7 +969,9 @@ async def _update_handler(db: AsyncSession, f: Filters, q: str) -> str:
         try:
             low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
             if low:
-                lines.append(f"\n- **Inventory:** {len(low)} product(s) below reorder — e.g. {', '.join((r['product'] or r['sku']) for r in low[:3])}")
+                lines.append(
+                    f"\n- **Inventory:** {len(low)} product(s) below reorder — e.g. {', '.join((r['product'] or r['sku']) for r in low[:3])}"
+                )
             else:
                 lines.append("\n- **Inventory:** all SKUs above reorder level — healthy")
         except Exception:
@@ -942,7 +984,7 @@ async def _update_handler(db: AsyncSession, f: Filters, q: str) -> str:
                 aq = aq.where(Anomaly.org_id == f.org_id)
             anoms = (await db.execute(aq)).scalars().all()
             if anoms:
-                latest = ", ".join(f"{a.metric.replace('_',' ')} {npr(a.observed_value)}" for a in anoms[:2])
+                latest = ", ".join(f"{a.metric.replace('_', ' ')} {npr(a.observed_value)}" for a in anoms[:2])
                 lines.append(f"- **Anomalies:** {len(anoms)} open — latest: {latest}")
             else:
                 lines.append("- **Anomalies:** none open — stable")
@@ -962,18 +1004,31 @@ async def _update_handler(db: AsyncSession, f: Filters, q: str) -> str:
                 fc = (await db.execute(fq)).scalars().all()
                 if fc:
                     total = sum(float(r.yhat) for r in fc)
-                    lines.append(f"- **Forecast (next {len(fc)} days):** {npr(total)} total (~{npr(total/len(fc))}/day, {model.model_type} v{model.version})")
+                    lines.append(
+                        f"- **Forecast (next {len(fc)} days):** {npr(total)} total (~{npr(total / len(fc))}/day, {model.model_type} v{model.version})"
+                    )
         except Exception:
             pass
 
         # Catalog hint for discoverability
         try:
-            tbl_cnt = (await db.execute(_text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name NOT LIKE 'alembic%'"))).scalar() or 0
-            lines.append(f"\n- **Data catalog:** {tbl_cnt} live tables — ask 'what tables do you have?' or 'sample <table>' to explore any new data instantly")
+            tbl_cnt = (
+                await db.execute(
+                    _text(
+                        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name NOT LIKE 'alembic%'"
+                    )
+                )
+            ).scalar() or 0
+            lines.append(
+                f"\n- **Data catalog:** {tbl_cnt} live tables — ask 'what tables do you have?' or 'sample <table>' to explore any new data instantly"
+            )
         except Exception:
             pass
 
-        lines += ["", "**Suggested action:** ask me anything specific — *'revenue yesterday'*, *'how many businesses are registered?'*, *'sample inventory_levels'* — every answer is live, precise, and scoped to you."]
+        lines += [
+            "",
+            "**Suggested action:** ask me anything specific — *'revenue yesterday'*, *'how many businesses are registered?'*, *'sample inventory_levels'* — every answer is live, precise, and scoped to you.",
+        ]
         return "\n".join(lines)
     except Exception:
         logger.warning("_update_handler failed", exc_info=True)
@@ -995,10 +1050,15 @@ async def _generic_fallback(db: AsyncSession, f: Filters) -> str:
             lines.append(f"- **Expenses:** {npr(exp)}")
         if not lines[1:]:
             lines.append("- No KPI data loaded yet — connect a data source on the **Data** page")
-        lines += ["", "Ask me about **revenue, expenses, products, inventory, anomalies, forecasts, or any table** — I query every table live."]
+        lines += [
+            "",
+            "Ask me about **revenue, expenses, products, inventory, anomalies, forecasts, or any table** — I query every table live.",
+        ]
         return "\n".join(lines)
     except Exception:
-        return "I couldn't read live data just now — please try again. The **Data** page shows your sources and freshness."
+        return (
+            "I couldn't read live data just now — please try again. The **Data** page shows your sources and freshness."
+        )
 
 
 async def _generic(db: AsyncSession, f: Filters) -> str:
