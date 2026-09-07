@@ -38,7 +38,11 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app /app/app
 COPY --from=builder /app/alembic /app/alembic
 COPY --from=builder /app/alembic.ini /app/alembic.ini
-RUN chown -R api:api /app/.venv /app/app /app/alembic /app/alembic.ini
+# Free-tier: prune venv tests/caches to shrink image ~300MB → ~180MB (scipy/pandas tests are 150MB+)
+RUN find /app/.venv -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true \
+ && find /app/.venv -type d -name "tests" -prune -exec rm -rf {} + 2>/dev/null || true \
+ && rm -rf /app/.venv/lib/python*/site-packages/pip /app/.venv/lib/python*/site-packages/setuptools 2>/dev/null || true \
+ && chown -R api:api /app/.venv /app/app /app/alembic /app/alembic.ini
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

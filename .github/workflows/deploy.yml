@@ -23,6 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
+      - name: Free disk space (GH runner, 14GB → 30GB)
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost 2>/dev/null || true
+          sudo docker system prune -af --volumes 2>&1 | tail -5 || true
+          sudo apt-get clean 2>/dev/null || true
+          df -h
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -123,23 +130,40 @@ jobs:
           # Pull GHCR (public) — no build on 1GB
           export TAG=$TAG
           export OWNER_LC=$OWNER_LC
+          # --- free-tier disk guard: EC2 is 30GB, image layers ~2GB each, so prune BEFORE pull ---
+          echo "→ pre-pull disk free (30GB guard)"
+          df -h || true
+          docker system df || true
+          # keep only the running images, drop everything else
+          docker image prune -af 2>&1 | tail -20 || true
+          docker builder prune -af 2>&1 | tail -20 || true
+          docker container prune -f 2>&1 | tail -5 || true
+          sudo journalctl --vacuum-size=100M 2>&1 | tail -5 || sudo journalctl --vacuum-time=1d 2>&1 | tail -5 || true
+          sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+          sudo apt-get clean 2>/dev/null || true
+          # containerd overlayfs snapshot leftovers (the exact path from the error)
+          sudo rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/new-* 2>/dev/null || true
+          df -h || true
           # Update compose image tag (lowercase)
           sed -i "s|image: .*bi-backend:.*|image: ghcr.io/$OWNER_LC/bi-backend:$TAG|" \$COMPOSE || true
           if grep -q "ghcr.io" \$COMPOSE; then
             if [ -f ~/ghcr.token ]; then cat ~/ghcr.token | docker login ghcr.io -u $OWNER_LC --password-stdin || true; fi
-            docker compose -f \$COMPOSE pull api || docker pull ghcr.io/$OWNER_LC/bi-backend:$TAG
+            docker compose -f \$COMPOSE pull api 2>&1 | tail -100 || docker pull ghcr.io/$OWNER_LC/bi-backend:$TAG 2>&1 | tail -100
           else
             docker compose -f \$COMPOSE build api
           fi
           echo "→ migrate"
-          docker compose -f \$COMPOSE run --rm api alembic upgrade heads || docker compose -f \$COMPOSE run --rm api python -m alembic upgrade heads || docker compose -f \$COMPOSE run --rm api uv run alembic upgrade heads
+          docker compose -f \$COMPOSE run --rm api alembic upgrade head 2>&1 | tail -30 || docker compose -f \$COMPOSE run --rm api python -m alembic upgrade head 2>&1 | tail -30 || docker compose -f \$COMPOSE run --rm api uv run alembic upgrade head 2>&1 | tail -30
           echo "→ up -d"
           docker compose -f \$COMPOSE up -d api
           sleep 5
           curl -fsS http://127.0.0.1:8000/api/v1/health | head -c 200; echo " — backend ok"
           docker compose -f \$COMPOSE ps
-          # Free-tier disk 30GB prune
-          docker image prune -f --filter "until=24h" || true
+          # Free-tier disk 30GB prune (post-deploy, keep recent)
+          docker image prune -f --filter "until=12h" 2>&1 | tail -10 || true
+          docker builder prune -f --filter "until=24h" 2>&1 | tail -10 || true
+          df -h | head -n 10 || true
+          docker system df || true
           EOSSH
 
       - name: Smoke via nginx
