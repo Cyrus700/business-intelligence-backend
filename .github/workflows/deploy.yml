@@ -140,12 +140,13 @@ jobs:
             echo "→ patch GOOGLE_REDIRECT_URI to prod"
             sed -i "s|^GOOGLE_REDIRECT_URI=.*|GOOGLE_REDIRECT_URI=https://api.insightflowai.tech/api/v1/auth/google/callback|" business-intelligence-backend/.env || true
           fi
-          # rate_limit_per_minute default moved 240→600 in code (dashboard fans out
-          # 25+ parallel GETs on first paint); the persistent EC2 .env predates that
-          # and silently overrides the new default, so it needs patching explicitly.
-          if grep -q "^RATE_LIMIT_PER_MINUTE=240" business-intelligence-backend/.env 2>/dev/null; then
-            echo "→ bump stale RATE_LIMIT_PER_MINUTE 240 → 600"
-            sed -i "s/^RATE_LIMIT_PER_MINUTE=240/RATE_LIMIT_PER_MINUTE=600/" business-intelligence-backend/.env || true
+          # rate_limit: 240→600→10000 — user wants 0×429 (dashboard 28 parallel
+          # must all 200). EC2 .env predates code defaults and overrides them.
+          if grep -q "^RATE_LIMIT_PER_MINUTE=" business-intelligence-backend/.env 2>/dev/null; then
+            echo "→ bump RATE_LIMIT_PER_MINUTE → 10000 (no 429)"
+            sed -i "s/^RATE_LIMIT_PER_MINUTE=.*/RATE_LIMIT_PER_MINUTE=10000/" business-intelligence-backend/.env || true
+          else
+            echo "RATE_LIMIT_PER_MINUTE=10000" >> business-intelligence-backend/.env
           fi
           cat business-intelligence-backend/.env | grep -E "FRONTEND_ORIGINS|GOOGLE_REDIRECT|JWT_SECRET" | sed "s/JWT_SECRET=.*/JWT_SECRET=***/" || true
           # Pull GHCR (public) — no build on 1GB

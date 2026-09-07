@@ -67,7 +67,7 @@ STRICT_PATHS = (
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, limit_per_minute: int = 600, strict_per_minute: int = 20) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, app, limit_per_minute: int = 10000, strict_per_minute: int = 20) -> None:  # type: ignore[no-untyped-def]
         super().__init__(app)
         self.default = FixedWindowLimiter(limit_per_minute)
         self.strict = FixedWindowLimiter(strict_per_minute)

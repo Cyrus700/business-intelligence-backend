@@ -113,10 +113,10 @@ class Settings(BaseSettings):
     )
 
     # ── Rate limiting ─────────────────────────────────────────────────────
-    # Dashboard first paint is ~25 parallel GETs; 240 was tight with
-    # multiple tabs / rapid filter changes → 429 storm (430 req in screenshot).
-    # 600 sustains ~10/s with burst headroom, still blocks real abuse.
-    rate_limit_per_minute: int = Field(default=600, ge=10, le=100_000)
+    # Dashboard: ~28 parallel GETs on first paint. User wants 0×429 — all must
+    # 200. 600 still 429'd with burst. 10000 is effectively no limit for
+    # legitimate use while STRICT paths (login) stay throttled at 20/min.
+    rate_limit_per_minute: int = Field(default=10000, ge=10, le=100_000)
 
     # ------------------------------------------------------------------
     # Validators
