@@ -13,7 +13,7 @@ import re
 import warnings
 from functools import lru_cache
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,11 @@ class Settings(BaseSettings):
     env: str = Field(default="dev", description="Runtime env: dev|test|ci|prod")
     database_url: str = Field(default="", description="Postgres DSN (postgresql+asyncpg://)")
 
-    jwt_secret: str = Field(default="", description="HS256 secret for JWT mint/verify")
+    jwt_secret: str = Field(
+        default="",
+        description="HS256 secret for JWT mint/verify",
+        validation_alias=AliasChoices("jwt_secret", "supabase_jwt_secret", "JWT_SECRET", "SUPABASE_JWT_SECRET"),
+    )
     jwt_audience: str = Field(default="authenticated")
     jwt_expiry_hours: int = Field(default=24, ge=1, le=720, description="Auth token TTL in hours (prod default 24h)")
     jwt_reset_expiry_minutes: int = Field(default=30, ge=5, le=120, description="Password-reset token TTL")
