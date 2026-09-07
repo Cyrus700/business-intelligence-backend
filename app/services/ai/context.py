@@ -118,15 +118,25 @@ async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DA
         pass
 
     try:
+        # Use coverage to distinguish genuine zero vs empty warehouse for personal users
+        try:
+            cov = await data_coverage(db, org_id=org_id)
+            is_empty = (cov.get("row_count") == 0) or (cov.get("first_date") is None)
+        except Exception:
+            is_empty = False
         cards = {c["metric"]: c for c in await kpi_summary(db, f)}
-        for metric in ("revenue", "orders", "avg_order_value", "gross_margin", "expense_total"):
-            c = cards.get(metric)
-            if not c:
-                continue
-            label = metric.replace("_", " ")
-            change = c.get("change_pct")
-            trend = f" ({(change or 0):+.1f}% vs previous {days}d)" if change is not None else ""
-            lines.append(f"- {label}: {npr(c['value'])}{trend}")
+        # If empty, emit single empty notice instead of zero lines
+        if is_empty and all(float((cards.get(m) or {}).get("value") or 0) == 0 for m in ("revenue", "orders", "expense_total")):
+            lines.append("- No analytics data loaded yet — upload your business data to populate revenue, orders, and expenses. Your personal workspace is empty until you add data.")
+        else:
+            for metric in ("revenue", "orders", "avg_order_value", "gross_margin", "expense_total"):
+                c = cards.get(metric)
+                if not c:
+                    continue
+                label = metric.replace("_", " ")
+                change = c.get("change_pct")
+                trend = f" ({(change or 0):+.1f}% vs previous {days}d)" if change is not None else ""
+                lines.append(f"- {label}: {npr(c['value'])}{trend}")
     except Exception:
         pass
 

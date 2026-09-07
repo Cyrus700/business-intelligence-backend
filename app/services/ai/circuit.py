@@ -18,11 +18,19 @@ COOLDOWN_SECONDS = 300  # how long a tripped provider is skipped (5 min)
 
 # Approximate list prices per 1M tokens (inputs, outputs) — used only for
 # cost *estimates* in the ops view; keep in sync with the configured models.
+# OpenRouter free tier (``:free`` suffix) is $0, Groq/Gemini free are ~$0 as well for ops.
 PRICING_PER_1M = {
     "openai/gpt-oss-120b": (0.15, 0.75),
     "openai/gpt-oss-20b": (0.10, 0.50),
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-2.5-flash": (0.30, 2.50),
+    # OpenRouter free — high quota, $0
+    "meta-llama/llama-3.1-8b-instruct:free": (0.0, 0.0),
+    "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0),
+    "mistralai/mistral-7b-instruct:free": (0.0, 0.0),
+    "google/gemma-2-9b-it:free": (0.0, 0.0),
+    "google/gemma-3-4b-it:free": (0.0, 0.0),
+    "qwen/qwen-2-7b-instruct:free": (0.0, 0.0),
 }
 DEFAULT_PRICE = (0.30, 0.60)  # unknown models
 

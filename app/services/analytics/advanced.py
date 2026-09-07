@@ -105,7 +105,17 @@ async def waterfall(
         .group_by(_col(dimension))
     )
     prev_from, prev_to = f.previous_period()
-    pf = Filters(date_from=prev_from, date_to=prev_to, region=f.region, channel=f.channel, category=f.category)
+    pf = Filters(
+        date_from=prev_from,
+        date_to=prev_to,
+        region=f.region,
+        channel=f.channel,
+        category=f.category,
+        regions=f.regions,
+        channels=f.channels,
+        categories=f.categories,
+        org_id=f.org_id,
+    )
     prev_stmt = (
         select(_col(dimension).label("k"), func.sum(_METRIC_AGG[metric]).label("v"))
         .select_from(_join_for(dimension))

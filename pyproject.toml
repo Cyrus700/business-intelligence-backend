@@ -27,6 +27,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "groq>=0.18",
     "google-genai>=1.14",
+    "openai>=1.50",
 ]
 
 

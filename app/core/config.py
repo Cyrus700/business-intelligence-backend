@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-2.0-flash")
 
+    openrouter_api_key: str = Field(default="", description="OpenRouter API key (free tier, high quota) — primary provider")
+    openrouter_model: str = Field(
+        default="meta-llama/llama-3.1-8b-instruct:free",
+        description="OpenRouter model ID (free tier). Good tool-calling free: meta-llama/llama-3.1-8b-instruct:free, mistralai/mistral-7b-instruct:free, google/gemma-3-4b-it:free",
+    )
+    openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", description="OpenRouter API base URL")
+
     # ── Email / SMTP ──────────────────────────────────────────────────────
     smtp_host: str = Field(default="", description="SMTP host (empty disables email)")
     smtp_port: int = Field(default=587, ge=1, le=65535)

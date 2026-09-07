@@ -15,7 +15,7 @@ def _ninety_days_ago(today: date) -> date:
     return today - timedelta(days=90)
 
 
-async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def revenue_recommendations(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     found = []
     thirty = today - timedelta(days=30)
     ninety = today - timedelta(days=90)
@@ -26,10 +26,11 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
                    ROW_NUMBER() OVER (ORDER BY SUM(total_amount) DESC) AS rnk
             FROM sales_transactions
             WHERE txn_date BETWEEN :s AND :e
+              AND (:oid IS NULL OR org_id = :oid)
             GROUP BY channel
             ORDER BY revenue DESC
         """),
-        {"s": thirty, "e": today},
+        {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     channels = ch.all()
     if len(channels) >= 2:
@@ -65,9 +66,10 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
             SELECT DATE_TRUNC('day', txn_date) AS day, SUM(total_amount) AS revenue
             FROM sales_transactions
             WHERE txn_date BETWEEN :s AND :e
+              AND (:oid IS NULL OR org_id = :oid)
             GROUP BY day ORDER BY revenue DESC LIMIT 1
         """),
-        {"s": ninety, "e": today},
+        {"s": ninety, "e": today, "oid": str(org_id) if org_id else None},
     )
     peak_row = peak.one_or_none()
     if peak_row:
@@ -77,10 +79,11 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
                     SELECT SUM(total_amount) AS daily
                     FROM sales_transactions
                     WHERE txn_date BETWEEN :s AND :e
+                      AND (:oid IS NULL OR org_id = :oid)
                     GROUP BY txn_date
                 ) d
             """),
-            {"s": ninety, "e": today},
+            {"s": ninety, "e": today, "oid": str(org_id) if org_id else None},
         )
         avg_val = float(avg.scalar_one() or 0)
         if avg_val > 0 and float(peak_row.revenue) > avg_val * 2.5:
@@ -107,7 +110,7 @@ async def revenue_recommendations(db: AsyncSession, today: date) -> list[dict[st
     return found
 
 
-async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def cost_recommendations(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     found = []
     thirty = today - timedelta(days=30)
 
@@ -116,11 +119,12 @@ async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, 
             SELECT category, SUM(amount) AS total
             FROM expenses
             WHERE expense_date BETWEEN :s AND :e
+              AND (:oid IS NULL OR org_id = :oid)
             GROUP BY category
             ORDER BY total DESC
             LIMIT 3
         """),
-        {"s": thirty, "e": today},
+        {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     expenses = top_exp.all()
     if expenses:
@@ -152,9 +156,10 @@ async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, 
             SELECT DATE_TRUNC('month', expense_date) AS month, SUM(amount) AS total
             FROM expenses
             WHERE expense_date >= :s
+              AND (:oid IS NULL OR org_id = :oid)
             GROUP BY month ORDER BY month
         """),
-        {"s": _ninety_days_ago(today)},
+        {"s": _ninety_days_ago(today), "oid": str(org_id) if org_id else None},
     )
     months = exp_trend.all()
     if len(months) >= 2:
@@ -184,7 +189,7 @@ async def cost_recommendations(db: AsyncSession, today: date) -> list[dict[str, 
     return found
 
 
-async def pricing_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def pricing_recommendations(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     found = []
     thirty = today - timedelta(days=30)
 
@@ -197,12 +202,14 @@ async def pricing_recommendations(db: AsyncSession, today: date) -> list[dict[st
             JOIN products p ON p.id = st.product_id
             WHERE st.txn_date BETWEEN :s AND :e
               AND st.discount > 0
+              AND (:oid IS NULL OR st.org_id = :oid)
+              AND (:oid IS NULL OR p.org_id = :oid)
             GROUP BY p.id, p.name, p.sku
             HAVING AVG(st.discount) > 20 AND COUNT(*) >= 10
             ORDER BY AVG(st.discount) DESC
             LIMIT 3
         """),
-        {"s": thirty, "e": today},
+        {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     for row in deep_discount.all():
         rev_impact = round(float(row.revenue) / float(row.txns), 2)
@@ -235,12 +242,14 @@ async def pricing_recommendations(db: AsyncSession, today: date) -> list[dict[st
             JOIN products p ON p.id = st.product_id
             WHERE st.txn_date BETWEEN :s AND :e
               AND st.discount > 30
+              AND (:oid IS NULL OR st.org_id = :oid)
+              AND (:oid IS NULL OR p.org_id = :oid)
             GROUP BY p.id, p.name, p.sku
             HAVING AVG(st.discount) > 30 AND COUNT(*) >= 5
             ORDER BY AVG(st.discount) DESC
             LIMIT 3
         """),
-        {"s": thirty, "e": today},
+        {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     for row in margin_risk.all():
         found.append(
@@ -265,7 +274,7 @@ async def pricing_recommendations(db: AsyncSession, today: date) -> list[dict[st
     return found
 
 
-async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def region_recommendations(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     found = []
     thirty = today - timedelta(days=30)
 
@@ -275,10 +284,11 @@ async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str
                    ROW_NUMBER() OVER (ORDER BY SUM(total_amount) DESC) AS rnk
             FROM sales_transactions
             WHERE txn_date BETWEEN :s AND :e
+              AND (:oid IS NULL OR org_id = :oid)
             GROUP BY region
             ORDER BY revenue DESC
         """),
-        {"s": thirty, "e": today},
+        {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     regions = reg.all()
     if len(regions) >= 2:
@@ -310,7 +320,7 @@ async def region_recommendations(db: AsyncSession, today: date) -> list[dict[str
     return found
 
 
-async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict[str, Any]]:
+async def diagnostic_recommendations(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
     """Suggestions derived from *why* the numbers moved, not just what they are.
 
     The other generators fire on levels and gaps ("this channel is behind that
@@ -336,7 +346,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
     )
 
     # ── the product behind a decline ──────────────────────────────────────
-    breakdown = await explain_change(db, "product", current, previous, top_n=3)
+    breakdown = await explain_change(db, "product", current, previous, top_n=3, org_id=org_id)
     if breakdown.total_delta < 0 and breakdown.drags:
         worst = breakdown.drags[0]
         share = abs(worst.contribution_pct)
@@ -384,7 +394,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
         )
 
     # ── volume problem or value problem ───────────────────────────────────
-    cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1]))}
+    cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1], org_id=org_id))}
     rev, orders = cards.get("revenue"), cards.get("orders")
     if rev and orders and rev.get("previous_value") and orders.get("previous_value"):
         bridge = price_volume_bridge(
@@ -429,7 +439,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
             )
 
     # ── the month is heading for a miss ───────────────────────────────────
-    projection = await project_current_period(db, metric="revenue", period="month")
+    projection = await project_current_period(db, metric="revenue", period="month", org_id=org_id)
     month_start, _ = month_bounds(today)
     if projection.days_elapsed >= 5 and projection.days_remaining >= 3:
         prev_month_end = month_start - timedelta(days=1)
@@ -437,7 +447,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
             c["metric"]: c
             for c in await kpi_summary(
                 db,
-                Filters(date_from=prev_month_end.replace(day=1), date_to=prev_month_end),
+                Filters(date_from=prev_month_end.replace(day=1), date_to=prev_month_end, org_id=org_id),
             )
         }
         last_month = float((prev_cards.get("revenue") or {}).get("value") or 0.0)
@@ -471,7 +481,7 @@ async def diagnostic_recommendations(db: AsyncSession, today: date) -> list[dict
             )
 
     # ── too much resting on too few ───────────────────────────────────────
-    conc = await analyse_concentration(db, "product", *current)
+    conc = await analyse_concentration(db, "product", *current, org_id=org_id)
     if conc.members >= 3 and conc.risk.startswith("high"):
         top1 = round(conc.top1_share_pct, 1)
         top3 = round(conc.top3_share_pct, 1)

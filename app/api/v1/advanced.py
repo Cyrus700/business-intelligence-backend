@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DbSession, get_current_user
+from app.api.deps import CurrentUser, DbSession, get_current_user, is_super_admin
 from app.api.v1.analytics import FiltersDep
 from app.models import Product, SalesTransaction
 from app.services.analytics import advanced
@@ -20,6 +20,14 @@ from app.services.ml.scenario import monte_carlo
 from app.services.ml.segmentation import segment
 
 router = APIRouter(prefix="/advanced", tags=["advanced"], dependencies=[Depends(get_current_user)])
+
+
+def _scoped_filters(f: Filters, user: CurrentUser) -> Filters:
+    import dataclasses
+
+    if is_super_admin(user):
+        return f
+    return dataclasses.replace(f, org_id=user.org_id)
 
 
 async def _daily_series(db: AsyncSession, f: Filters, metric: str = "revenue") -> list[dict]:
@@ -47,22 +55,25 @@ async def _daily_series(db: AsyncSession, f: Filters, metric: str = "revenue") -
 
 @router.get("/decomposition-tree")
 async def decomposition_tree_endpoint(
-    db: DbSession, f: FiltersDep, metric: str = "revenue", hierarchy: str = "region,category,product"
+    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", hierarchy: str = "region,category,product"
 ):
+    f = _scoped_filters(f, user)
     return await advanced.decomposition_tree(db, f, metric=metric, hierarchy=hierarchy)
 
 
 @router.get("/waterfall")
 async def waterfall_endpoint(
-    db: DbSession, f: FiltersDep, metric: str = "revenue", dimension: str = "category", top_n: int = 8
+    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", dimension: str = "category", top_n: int = 8
 ):
+    f = _scoped_filters(f, user)
     return await advanced.waterfall(db, f, metric=metric, dimension=dimension, top_n=top_n)
 
 
 @router.get("/heatmap")
 async def heatmap_endpoint(
-    db: DbSession, f: FiltersDep, metric: str = "revenue", row_dim: str = "region", col_dim: str = "category"
+    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", row_dim: str = "region", col_dim: str = "category"
 ):
+    f = _scoped_filters(f, user)
     return await advanced.heatmap(db, f, metric=metric, row_dim=row_dim, col_dim=col_dim)
 
 
@@ -70,25 +81,29 @@ async def heatmap_endpoint(
 async def scatter_endpoint(
     db: DbSession,
     f: FiltersDep,
+    user: CurrentUser,
     dimension: str = "product",
     x: str = "revenue",
     y: str = "margin_pct",
     size: str = "units",
 ):
+    f = _scoped_filters(f, user)
     return await advanced.scatter(db, f, dimension=dimension, x=x, y=y, size=size)
 
 
 @router.get("/funnel")
 async def funnel_endpoint(
-    db: DbSession, f: FiltersDep, metric: str = "revenue", dimension: str = "category", top_n: int = 8
+    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", dimension: str = "category", top_n: int = 8
 ):
+    f = _scoped_filters(f, user)
     return await advanced.funnel(db, f, metric=metric, dimension=dimension, top_n=top_n)
 
 
 @router.get("/radar")
 async def radar_endpoint(
-    db: DbSession, f: FiltersDep, dimension: str = "region", metrics: str = "revenue,orders,gross_margin,aov,units"
+    db: DbSession, f: FiltersDep, user: CurrentUser, dimension: str = "region", metrics: str = "revenue,orders,gross_margin,aov,units"
 ):
+    f = _scoped_filters(f, user)
     return await advanced.radar(db, f, dimension=dimension, metrics=metrics)
 
 
@@ -96,20 +111,24 @@ async def radar_endpoint(
 async def small_multiples_endpoint(
     db: DbSession,
     f: FiltersDep,
+    user: CurrentUser,
     metric: str = "revenue",
     dimension: str = "region",
     granularity: str = "month",
 ):
+    f = _scoped_filters(f, user)
     return await advanced.small_multiples(db, f, metric=metric, dimension=dimension, granularity=granularity)
 
 
 @router.get("/key-influencers")
-async def key_influencers_endpoint(db: DbSession, f: FiltersDep, target: str = "revenue"):
+async def key_influencers_endpoint(db: DbSession, f: FiltersDep, user: CurrentUser, target: str = "revenue"):
+    f = _scoped_filters(f, user)
     return await key_influencers(db, f, target=target)
 
 
 @router.get("/segmentation")
-async def segmentation_endpoint(db: DbSession, f: FiltersDep, dimension: str = "product", n_clusters: int = 4):
+async def segmentation_endpoint(db: DbSession, f: FiltersDep, user: CurrentUser, dimension: str = "product", n_clusters: int = 4):
+    f = _scoped_filters(f, user)
     return await segment(db, f, dimension=dimension, n_clusters=n_clusters)
 
 
@@ -117,11 +136,13 @@ async def segmentation_endpoint(db: DbSession, f: FiltersDep, dimension: str = "
 async def forecast_scenarios_endpoint(
     db: DbSession,
     f: FiltersDep,
+    user: CurrentUser,
     metric: str = "revenue",
     horizon: int = Query(30, ge=1, le=180),
     n_paths: int = Query(500, ge=50, le=2000),
     model: str | None = None,
 ):
+    f = _scoped_filters(f, user)
     series = await _daily_series(db, f, metric=metric)
     if len(series) < 7:
         return {"error": "insufficient history for probabilistic forecast", "points": 0}
@@ -132,8 +153,9 @@ async def forecast_scenarios_endpoint(
 
 
 @router.get("/model-comparison")
-async def model_comparison_endpoint(db: DbSession, f: FiltersDep, metric: str = "revenue"):
+async def model_comparison_endpoint(db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue"):
     """Holdout MAPE for every candidate model on the selected series."""
+    f = _scoped_filters(f, user)
     series = await _daily_series(db, f, metric=metric)
     if len(series) < fc.HOLDOUT_DAYS + 14:
         return {"error": "need at least ~104 days of history", "candidates": []}

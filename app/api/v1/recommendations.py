@@ -41,7 +41,8 @@ async def list_recommendations(
 ) -> list[RecommendationOut]:
     from app.services.ml.recommendations import generate_all_recommendations, scope_recommendations
 
-    recs = await generate_all_recommendations(db)
+    org_id = None if getattr(user, "is_super_admin", False) else user.org_id
+    recs = await generate_all_recommendations(db, org_id=org_id)
     recs = await scope_recommendations(db, recs, user)
     if min_severity:
         order = {"critical": 3, "warning": 2, "info": 1}
@@ -51,17 +52,13 @@ async def list_recommendations(
 
 
 @router.get("/history", response_model=list[RecommendationOut])
-async def recommendation_history(db: DbSession) -> list[RecommendationOut]:
+async def recommendation_history(db: DbSession, user: CurrentUser) -> list[RecommendationOut]:
     """Persisted recommendations with their decision status (Phase 8 audit trail)."""
+    stmt = select(Insight).where(Insight.insight_type == "recommendation")
+    if not getattr(user, "is_super_admin", False):
+        stmt = stmt.where(Insight.org_id == user.org_id)
     rows = (
-        (
-            await db.execute(
-                select(Insight)
-                .where(Insight.insight_type == "recommendation")
-                .order_by(Insight.generated_at.desc())
-                .limit(100)
-            )
-        )
+        (await db.execute(stmt.order_by(Insight.generated_at.desc()).limit(100)))
         .scalars()
         .all()
     )
@@ -108,6 +105,8 @@ async def decide_recommendation(
     insight = await db.get(Insight, insight_id)
     if insight is None or insight.insight_type != "recommendation":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Recommendation not found")
+    if not getattr(user, "is_super_admin", False) and insight.org_id != user.org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Recommendation not found")
 
     insight.status = body.decision
     if insight.dedupe_key:
@@ -116,6 +115,7 @@ async def decide_recommendation(
                 rec_key=insight.dedupe_key,
                 user_id=user.id,
                 action=body.decision,
+                org_id=insight.org_id,
             )
         )
     await db.commit()
@@ -142,7 +142,9 @@ async def decide_recommendation(
 )
 async def generate_recommendations(
     db: DbSession,
+    user: CurrentUser,
 ) -> dict[str, int]:
     from app.services.ml.recommendations import persist_recommendations
 
-    return await persist_recommendations(db)
+    org_id = None if getattr(user, "is_super_admin", False) else user.org_id
+    return await persist_recommendations(db, org_id=org_id)

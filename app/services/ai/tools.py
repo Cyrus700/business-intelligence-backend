@@ -376,7 +376,8 @@ async def _recommendations(db: AsyncSession, user: Profile, **kwargs: Any) -> st
         scope_recommendations,
     )
 
-    recs = await scope_recommendations(db, await generate_all_recommendations(db), user)
+    org_id = _org_id_for(user)
+    recs = await scope_recommendations(db, await generate_all_recommendations(db, org_id=org_id), user)
     limit = max(1, min(int(kwargs.get("limit") or 5), 15))
     if not recs:
         return "No open recommendations right now."

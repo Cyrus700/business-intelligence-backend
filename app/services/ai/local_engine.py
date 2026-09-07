@@ -321,6 +321,10 @@ async def _forecast(db: AsyncSession, f: Filters, q: str) -> str:
 
 
 async def _inventory(db: AsyncSession, f: Filters, q: str) -> str:
+    # Check if any inventory exists at all for empty personal workspace
+    all_levels = await inventory_levels(db, below_reorder_only=False, org_id=f.org_id)
+    if not all_levels:
+        return "No inventory data loaded yet — upload your inventory snapshot to see reorder alerts. Your personal workspace is empty until you add data."
     low = await inventory_levels(db, below_reorder_only=True, org_id=f.org_id)
     if not low:
         return "Good news — **no products are below their reorder level** right now. Inventory looks healthy."

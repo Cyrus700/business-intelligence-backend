@@ -120,6 +120,175 @@ class BaseAIProvider(ABC):
         self._circuit().record_failure()
 
 
+class OpenRouterProvider(BaseAIProvider):
+    """Primary provider — OpenRouter free tier, high quota, OpenAI-compatible.
+
+    Uses the OpenAI Python SDK with ``base_url=https://openrouter.ai/api/v1``.
+    The free model (default ``meta-llama/llama-3.1-8b-instruct:free``) is
+    selected for strong tool-calling, low latency, and generous daily quota;
+    any ``:free`` suffix model on OpenRouter can be swapped via
+    ``OPENROUTER_MODEL`` without code changes. Rate-limit / auth errors trip
+    the circuit breaker and fall through to Groq → Gemini.
+    """
+
+    circuit_name = "openrouter"
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.api_key = settings.openrouter_api_key
+        self.model = settings.openrouter_model or "meta-llama/llama-3.1-8b-instruct:free"
+        self.base_url = settings.openrouter_base_url or "https://openrouter.ai/api/v1"
+
+    def model_id(self) -> str:
+        return self.model
+
+    def _msgs(self, messages: list[AIMessage], system_prompt: str | None) -> list[dict]:
+        import json
+
+        msgs: list[dict] = []
+        if system_prompt:
+            msgs.append({"role": "system", "content": system_prompt})
+        for m in messages:
+            if m.role == "tool":
+                msgs.append(
+                    {
+                        "role": "tool",
+                        "content": m.content,
+                        "tool_call_id": m.tool_call_id or "",
+                        **({"name": m.name} if m.name else {}),
+                    }
+                )
+                continue
+            entry: dict[str, Any] = {"role": m.role, "content": m.content or ""}
+            if m.tool_calls:
+                entry["tool_calls"] = [
+                    {
+                        "id": c.id,
+                        "type": "function",
+                        "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
+                    }
+                    for c in m.tool_calls
+                ]
+                entry["content"] = m.content or None
+            msgs.append(entry)
+        return msgs
+
+    def _client(self):
+        from openai import AsyncOpenAI
+
+        # OpenRouter requires HTTP-Referer and X-Title for free-tier analytics
+        # (optional but helps with quota). We set them to the platform URL.
+        return AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            default_headers={
+                "HTTP-Referer": "https://insightflowai.tech",
+                "X-Title": "InsightFlow AI",
+            },
+        )
+
+    async def chat(self, messages: list[AIMessage], system_prompt: str | None = None) -> str:
+        if not self.api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not configured")
+        if await self._circuit_open():
+            raise RuntimeError("openrouter circuit open")
+        try:
+            client = self._client()
+            started = time.monotonic()
+            resp = await client.chat.completions.create(
+                model=self.model,
+                messages=self._msgs(messages, system_prompt),
+                temperature=RESPONSE_TEMPERATURE,
+                max_tokens=2048,
+            )
+            reply = resp.choices[0].message.content or ""
+            self._record_success(
+                int((time.monotonic() - started) * 1000),
+                " ".join(m.content for m in messages),
+                reply,
+            )
+            return reply
+        except Exception as e:
+            self._record_failure()
+            logger.warning("OpenRouter API error: %s", e)
+            raise
+
+    async def chat_with_tools(
+        self,
+        messages: list[AIMessage],
+        tools: list[dict],
+        system_prompt: str | None = None,
+        tool_choice: str = "auto",
+    ) -> ToolResponse:
+        if not self.api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not configured")
+        if await self._circuit_open():
+            raise RuntimeError("OpenRouter circuit open")
+        try:
+            client = self._client()
+            started = time.monotonic()
+            resp = await client.chat.completions.create(
+                model=self.model,
+                messages=self._msgs(messages, system_prompt),
+                tools=tools or None,
+                tool_choice=tool_choice if tools else None,
+                temperature=RESPONSE_TEMPERATURE,
+                max_tokens=2048,
+            )
+            msg = resp.choices[0].message
+            reply_text = msg.content or ""
+            calls = []
+            for idx, t in enumerate(getattr(msg, "tool_calls", None) or []):
+                fn = getattr(t, "function", None)
+                calls.append(
+                    ToolCall(
+                        id=getattr(t, "id", "") or f"call_{idx}",
+                        name=(fn.name if fn else ""),
+                        arguments=_json_loads(fn.arguments if fn else "{}"),
+                    )
+                )
+            self._record_success(
+                int((time.monotonic() - started) * 1000),
+                " ".join(m.content for m in messages),
+                reply_text,
+            )
+            return ToolResponse(content=reply_text, tool_calls=calls)
+        except Exception as e:
+            self._record_failure()
+            logger.warning("OpenRouter tool-call error: %s", e)
+            raise
+
+    async def chat_stream(self, messages: list[AIMessage], system_prompt: str | None = None) -> AsyncIterator[str]:
+        if not self.api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not configured")
+        if await self._circuit_open():
+            raise RuntimeError("OpenRouter circuit open")
+        try:
+            client = self._client()
+            stream = await client.chat.completions.create(
+                model=self.model,
+                messages=self._msgs(messages, system_prompt),
+                temperature=RESPONSE_TEMPERATURE,
+                max_tokens=2048,
+                stream=True,
+            )
+            started = time.monotonic()
+            async for chunk in stream:
+                if getattr(chunk, "choices", None):
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+            self._record_success(
+                int((time.monotonic() - started) * 1000),
+                " ".join(m.content for m in messages),
+                "",
+            )
+        except Exception as e:
+            self._record_failure()
+            logger.warning("OpenRouter stream error: %s", e)
+            raise
+
+
 class GroqProvider(BaseAIProvider):
     circuit_name = "groq"
 
@@ -646,8 +815,20 @@ async def get_ai_stream(
 
 
 def _providers() -> list[BaseAIProvider]:
+    """All AI uses OpenRouter (free, high-quota) → Groq → Gemini, in that order.
+
+    OpenRouter is primary because the free tier (e.g. ``meta-llama/llama-3.1-8b-instruct:free``)
+    has an order-of-magnitude higher daily quota than Groq/Gemini free tiers and is
+    OpenAI-compatible, so tool-calling works without code changes. Every AI path
+    (``get_ai_response``, ``get_ai_stream``, ``chat_with_tools``) goes through
+    this list via ``_providers()``, so the single change covers the entire
+    platform. Groq and Gemini remain as resilient fallbacks; the circuit breaker
+    (`app/services/ai/circuit.py:16`) isolates a failing provider for 5 min.
+    """
     settings = get_settings()
     providers: list[BaseAIProvider] = []
+    if settings.openrouter_api_key:
+        providers.append(OpenRouterProvider())
     if settings.groq_api_key:
         providers.append(GroqProvider())
     if settings.gemini_api_key:

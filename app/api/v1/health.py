@@ -52,7 +52,7 @@ class SystemHealthOut(BaseModel):
     overall: str
 
 
-async def _business_health(db: DbSession) -> dict[str, Any]:
+async def _business_health(db: DbSession, org_id=None) -> dict[str, Any]:
     """Transparent Business Health Score.
 
     Formula: weighted mean of five components, each 0-100:
@@ -74,28 +74,32 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
         score = max(0.0, min(100.0, score))
         components.append({"name": name, "weight": weight, "score": round(score, 1), "detail": detail})
 
-    # growth: 14d vs previous 14d revenue
+    # growth: 14d vs previous 14d revenue (per-org)
+    org_filter = "AND org_id = :oid" if org_id is not None else ""
+    oid_param = str(org_id) if org_id else None
     revenue = (
         await db.execute(
             text(
-                "SELECT SUM(value) AS total FROM kpi_snapshots "
-                "WHERE metric = 'revenue' AND snapshot_date BETWEEN :a AND :b"
+                f"SELECT SUM(value) AS total FROM kpi_snapshots "
+                f"WHERE metric = 'revenue' AND snapshot_date BETWEEN :a AND :b {org_filter}"
             ),
             {
                 "a": today - timedelta(days=14),
                 "b": today - timedelta(days=1),
+                "oid": oid_param,
             },
         )
     ).scalar() or 0
     revenue_prev = (
         await db.execute(
             text(
-                "SELECT SUM(value) AS total FROM kpi_snapshots "
-                "WHERE metric = 'revenue' AND snapshot_date BETWEEN :a AND :b"
+                f"SELECT SUM(value) AS total FROM kpi_snapshots "
+                f"WHERE metric = 'revenue' AND snapshot_date BETWEEN :a AND :b {org_filter}"
             ),
             {
                 "a": today - timedelta(days=28),
                 "b": today - timedelta(days=15),
+                "oid": oid_param,
             },
         )
     ).scalar() or 0
@@ -105,14 +109,14 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
         change = 0.0
     add("growth", 0.30, 50 + change * 500, f"revenue {change:+.1%} vs prior 14d")
 
-    # profitability: revenue vs expenses, last 30 days
+    # profitability: revenue vs expenses, last 30 days (per-org)
     expenses = (
         await db.execute(
             text(
-                "SELECT COALESCE(SUM(value), 0) FROM kpi_snapshots "
-                "WHERE metric = 'expense_total' AND snapshot_date >= :a"
+                f"SELECT COALESCE(SUM(value), 0) FROM kpi_snapshots "
+                f"WHERE metric = 'expense_total' AND snapshot_date >= :a {org_filter}"
             ),
-            {"a": today - timedelta(days=30)},
+            {"a": today - timedelta(days=30), "oid": oid_param},
         )
     ).scalar() or 0
     margin = 1.0
@@ -125,15 +129,12 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
         f"margin vs expenses {margin:+.1%} (30d)",
     )
 
-    # forecast health: best MAPE among active/retired models
+    # forecast health: best MAPE among active/retired models (per-org)
     model_mape: float | None = None
-    model = (
-        await db.execute(
-            select(MlModel)
-            .where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
-            .order_by(MlModel.version.desc())
-        )
-    ).scalar_one_or_none()
+    model_stmt = select(MlModel).where(MlModel.target == "revenue_daily", MlModel.is_active.is_(True))
+    if org_id is not None:
+        model_stmt = model_stmt.where(MlModel.org_id == org_id)
+    model = (await db.execute(model_stmt.order_by(MlModel.version.desc()))).scalar_one_or_none()
     if model is not None and model.metrics:
         model_mape = float((model.metrics or {}).get("mape") or 100)
     add(
@@ -143,8 +144,11 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
         f"active model MAPE {model_mape:.1f}%" if model_mape is not None else "no trained model",
     )
 
-    # data freshness: days since the latest snapshot
-    latest = (await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))).scalar()
+    # data freshness: days since the latest snapshot (per-org)
+    if org_id is not None:
+        latest = (await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue' AND org_id = :oid"), {"oid": oid_param})).scalar()
+    else:
+        latest = (await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))).scalar()
     if latest is None:
         freshness = 0.0
         detail = "no data yet"
@@ -154,10 +158,13 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
         detail = f"data {stale_days}d old"
     add("data_freshness", 0.15, freshness, detail)
 
-    # open anomalies penalty
-    open_count = (
-        await db.execute(select(func.count()).select_from(text("anomalies WHERE status IN ('open', 'acknowledged')")))
-    ).scalar() or 0
+    # open anomalies penalty (per-org)
+    if org_id is not None:
+        open_count = (await db.execute(text("SELECT COUNT(*) FROM anomalies WHERE status IN ('open', 'acknowledged') AND org_id = :oid"), {"oid": oid_param})).scalar() or 0
+    else:
+        open_count = (
+            await db.execute(select(func.count()).select_from(text("anomalies WHERE status IN ('open', 'acknowledged')")))
+        ).scalar() or 0
     add("open_anomalies", 0.15, 100 - 10 * int(open_count), f"{open_count} open anomaly(s)")
 
     score = sum(c["score"] * c["weight"] for c in components)
@@ -170,8 +177,11 @@ async def _business_health(db: DbSession) -> dict[str, Any]:
     response_model=BusinessHealthOut,
     dependencies=[Depends(get_current_user)],
 )
-async def business_health(db: DbSession) -> BusinessHealthOut:
-    result = await _business_health(db)
+async def business_health(db: DbSession, user=Depends(get_current_user)) -> BusinessHealthOut:
+    from app.api.deps import is_super_admin
+
+    org_id = None if is_super_admin(user) else user.org_id
+    result = await _business_health(db, org_id=org_id)
     return BusinessHealthOut(**result)
 
 
@@ -310,33 +320,58 @@ class AiUsageOut(BaseModel):
     response_model=AiUsageOut,
     dependencies=[Depends(require_role("admin"))],
 )
-async def ai_usage(db: DbSession) -> AiUsageOut:
+async def ai_usage(db: DbSession, user=Depends(get_current_user)) -> AiUsageOut:
     """AI usage/cost monitoring (admin) — circuit snapshots + message volume."""
     from app.services.ai.circuit import snapshot_all
+
+    from app.api.deps import is_super_admin
 
     providers = snapshot_all()
     # ai_messages.created_at is tz-naive; business_now() is aware
     cutoff = business_now().replace(tzinfo=None) - timedelta(days=14)
-    requests = (
-        await db.execute(
-            select(func.count()).select_from(Message).where(Message.role == "user", Message.created_at >= cutoff)
-        )
-    ).scalar() or 0
-    assistant = (
-        await db.execute(
-            select(func.count()).select_from(Message).where(Message.role == "assistant", Message.created_at >= cutoff)
-        )
-    ).scalar() or 0
-    users = (
-        await db.execute(
-            text(
-                "SELECT COUNT(DISTINCT c.user_id) FROM ai_messages m "
-                "JOIN ai_conversations c ON c.id = m.conversation_id "
-                "WHERE m.role = 'user' AND m.created_at >= :cutoff"
-            ),
-            {"cutoff": cutoff},
-        )
-    ).scalar() or 0
+    if is_super_admin(user):
+        requests = (
+            await db.execute(
+                select(func.count()).select_from(Message).where(Message.role == "user", Message.created_at >= cutoff)
+            )
+        ).scalar() or 0
+        assistant = (
+            await db.execute(
+                select(func.count()).select_from(Message).where(Message.role == "assistant", Message.created_at >= cutoff)
+            )
+        ).scalar() or 0
+        users = (
+            await db.execute(
+                text(
+                    "SELECT COUNT(DISTINCT c.user_id) FROM ai_messages m "
+                    "JOIN ai_conversations c ON c.id = m.conversation_id "
+                    "WHERE m.role = 'user' AND m.created_at >= :cutoff"
+                ),
+                {"cutoff": cutoff},
+            )
+        ).scalar() or 0
+    else:
+        org_id = user.org_id
+        requests = (
+            await db.execute(
+                select(func.count()).select_from(Message).where(Message.role == "user", Message.org_id == org_id, Message.created_at >= cutoff)
+            )
+        ).scalar() or 0
+        assistant = (
+            await db.execute(
+                select(func.count()).select_from(Message).where(Message.role == "assistant", Message.org_id == org_id, Message.created_at >= cutoff)
+            )
+        ).scalar() or 0
+        users = (
+            await db.execute(
+                text(
+                    "SELECT COUNT(DISTINCT c.user_id) FROM ai_messages m "
+                    "JOIN ai_conversations c ON c.id = m.conversation_id "
+                    "WHERE m.role = 'user' AND m.created_at >= :cutoff AND c.org_id = :oid"
+                ),
+                {"cutoff": cutoff, "oid": str(org_id) if org_id else None},
+            )
+        ).scalar() or 0
     total_cost = sum(float(p["est_cost_usd"]) for p in providers)
     return AiUsageOut(
         generated_at=business_now().isoformat(),
