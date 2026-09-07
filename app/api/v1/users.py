@@ -161,6 +161,10 @@ async def update_user(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
 
     changes = body.model_dump(exclude_unset=True)
+    # Prevent self-deactivation — an admin locking themselves out is always an accident,
+    # and with only one admin left it would brick the workspace.
+    if changes.get("is_active") is False and user_id == user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot deactivate your own account")
     # Prevent org hopping via PATCH unless super_admin
     if "org_id" in changes and changes["org_id"] is not None:
         if is_super_admin(user):
