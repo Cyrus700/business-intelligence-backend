@@ -146,9 +146,16 @@ async def _business_health(db: DbSession, org_id=None) -> dict[str, Any]:
 
     # data freshness: days since the latest snapshot (per-org)
     if org_id is not None:
-        latest = (await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue' AND org_id = :oid"), {"oid": oid_param})).scalar()
+        latest = (
+            await db.execute(
+                text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue' AND org_id = :oid"),
+                {"oid": oid_param},
+            )
+        ).scalar()
     else:
-        latest = (await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))).scalar()
+        latest = (
+            await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))
+        ).scalar()
     if latest is None:
         freshness = 0.0
         detail = "no data yet"
@@ -160,10 +167,17 @@ async def _business_health(db: DbSession, org_id=None) -> dict[str, Any]:
 
     # open anomalies penalty (per-org)
     if org_id is not None:
-        open_count = (await db.execute(text("SELECT COUNT(*) FROM anomalies WHERE status IN ('open', 'acknowledged') AND org_id = :oid"), {"oid": oid_param})).scalar() or 0
+        open_count = (
+            await db.execute(
+                text("SELECT COUNT(*) FROM anomalies WHERE status IN ('open', 'acknowledged') AND org_id = :oid"),
+                {"oid": oid_param},
+            )
+        ).scalar() or 0
     else:
         open_count = (
-            await db.execute(select(func.count()).select_from(text("anomalies WHERE status IN ('open', 'acknowledged')")))
+            await db.execute(
+                select(func.count()).select_from(text("anomalies WHERE status IN ('open', 'acknowledged')"))
+            )
         ).scalar() or 0
     add("open_anomalies", 0.15, 100 - 10 * int(open_count), f"{open_count} open anomaly(s)")
 
@@ -322,9 +336,8 @@ class AiUsageOut(BaseModel):
 )
 async def ai_usage(db: DbSession, user=Depends(get_current_user)) -> AiUsageOut:
     """AI usage/cost monitoring (admin) — circuit snapshots + message volume."""
-    from app.services.ai.circuit import snapshot_all
-
     from app.api.deps import is_super_admin
+    from app.services.ai.circuit import snapshot_all
 
     providers = snapshot_all()
     # ai_messages.created_at is tz-naive; business_now() is aware
@@ -337,7 +350,9 @@ async def ai_usage(db: DbSession, user=Depends(get_current_user)) -> AiUsageOut:
         ).scalar() or 0
         assistant = (
             await db.execute(
-                select(func.count()).select_from(Message).where(Message.role == "assistant", Message.created_at >= cutoff)
+                select(func.count())
+                .select_from(Message)
+                .where(Message.role == "assistant", Message.created_at >= cutoff)
             )
         ).scalar() or 0
         users = (
@@ -354,12 +369,16 @@ async def ai_usage(db: DbSession, user=Depends(get_current_user)) -> AiUsageOut:
         org_id = user.org_id
         requests = (
             await db.execute(
-                select(func.count()).select_from(Message).where(Message.role == "user", Message.org_id == org_id, Message.created_at >= cutoff)
+                select(func.count())
+                .select_from(Message)
+                .where(Message.role == "user", Message.org_id == org_id, Message.created_at >= cutoff)
             )
         ).scalar() or 0
         assistant = (
             await db.execute(
-                select(func.count()).select_from(Message).where(Message.role == "assistant", Message.org_id == org_id, Message.created_at >= cutoff)
+                select(func.count())
+                .select_from(Message)
+                .where(Message.role == "assistant", Message.org_id == org_id, Message.created_at >= cutoff)
             )
         ).scalar() or 0
         users = (

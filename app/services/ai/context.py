@@ -126,8 +126,12 @@ async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DA
             is_empty = False
         cards = {c["metric"]: c for c in await kpi_summary(db, f)}
         # If empty, emit single empty notice instead of zero lines
-        if is_empty and all(float((cards.get(m) or {}).get("value") or 0) == 0 for m in ("revenue", "orders", "expense_total")):
-            lines.append("- No analytics data loaded yet — upload your business data to populate revenue, orders, and expenses. Your personal workspace is empty until you add data.")
+        if is_empty and all(
+            float((cards.get(m) or {}).get("value") or 0) == 0 for m in ("revenue", "orders", "expense_total")
+        ):
+            lines.append(
+                "- No analytics data loaded yet — upload your business data to populate revenue, orders, and expenses. Your personal workspace is empty until you add data."
+            )
         else:
             for metric in ("revenue", "orders", "avg_order_value", "gross_margin", "expense_total"):
                 c = cards.get(metric)

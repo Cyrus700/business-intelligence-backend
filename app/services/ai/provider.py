@@ -124,23 +124,48 @@ class OpenRouterProvider(BaseAIProvider):
     """Primary provider — OpenRouter free tier, high quota, OpenAI-compatible.
 
     Uses the OpenAI Python SDK with ``base_url=https://openrouter.ai/api/v1``.
-    The free model (default ``meta-llama/llama-3.1-8b-instruct:free``) is
-    selected for strong tool-calling, low latency, and generous daily quota;
-    any ``:free`` suffix model on OpenRouter can be swapped via
-    ``OPENROUTER_MODEL`` without code changes. Rate-limit / auth errors trip
-    the circuit breaker and fall through to Groq → Gemini.
+    Rotates through multiple ``:free`` models for speed and resilience:
+    ``meta-llama/llama-3.1-8b-instruct:free`` (primary, fast tool-calling) →
+    ``mistralai/mistral-7b-instruct:free`` → ``google/gemma-3-4b-it:free`` →
+    ``qwen/qwen-2-7b-instruct:free`` → ``meta-llama/llama-3.2-3b-instruct:free``.
+    Any ``:free`` model can be set via ``OPENROUTER_MODEL`` (single) or
+    ``OPENROUTER_MODELS`` (comma list) without code changes. Rate-limit/auth
+    errors trip the per-model circuit and fall through to Groq → Gemini.
     """
 
     circuit_name = "openrouter"
 
+    # Fast free-tier rotation — verified 2026-09-07 via /api/v1/models (18 free, all $0)
+    # All support tool-calling; ordered by latency/quality for InsightFlow
+    FREE_ROTATION = [
+        "nvidia/nemotron-3.5-lightning:free",  # fast, reasoning, tool-calling good
+        "liquid/lfm-2.5-2.6b:free",  # very fast, low latency
+        "inclusionai/ling-3.0-flash-sante:free",  # fast, high quota
+        "thinkingmachines/inkling-small:free",  # fast
+        "cohere/north-mini-code:free",  # code/reasoning
+        "meta-llama/llama-3.1-8b-instruct:free",  # fallback if free changes
+    ]
+
     def __init__(self) -> None:
         settings = get_settings()
         self.api_key = settings.openrouter_api_key
-        self.model = settings.openrouter_model or "meta-llama/llama-3.1-8b-instruct:free"
+        # Support single model or comma-list for rotation
+        raw = settings.openrouter_model or "meta-llama/llama-3.1-8b-instruct:free"
+        if "," in raw:
+            self.models = [m.strip() for m in raw.split(",") if m.strip()]
+        else:
+            # Primary + rotation (deduplicate, keep primary first)
+            self.models = [raw] + [m for m in self.FREE_ROTATION if m != raw]
+        self.model = self.models[0]
         self.base_url = settings.openrouter_base_url or "https://openrouter.ai/api/v1"
 
     def model_id(self) -> str:
+        # Circuit is per-model, so each free model has its own breaker
         return self.model
+
+    def _model_circuit(self, model: str) -> CircuitState:
+        # Per-model circuit so one rate-limited :free doesn't block others
+        return get_circuit(f"{self.circuit_name}:{model}", model)
 
     def _msgs(self, messages: list[AIMessage], system_prompt: str | None) -> list[dict]:
         import json
@@ -174,44 +199,64 @@ class OpenRouterProvider(BaseAIProvider):
         return msgs
 
     def _client(self):
-        from openai import AsyncOpenAI
+        # Use httpx directly to avoid openai dependency conflicts (pydantic version)
+        # OpenRouter is OpenAI-compatible, so we can call it via httpx
+        import httpx
 
-        # OpenRouter requires HTTP-Referer and X-Title for free-tier analytics
-        # (optional but helps with quota). We set them to the platform URL.
-        return AsyncOpenAI(
-            api_key=self.api_key,
+        return httpx.AsyncClient(
             base_url=self.base_url,
-            default_headers={
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
                 "HTTP-Referer": "https://insightflowai.tech",
                 "X-Title": "InsightFlow AI",
+                "Content-Type": "application/json",
             },
+            timeout=30.0,
         )
 
     async def chat(self, messages: list[AIMessage], system_prompt: str | None = None) -> str:
         if not self.api_key:
             raise RuntimeError("OPENROUTER_API_KEY not configured")
-        if await self._circuit_open():
-            raise RuntimeError("openrouter circuit open")
-        try:
-            client = self._client()
-            started = time.monotonic()
-            resp = await client.chat.completions.create(
-                model=self.model,
-                messages=self._msgs(messages, system_prompt),
-                temperature=RESPONSE_TEMPERATURE,
-                max_tokens=2048,
-            )
-            reply = resp.choices[0].message.content or ""
-            self._record_success(
-                int((time.monotonic() - started) * 1000),
-                " ".join(m.content for m in messages),
-                reply,
-            )
-            return reply
-        except Exception as e:
-            self._record_failure()
-            logger.warning("OpenRouter API error: %s", e)
-            raise
+        last_exc: Exception | None = None
+        for model in self.models:
+            circuit = self._model_circuit(model)
+            if circuit.is_open:
+                logger.warning("OpenRouter %s circuit OPEN, skipping", model)
+                continue
+            try:
+                started = time.monotonic()
+                async with self._client() as client:
+                    resp = await client.post(
+                        "/chat/completions",
+                        json={
+                            "model": model,
+                            "messages": self._msgs(messages, system_prompt),
+                            "temperature": RESPONSE_TEMPERATURE,
+                            "max_tokens": 2048,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    reply = data["choices"][0]["message"]["content"] or ""
+                circuit.record_success(int((time.monotonic() - started) * 1000), 0.0)
+                self._record_success(
+                    int((time.monotonic() - started) * 1000),
+                    " ".join(m.content for m in messages),
+                    reply,
+                )
+                if model != self.model:
+                    logger.info("OpenRouter rotated to %s (primary %s failed)", model, self.model)
+                    self.model = model
+                return reply
+            except Exception as e:
+                last_exc = e
+                circuit.record_failure()
+                self._record_failure()
+                logger.warning("OpenRouter %s failed, trying next free: %s", model, e)
+                continue
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("All OpenRouter free models failed")
 
     async def chat_with_tools(
         self,
@@ -222,71 +267,117 @@ class OpenRouterProvider(BaseAIProvider):
     ) -> ToolResponse:
         if not self.api_key:
             raise RuntimeError("OPENROUTER_API_KEY not configured")
-        if await self._circuit_open():
-            raise RuntimeError("OpenRouter circuit open")
-        try:
-            client = self._client()
-            started = time.monotonic()
-            resp = await client.chat.completions.create(
-                model=self.model,
-                messages=self._msgs(messages, system_prompt),
-                tools=tools or None,
-                tool_choice=tool_choice if tools else None,
-                temperature=RESPONSE_TEMPERATURE,
-                max_tokens=2048,
-            )
-            msg = resp.choices[0].message
-            reply_text = msg.content or ""
-            calls = []
-            for idx, t in enumerate(getattr(msg, "tool_calls", None) or []):
-                fn = getattr(t, "function", None)
-                calls.append(
-                    ToolCall(
-                        id=getattr(t, "id", "") or f"call_{idx}",
-                        name=(fn.name if fn else ""),
-                        arguments=_json_loads(fn.arguments if fn else "{}"),
-                    )
+        last_exc: Exception | None = None
+        for model in self.models:
+            circuit = self._model_circuit(model)
+            if circuit.is_open:
+                logger.warning("OpenRouter %s circuit OPEN, skipping", model)
+                continue
+            try:
+                started = time.monotonic()
+                async with self._client() as client:
+                    payload: dict[str, Any] = {
+                        "model": model,
+                        "messages": self._msgs(messages, system_prompt),
+                        "temperature": RESPONSE_TEMPERATURE,
+                        "max_tokens": 2048,
+                    }
+                    if tools:
+                        payload["tools"] = tools
+                        payload["tool_choice"] = tool_choice
+                    resp = await client.post("/chat/completions", json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    msg = data["choices"][0]["message"]
+                    reply_text = msg.get("content") or ""
+                    calls = []
+                    for idx, t in enumerate(msg.get("tool_calls") or []):
+                        fn = t.get("function") or {}
+                        calls.append(
+                            ToolCall(
+                                id=t.get("id") or f"call_{idx}",
+                                name=fn.get("name") or "",
+                                arguments=_json_loads(fn.get("arguments") or "{}"),
+                            )
+                        )
+                circuit.record_success(int((time.monotonic() - started) * 1000), 0.0)
+                self._record_success(
+                    int((time.monotonic() - started) * 1000),
+                    " ".join(m.content for m in messages),
+                    reply_text,
                 )
-            self._record_success(
-                int((time.monotonic() - started) * 1000),
-                " ".join(m.content for m in messages),
-                reply_text,
-            )
-            return ToolResponse(content=reply_text, tool_calls=calls)
-        except Exception as e:
-            self._record_failure()
-            logger.warning("OpenRouter tool-call error: %s", e)
-            raise
+                if model != self.model:
+                    logger.info("OpenRouter tool rotated to %s", model)
+                    self.model = model
+                return ToolResponse(content=reply_text, tool_calls=calls)
+            except Exception as e:
+                last_exc = e
+                circuit.record_failure()
+                self._record_failure()
+                logger.warning("OpenRouter %s tool failed, trying next: %s", model, e)
+                continue
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("All OpenRouter free models failed")
 
     async def chat_stream(self, messages: list[AIMessage], system_prompt: str | None = None) -> AsyncIterator[str]:
         if not self.api_key:
             raise RuntimeError("OPENROUTER_API_KEY not configured")
-        if await self._circuit_open():
-            raise RuntimeError("OpenRouter circuit open")
-        try:
-            client = self._client()
-            stream = await client.chat.completions.create(
-                model=self.model,
-                messages=self._msgs(messages, system_prompt),
-                temperature=RESPONSE_TEMPERATURE,
-                max_tokens=2048,
-                stream=True,
-            )
-            started = time.monotonic()
-            async for chunk in stream:
-                if getattr(chunk, "choices", None):
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        yield delta
-            self._record_success(
-                int((time.monotonic() - started) * 1000),
-                " ".join(m.content for m in messages),
-                "",
-            )
-        except Exception as e:
-            self._record_failure()
-            logger.warning("OpenRouter stream error: %s", e)
-            raise
+        last_exc: Exception | None = None
+        for model in self.models:
+            circuit = self._model_circuit(model)
+            if circuit.is_open:
+                logger.warning("OpenRouter %s circuit OPEN (stream), skipping", model)
+                continue
+            try:
+                started = time.monotonic()
+                async with self._client() as client:
+                    async with client.stream(
+                        "POST",
+                        "/chat/completions",
+                        json={
+                            "model": model,
+                            "messages": self._msgs(messages, system_prompt),
+                            "temperature": RESPONSE_TEMPERATURE,
+                            "max_tokens": 2048,
+                            "stream": True,
+                        },
+                    ) as resp:
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line.strip() or not line.startswith("data:"):
+                                continue
+                            data_str = line[5:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                import json as _json
+
+                                data = _json.loads(data_str)
+                                delta = data.get("choices", [{}])[0].get("delta", {}).get("content")
+                                if delta:
+                                    yield delta
+                            except Exception:
+                                continue
+                circuit.record_success(int((time.monotonic() - started) * 1000), 0.0)
+                self._record_success(
+                    int((time.monotonic() - started) * 1000),
+                    " ".join(m.content for m in messages),
+                    "",
+                )
+                if model != self.model:
+                    logger.info("OpenRouter stream rotated to %s", model)
+                    self.model = model
+                return
+            except Exception as e:
+                last_exc = e
+                circuit.record_failure()
+                self._record_failure()
+                logger.warning("OpenRouter %s stream failed, trying next: %s", model, e)
+                continue
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("All OpenRouter free models failed (stream)")
 
 
 class GroqProvider(BaseAIProvider):

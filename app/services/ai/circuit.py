@@ -24,13 +24,13 @@ PRICING_PER_1M = {
     "openai/gpt-oss-20b": (0.10, 0.50),
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-2.5-flash": (0.30, 2.50),
-    # OpenRouter free — high quota, $0
+    # OpenRouter free — high quota, $0 (verified 2026-09-07)
+    "nvidia/nemotron-3.5-lightning:free": (0.0, 0.0),
+    "liquid/lfm-2.5-2.6b:free": (0.0, 0.0),
+    "inclusionai/ling-3.0-flash-sante:free": (0.0, 0.0),
+    "thinkingmachines/inkling-small:free": (0.0, 0.0),
+    "cohere/north-mini-code:free": (0.0, 0.0),
     "meta-llama/llama-3.1-8b-instruct:free": (0.0, 0.0),
-    "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0),
-    "mistralai/mistral-7b-instruct:free": (0.0, 0.0),
-    "google/gemma-2-9b-it:free": (0.0, 0.0),
-    "google/gemma-3-4b-it:free": (0.0, 0.0),
-    "qwen/qwen-2-7b-instruct:free": (0.0, 0.0),
 }
 DEFAULT_PRICE = (0.30, 0.60)  # unknown models
 

@@ -394,7 +394,9 @@ async def diagnostic_recommendations(db: AsyncSession, today: date, org_id=None)
         )
 
     # ── volume problem or value problem ───────────────────────────────────
-    cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1], org_id=org_id))}
+    cards = {
+        c["metric"]: c for c in await kpi_summary(db, Filters(date_from=current[0], date_to=current[1], org_id=org_id))
+    }
     rev, orders = cards.get("revenue"), cards.get("orders")
     if rev and orders and rev.get("previous_value") and orders.get("previous_value"):
         bridge = price_volume_bridge(

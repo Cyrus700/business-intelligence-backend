@@ -91,10 +91,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-2.0-flash")
 
-    openrouter_api_key: str = Field(default="", description="OpenRouter API key (free tier, high quota) — primary provider")
+    openrouter_api_key: str = Field(
+        default="", description="OpenRouter API key (free tier, high quota) — primary provider"
+    )
     openrouter_model: str = Field(
-        default="meta-llama/llama-3.1-8b-instruct:free",
-        description="OpenRouter model ID (free tier). Good tool-calling free: meta-llama/llama-3.1-8b-instruct:free, mistralai/mistral-7b-instruct:free, google/gemma-3-4b-it:free",
+        default="nvidia/nemotron-3.5-lightning:free",
+        description="OpenRouter model ID (free tier, high quota). Verified 2026-09-07 free: nvidia/nemotron-3.5-lightning:free, liquid/lfm-2.5-2.6b:free, inclusionai/ling-3.0-flash-sante:free",
     )
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", description="OpenRouter API base URL")
 

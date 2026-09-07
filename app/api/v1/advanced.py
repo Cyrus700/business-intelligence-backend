@@ -63,7 +63,12 @@ async def decomposition_tree_endpoint(
 
 @router.get("/waterfall")
 async def waterfall_endpoint(
-    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", dimension: str = "category", top_n: int = 8
+    db: DbSession,
+    f: FiltersDep,
+    user: CurrentUser,
+    metric: str = "revenue",
+    dimension: str = "category",
+    top_n: int = 8,
 ):
     f = _scoped_filters(f, user)
     return await advanced.waterfall(db, f, metric=metric, dimension=dimension, top_n=top_n)
@@ -71,7 +76,12 @@ async def waterfall_endpoint(
 
 @router.get("/heatmap")
 async def heatmap_endpoint(
-    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", row_dim: str = "region", col_dim: str = "category"
+    db: DbSession,
+    f: FiltersDep,
+    user: CurrentUser,
+    metric: str = "revenue",
+    row_dim: str = "region",
+    col_dim: str = "category",
 ):
     f = _scoped_filters(f, user)
     return await advanced.heatmap(db, f, metric=metric, row_dim=row_dim, col_dim=col_dim)
@@ -93,7 +103,12 @@ async def scatter_endpoint(
 
 @router.get("/funnel")
 async def funnel_endpoint(
-    db: DbSession, f: FiltersDep, user: CurrentUser, metric: str = "revenue", dimension: str = "category", top_n: int = 8
+    db: DbSession,
+    f: FiltersDep,
+    user: CurrentUser,
+    metric: str = "revenue",
+    dimension: str = "category",
+    top_n: int = 8,
 ):
     f = _scoped_filters(f, user)
     return await advanced.funnel(db, f, metric=metric, dimension=dimension, top_n=top_n)
@@ -101,7 +116,11 @@ async def funnel_endpoint(
 
 @router.get("/radar")
 async def radar_endpoint(
-    db: DbSession, f: FiltersDep, user: CurrentUser, dimension: str = "region", metrics: str = "revenue,orders,gross_margin,aov,units"
+    db: DbSession,
+    f: FiltersDep,
+    user: CurrentUser,
+    dimension: str = "region",
+    metrics: str = "revenue,orders,gross_margin,aov,units",
 ):
     f = _scoped_filters(f, user)
     return await advanced.radar(db, f, dimension=dimension, metrics=metrics)
@@ -127,7 +146,9 @@ async def key_influencers_endpoint(db: DbSession, f: FiltersDep, user: CurrentUs
 
 
 @router.get("/segmentation")
-async def segmentation_endpoint(db: DbSession, f: FiltersDep, user: CurrentUser, dimension: str = "product", n_clusters: int = 4):
+async def segmentation_endpoint(
+    db: DbSession, f: FiltersDep, user: CurrentUser, dimension: str = "product", n_clusters: int = 4
+):
     f = _scoped_filters(f, user)
     return await segment(db, f, dimension=dimension, n_clusters=n_clusters)
 

@@ -57,11 +57,7 @@ async def recommendation_history(db: DbSession, user: CurrentUser) -> list[Recom
     stmt = select(Insight).where(Insight.insight_type == "recommendation")
     if not getattr(user, "is_super_admin", False):
         stmt = stmt.where(Insight.org_id == user.org_id)
-    rows = (
-        (await db.execute(stmt.order_by(Insight.generated_at.desc()).limit(100)))
-        .scalars()
-        .all()
-    )
+    rows = (await db.execute(stmt.order_by(Insight.generated_at.desc()).limit(100))).scalars().all()
     out = []
     for r in rows:
         out.append(

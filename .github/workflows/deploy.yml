@@ -132,7 +132,7 @@ jobs:
             docker compose -f \$COMPOSE build api
           fi
           echo "→ migrate"
-          docker compose -f \$COMPOSE run --rm api alembic upgrade head || docker compose -f \$COMPOSE run --rm api uv run alembic upgrade head
+          docker compose -f \$COMPOSE run --rm api alembic upgrade heads || docker compose -f \$COMPOSE run --rm api python -m alembic upgrade heads || docker compose -f \$COMPOSE run --rm api uv run alembic upgrade heads
           echo "→ up -d"
           docker compose -f \$COMPOSE up -d api
           sleep 5
