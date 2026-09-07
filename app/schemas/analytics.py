@@ -117,6 +117,24 @@ class TableCoverage(BaseModel):
     last_ingested_at: datetime | None
 
 
+class DashboardOut(BaseModel):
+    """Single-call dashboard payload — replaces 14 parallel GETs on first paint."""
+
+    summary: KpiSummary | None = None
+    timeseries_revenue: Timeseries | None = None
+    timeseries_expense: Timeseries | None = None
+    by_channel: list[DimensionRow] | None = None
+    by_category: list[DimensionRow] | None = None
+    by_region: list[DimensionRow] | None = None
+    transactions: Paginated[TransactionRow] | None = None
+    levels: list[InventoryRow] | None = None
+    anomalies: list[dict] | None = None
+    recommendations: list[dict] | None = None
+    forecasts: dict | None = None
+    pnl: list[PnlRow] | None = None
+    errors: dict[str, str] | None = None
+
+
 class DataCoverage(BaseModel):
     """What the warehouse holds, so clients never mistake "not loaded" for zero."""
 

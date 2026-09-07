@@ -30,7 +30,7 @@ from app.core.rbac_defaults import (
 )
 from app.models.rbac import Permission, Role, RolePermission
 
-CACHE_TTL_SECONDS = 30.0
+CACHE_TTL_SECONDS = 60.0
 
 
 @dataclass(frozen=True)

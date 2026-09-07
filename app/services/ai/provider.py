@@ -912,7 +912,7 @@ def _strip_reasoning(text: str) -> str:
                 if line.strip() == "":
                     continue
                 # If we have passed the leak block and next 3 lines contain no markers, leak is over
-                window = " ".join(l.lower() for l in lines[i : i + 3])
+                window = " ".join(ln.lower() for ln in lines[i : i + 3])
                 if not any(m in window for m in leak_markers) and "analyze user input" not in window:
                     break
                 # still inside leak (bulleted sub-lines)
@@ -929,7 +929,9 @@ def _strip_reasoning(text: str) -> str:
 
     # 3) Generic cleanup of stray enumeration that is clearly reasoning
     #    (e.g., "1. Analyze User Input:" at very start)
-    text = re.sub(r"^\s*1\.\s*analyze user input:.*?(?=\n#{1,6}\s|\n\*\*|\n- |\Z)", "", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(
+        r"^\s*1\.\s*analyze user input:.*?(?=\n#{1,6}\s|\n\*\*|\n- |\Z)", "", text, flags=re.IGNORECASE | re.DOTALL
+    )
     return text.strip()
 
 

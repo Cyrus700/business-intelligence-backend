@@ -149,7 +149,9 @@ async def get_matrix(db: DbSession, user: CurrentUser) -> MatrixOut:
 @router.get("/rbac/me", response_model=MyAccessOut)
 async def my_rbac_access(db: DbSession, user: CurrentUser) -> MyAccessOut:
     """Effective permissions of the caller — drives client-side UI gating."""
-    await _bootstrap_if_empty(db)
+    # _bootstrap is for first-run seeding only; doing it on every /me added
+    # an extra `SELECT Role LIMIT 1` per request and contributed to the
+    # 3–4s /me latency under the 27-request fan-out.
     policy = await rbac.get_policy(db)
     info = policy.roles.get(user.role or "")
     return MyAccessOut(

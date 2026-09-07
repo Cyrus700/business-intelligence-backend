@@ -31,6 +31,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT false"
                     )
                 )
+                # Hot indexes for the dashboard's filtered aggregates. The 3–4s /me
+                # and 500s on summary/timeseries were partly sequential table scans
+                # when filtering by channel/region/category — these were missing.
+                for stmt in (
+                    "CREATE INDEX IF NOT EXISTS ix_products_category ON products (category)",
+                    "CREATE INDEX IF NOT EXISTS ix_products_org_category ON products (org_id, category)",
+                    "CREATE INDEX IF NOT EXISTS ix_sales_channel ON sales_transactions (channel)",
+                    "CREATE INDEX IF NOT EXISTS ix_sales_region ON sales_transactions (region)",
+                    "CREATE INDEX IF NOT EXISTS ix_sales_product_id ON sales_transactions (product_id)",
+                    "CREATE INDEX IF NOT EXISTS ix_sales_org_channel ON sales_transactions (org_id, channel)",
+                    "CREATE INDEX IF NOT EXISTS ix_sales_org_region ON sales_transactions (org_id, region)",
+                    "CREATE INDEX IF NOT EXISTS ix_expenses_category ON expenses (category)",
+                    "CREATE INDEX IF NOT EXISTS ix_expenses_org_category ON expenses (org_id, category)",
+                    "CREATE INDEX IF NOT EXISTS ix_inventory_product_snapshot ON inventory_levels (product_id, snapshot_date DESC)",
+                    "CREATE INDEX IF NOT EXISTS ix_kpi_snapshots_org_metric_dims_date ON kpi_snapshots (org_id, metric, snapshot_date)",
+                ):
+                    try:
+                        await conn.execute(text(stmt))
+                    except Exception:
+                        pass
         except Exception:  # noqa: BLE001 — best-effort self-heal, migration is source of truth
             pass
         # Self-heal RBAC: ensure compare:view permission exists and is granted to
@@ -123,6 +143,20 @@ def create_app() -> FastAPI:
         if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
             raise exc
         logger.exception("unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
+        # Pool/timeout pressure from the 27-query fan-out used to surface as 500;
+        # 503 + Retry-After lets the frontend retry with backoff instead of
+        # showing a dead "Request failed" panel.
+        msg_lower = str(exc).lower()
+        is_pool_pressure = (
+            "timeout" in msg_lower
+            or "pool" in msg_lower
+            or "queuepool" in msg_lower
+            or "too many clients" in msg_lower
+            or isinstance(exc, TimeoutError)
+        )
+        if is_pool_pressure:
+            detail = "Database is busy — please retry in a moment."
+            return JSONResponse({"detail": detail}, status_code=503, headers={"Retry-After": "2"})
         # In prod, hide details; in dev, include type for debugging but still no stack.
         detail = "Internal server error" if settings.is_prod else f"{type(exc).__name__}: request failed"
         return JSONResponse({"detail": detail}, status_code=500)

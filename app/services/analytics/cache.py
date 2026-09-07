@@ -26,7 +26,43 @@ class QueryCache:
     def _make_key(self, func_name: str, args: tuple, kwargs: dict) -> str:
         import json
 
-        key_data = {"fn": func_name, "args": args, "kwargs": kwargs}
+        def _stable(v: Any) -> Any:
+            if v is None:
+                return None
+            # Profile / user object — only tenant and role matter for cache
+            t = type(v).__name__
+            if t == "Profile":
+                try:
+                    return {"org_id": str(getattr(v, "org_id", None)), "role": getattr(v, "role", None)}
+                except Exception:
+                    return str(getattr(v, "org_id", None))
+            # Filters dataclass → stable dict of its fields
+            if hasattr(v, "__dataclass_fields__"):
+                try:
+                    d = {k: _stable(getattr(v, k)) for k in sorted(v.__dataclass_fields__.keys())}  # type: ignore[attr-defined]
+                    return d
+                except Exception:
+                    return str(v)
+            if isinstance(v, (list, tuple)):
+                return [_stable(x) for x in v]
+            if isinstance(v, dict):
+                return {str(k): _stable(val) for k, val in sorted(v.items())}
+            try:
+                json.dumps(v)
+                return v
+            except TypeError:
+                return str(v)
+
+        # First arg is always the DB session — drop it; it differs per request
+        # and would make every cache lookup miss, causing the 27-query thundering
+        # herd that triggered 429/500 on the dashboard.
+        stable_args: list[Any] = []
+        for idx, a in enumerate(args):
+            if idx == 0 and "Session" in type(a).__name__:
+                continue
+            stable_args.append(_stable(a))
+        stable_kwargs = {k: _stable(v) for k, v in kwargs.items()}
+        key_data = {"fn": func_name, "args": stable_args, "kwargs": stable_kwargs}
         return f"query:{func_name}:{hash(json.dumps(key_data, sort_keys=True, default=str))}"
 
     async def get(self, key: str) -> Any | None:

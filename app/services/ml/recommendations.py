@@ -1,7 +1,8 @@
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import business_today
@@ -29,7 +30,7 @@ async def revenue_recommendations(db: AsyncSession, today: date, org_id=None) ->
               AND (:oid IS NULL OR org_id = :oid)
             GROUP BY channel
             ORDER BY revenue DESC
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     channels = ch.all()
@@ -68,7 +69,7 @@ async def revenue_recommendations(db: AsyncSession, today: date, org_id=None) ->
             WHERE txn_date BETWEEN :s AND :e
               AND (:oid IS NULL OR org_id = :oid)
             GROUP BY day ORDER BY revenue DESC LIMIT 1
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": ninety, "e": today, "oid": str(org_id) if org_id else None},
     )
     peak_row = peak.one_or_none()
@@ -82,7 +83,7 @@ async def revenue_recommendations(db: AsyncSession, today: date, org_id=None) ->
                       AND (:oid IS NULL OR org_id = :oid)
                     GROUP BY txn_date
                 ) d
-            """),
+            """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
             {"s": ninety, "e": today, "oid": str(org_id) if org_id else None},
         )
         avg_val = float(avg.scalar_one() or 0)
@@ -123,7 +124,7 @@ async def cost_recommendations(db: AsyncSession, today: date, org_id=None) -> li
             GROUP BY category
             ORDER BY total DESC
             LIMIT 3
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     expenses = top_exp.all()
@@ -158,7 +159,7 @@ async def cost_recommendations(db: AsyncSession, today: date, org_id=None) -> li
             WHERE expense_date >= :s
               AND (:oid IS NULL OR org_id = :oid)
             GROUP BY month ORDER BY month
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": _ninety_days_ago(today), "oid": str(org_id) if org_id else None},
     )
     months = exp_trend.all()
@@ -208,7 +209,7 @@ async def pricing_recommendations(db: AsyncSession, today: date, org_id=None) ->
             HAVING AVG(st.discount) > 20 AND COUNT(*) >= 10
             ORDER BY AVG(st.discount) DESC
             LIMIT 3
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     for row in deep_discount.all():
@@ -248,7 +249,7 @@ async def pricing_recommendations(db: AsyncSession, today: date, org_id=None) ->
             HAVING AVG(st.discount) > 30 AND COUNT(*) >= 5
             ORDER BY AVG(st.discount) DESC
             LIMIT 3
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     for row in margin_risk.all():
@@ -287,7 +288,7 @@ async def region_recommendations(db: AsyncSession, today: date, org_id=None) -> 
               AND (:oid IS NULL OR org_id = :oid)
             GROUP BY region
             ORDER BY revenue DESC
-        """),
+        """).bindparams(bindparam("oid", type_=PG_UUID(as_uuid=True))),
         {"s": thirty, "e": today, "oid": str(org_id) if org_id else None},
     )
     regions = reg.all()
@@ -589,10 +590,15 @@ async def generate_all_recommendations(db: AsyncSession, org_id=None) -> list[di
             import inspect as _ins
 
             sig = _ins.signature(generator)
-            if "org_id" in sig.parameters:
-                all_recs.extend(await generator(db, today, org_id=org_id))  # type: ignore[call-arg]
-            else:
-                all_recs.extend(await generator(db, today))
+            # A SAVEPOINT scopes rollback to this generator's own failed
+            # statement — a plain session-wide rollback would also expire
+            # (detach) every other ORM object already loaded on this session,
+            # e.g. the request's current-user Profile.
+            async with db.begin_nested():
+                if "org_id" in sig.parameters:
+                    all_recs.extend(await generator(db, today, org_id=org_id))  # type: ignore[call-arg]
+                else:
+                    all_recs.extend(await generator(db, today))
         except Exception:
             import logging
 

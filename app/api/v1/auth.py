@@ -198,13 +198,17 @@ async def google_callback(
         # Use first() not scalar_one_or_none() — stale data may have duplicate lower(email)
         # (e.g. after a partial restore). Pick the most recent to avoid 500.
         existing = (
-            await db.execute(
-                select(Profile)
-                .where(func.lower(Profile.email) == normalized_google_email)
-                .order_by(Profile.created_at.desc())
-                .limit(1)
+            (
+                await db.execute(
+                    select(Profile)
+                    .where(func.lower(Profile.email) == normalized_google_email)
+                    .order_by(Profile.created_at.desc())
+                    .limit(1)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     # ADMIN_EMAIL from env is the source of truth — any login matching it becomes admin
     is_admin_login = s.is_admin_email(normalized_google_email)
@@ -237,8 +241,17 @@ async def google_callback(
             # Turning first-time Google users away with "register a business
             # first" was the dead end here.
             legacy_org = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)).order_by(Organization.created_at).limit(1))
-            ).scalars().first()
+                (
+                    await db.execute(
+                        select(Organization)
+                        .where(Organization.is_legacy.is_(True))
+                        .order_by(Organization.created_at)
+                        .limit(1)
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if is_admin_login and legacy_org is not None:
                 org_id = legacy_org.id
             else:
@@ -287,8 +300,17 @@ async def google_callback(
         # Backfill org_id if missing and legacy exists
         if profile.org_id is None:
             legacy_org = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)).order_by(Organization.created_at).limit(1))
-            ).scalars().first()
+                (
+                    await db.execute(
+                        select(Organization)
+                        .where(Organization.is_legacy.is_(True))
+                        .order_by(Organization.created_at)
+                        .limit(1)
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if legacy_org:
                 profile.org_id = legacy_org.id
                 updated = True
@@ -474,14 +496,22 @@ async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: B
         raise HTTPException(422, "Password is too common")
 
     normalized_email = body.email.strip().lower()
-    existing = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_email).limit(1))).scalars().first()
+    existing = (
+        (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_email).limit(1)))
+        .scalars()
+        .first()
+    )
     if existing is not None:
         raise HTTPException(409, "An account with this email already exists")
 
     normalized = body.org_name.strip()
     if not normalized:
         raise HTTPException(422, "Organization name is required")
-    existing_org = (await db.execute(select(Organization).where(func.lower(Organization.name) == normalized.lower()).limit(1))).scalars().first()
+    existing_org = (
+        (await db.execute(select(Organization).where(func.lower(Organization.name) == normalized.lower()).limit(1)))
+        .scalars()
+        .first()
+    )
     if existing_org is not None:
         raise HTTPException(409, "An organization with this name already exists")
 
@@ -625,7 +655,9 @@ async def resend_verification(
 ) -> dict[str, str]:
     """Resend verification email for pending business."""
     normalized = body.email.strip().lower()
-    profile = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized).limit(1))).scalars().first()
+    profile = (
+        (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized).limit(1))).scalars().first()
+    )
     if profile is None:
         return {"message": "If an account exists, a verification email has been sent."}
     if profile.email_verified:
@@ -932,7 +964,11 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
     # Their org's approval state and email-verification state are irrelevant:
     # they are the person who approves organizations in the first place.
     is_operator = get_settings().is_admin_email(normalized_login)
-    profile = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_login).limit(1))).scalars().first()
+    profile = (
+        (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_login).limit(1)))
+        .scalars()
+        .first()
+    )
     # Use generic error to avoid account enumeration (same message for not-found vs wrong password)
     generic_auth_failed = HTTPException(401, "Invalid email or password")
     if profile is None:
@@ -1021,7 +1057,11 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
     them, and no access to any other tenant's data.
     """
     normalized_signup_email = body.email.strip().lower()
-    existing = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_signup_email).limit(1))).scalars().first()
+    existing = (
+        (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_signup_email).limit(1)))
+        .scalars()
+        .first()
+    )
     if existing is not None:
         raise HTTPException(409, "An account with this email already exists")
 
@@ -1070,8 +1110,17 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
             # The platform operator joins the legacy org when there is one, so
             # they land on the shared seed data rather than an empty workspace.
             legacy = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)).order_by(Organization.created_at).limit(1))
-            ).scalars().first()
+                (
+                    await db.execute(
+                        select(Organization)
+                        .where(Organization.is_legacy.is_(True))
+                        .order_by(Organization.created_at)
+                        .limit(1)
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if legacy is not None:
                 org_id = legacy.id
                 assigned_role = "admin"
@@ -1283,7 +1332,11 @@ async def get_organization(org_id: UUID, db: DbSession, user: CurrentUser) -> Or
 @router.post("/forgot-password")
 async def forgot_password(body: ForgotPasswordBody, db: DbSession, background_tasks: BackgroundTasks) -> dict[str, str]:
     normalized_forgot = body.email.strip().lower()
-    profile = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_forgot).limit(1))).scalars().first()
+    profile = (
+        (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_forgot).limit(1)))
+        .scalars()
+        .first()
+    )
     if profile is None:
         return {"message": "If an account exists for this email, a reset link has been sent."}
 

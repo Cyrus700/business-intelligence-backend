@@ -22,9 +22,11 @@ def get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             settings.database_url,
             pool_pre_ping=True,
-            pool_size=20,
-            max_overflow=10,
-            pool_timeout=10,
+            # Dashboard fans out 25+ parallel GETs on first paint; 20/10 choked
+            # and produced the 3–4s /me and 500s seen in the screenshot.
+            pool_size=40,
+            max_overflow=20,
+            pool_timeout=30,
             pool_recycle=300,
             connect_args={"statement_cache_size": 0, "timeout": 10},
         )

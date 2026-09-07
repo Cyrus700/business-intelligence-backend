@@ -1,3 +1,5 @@
+import asyncio
+import time
 from collections.abc import Callable
 from typing import Annotated, Any
 from uuid import UUID
@@ -21,6 +23,13 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 # code paths that have no database session at hand.
 ROLE_RANK = {"analyst": 1, "manager": 2, "admin": 3}
 
+# In-memory profile cache: dashboard fans out 14 parallel GETs. Without cache
+# each needs `SELECT * FROM profiles` + 3 `rbac` queries. Cache for 5m
+# (token_version check still enforces revocation).
+_PROFILE_CACHE: dict[UUID, tuple[Profile, float]] = {}
+_PROFILE_LOCK = asyncio.Lock()
+_PROFILE_TTL = 300.0  # 5 minutes — JWT is source of truth, DB check is revocation guard
+
 
 async def get_current_user(
     request: Request,
@@ -34,11 +43,54 @@ async def get_current_user(
     except AuthError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, e.detail) from e
 
+    # Fast path: serve from in-memory cache when token_version matches
+    now = time.monotonic()
+    cached = _PROFILE_CACHE.get(claims.user_id)
+    if cached is not None:
+        cached_profile, cached_at = cached
+        if now - cached_at < _PROFILE_TTL:
+            # cached_profile was loaded on a *previous* request's session,
+            # which is long closed — it's a detached instance. Re-attach it
+            # to this request's session before touching any attribute, or
+            # the first access raises DetachedInstanceError. merge(load=False)
+            # looks like the obvious no-DB-hit option but breaks under
+            # pool_pre_ping (MissingGreenlet on the next checkout), so this
+            # still does a cheap PK lookup — a fraction of the cost of the
+            # uncached path (profile + 3 RBAC queries).
+            merged = await db.merge(cached_profile)
+            assert merged is not None
+            profile = merged
+            # Check revocation against cached token_version without DB hit
+            cached_ver = profile.token_version
+            claims_ver_tmp = claims.token_version if claims.token_version is not None else 0
+            if claims_ver_tmp == cached_ver:
+                # Still enforce is_active / org checks from cache
+                if not profile.is_active:
+                    raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is disabled")
+                if not getattr(profile, "is_super_admin", False) and profile.org_id is None:
+                    raise HTTPException(
+                        status.HTTP_403_FORBIDDEN,
+                        "Organization membership required — ask your admin for an invite or register your business.",
+                    )
+                request.state.user = profile
+                request.state.org_id = profile.org_id
+                request.state.is_super_admin = bool(getattr(profile, "is_super_admin", False))
+                return profile
+            # token_version mismatch → fall through to DB refresh
+
     profile = await db.get(Profile, claims.user_id)
     if profile is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No profile for this user")
     if not profile.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is disabled")
+    # Populate cache (best-effort, no lock needed for this write; eventual consistency is fine)
+    _PROFILE_CACHE[claims.user_id] = (profile, now)
+    # Opportunistically evict stale entries
+    if len(_PROFILE_CACHE) > 512:
+        cutoff = now - _PROFILE_TTL
+        for k, (_, ts) in list(_PROFILE_CACHE.items()):
+            if ts < cutoff:
+                _PROFILE_CACHE.pop(k, None)
     # Session revocation: every JWT carries a "ver" claim minted from
     # profiles.token_version at sign-in. Role downgrades / account flips bump
     # token_version, so pre-downgrade tokens stop working on the very next

@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.api.deps import CurrentUser, DbSession, get_current_user, is_super_admin, require_role
 from app.core.clock import business_today
 from app.schemas.analytics import (
+    DashboardOut,
     DataCoverage,
     DimensionRow,
     InventoryRow,
@@ -22,6 +23,7 @@ from app.schemas.analytics import (
     TransactionRow,
 )
 from app.services.analytics import queries
+from app.services.analytics.cache import get_query_cache
 from app.services.analytics.diagnostics import diagnose_change
 from app.services.analytics.queries import Filters
 
@@ -241,6 +243,162 @@ async def diagnose_change_endpoint(
         category=f.category,
         org_id=f.org_id,
     )
+
+
+@router.get("/dashboard", response_model=DashboardOut)
+async def get_dashboard(db: DbSession, f: FiltersDep, user: CurrentUser) -> DashboardOut:
+    """Single-call dashboard — 1 DB session, 1 auth check, ~14 queries sequential.
+
+    Replaces the 14 parallel GETs the overview fired on first paint
+    (summary, 2× timeseries, by-channel/category/region, transactions,
+    levels, anomalies, recommendations, forecasts, pnl). Sequential on one
+    connection avoids the pool starvation that produced the 3–4s /me and
+    500s. Result is cached 30s per org+range (same key as the individual
+    cached queries). Partial failures are returned in `errors` instead of
+    500ing the whole dashboard.
+    """
+    import logging
+
+    from sqlalchemy import select as sa_select
+
+    from app.models import Anomaly, Forecast
+
+    logger = logging.getLogger(__name__)
+    f = _scoped_filters(f, user)
+    cache = get_query_cache()
+    # Cache key is org + range (dashboard is range-driven)
+    cache_key = cache._make_key(  # type: ignore[attr-defined]
+        "dashboard",
+        (str(f.org_id), f.date_from.isoformat(), f.date_to.isoformat(), f.region, f.channel, f.category),
+        {},
+    )
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return DashboardOut(**cached)
+
+    out: dict = {"errors": {}}
+    # Use one session sequentially to avoid pool contention; each helper is
+    # already @cached_query so second dashboard hit is instant.
+
+    try:
+        cards = await queries.kpi_summary(db, f)
+        out["summary"] = {"period_start": f.date_from, "period_end": f.date_to, "cards": cards}
+    except Exception as e:
+        logger.warning("dashboard summary failed: %s", e, exc_info=True)
+        out["errors"]["summary"] = str(e)
+
+    try:
+        out["timeseries_revenue"] = {
+            "metric": "revenue",
+            "granularity": "day",
+            "points": await queries.kpi_timeseries(db, f, "revenue", "day"),
+        }
+    except Exception as e:
+        out["errors"]["timeseries_revenue"] = str(e)
+
+    try:
+        out["timeseries_expense"] = {
+            "metric": "expense_total",
+            "granularity": "day",
+            "points": await queries.kpi_timeseries(db, f, "expense_total", "day"),
+        }
+    except Exception as e:
+        out["errors"]["timeseries_expense"] = str(e)
+
+    for dim in ("channel", "category", "region"):
+        try:
+            out[f"by_{dim}"] = await queries.sales_by_dimension(db, f, dim)
+        except Exception as e:
+            out["errors"][f"by_{dim}"] = str(e)
+
+    try:
+        items, total = await queries.sales_transactions(db, f, 1, 6, None, None, None, None)
+        out["transactions"] = {"items": items, "total": total, "page": 1, "page_size": 6}
+    except Exception as e:
+        out["errors"]["transactions"] = str(e)
+
+    try:
+        org_id = None if is_super_admin(user) else user.org_id
+        out["levels"] = await queries.inventory_levels(db, below_reorder_only=True, org_id=org_id)
+    except Exception as e:
+        out["errors"]["levels"] = str(e)
+
+    try:
+        org_id = None if is_super_admin(user) else user.org_id
+        stmt = sa_select(Anomaly).where(Anomaly.status == "open").order_by(Anomaly.detected_at.desc()).limit(50)
+        if org_id is not None:
+            stmt = stmt.where(Anomaly.org_id == org_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        out["anomalies"] = [
+            {
+                "id": str(r.id),
+                "metric": r.metric,
+                "observed_value": str(r.observed_value),
+                "expected_value": str(r.expected_value) if r.expected_value is not None else None,
+                "severity": r.severity,
+                "status": r.status,
+                "context": r.context,
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        out["errors"]["anomalies"] = str(e)
+
+    try:
+        from app.services.ml.recommendations import generate_all_recommendations, scope_recommendations
+
+        org_id = None if is_super_admin(user) else user.org_id
+        recs = await generate_all_recommendations(db, org_id=org_id)
+        recs = await scope_recommendations(db, recs, user)
+        out["recommendations"] = recs[:10]
+    except Exception as e:
+        out["errors"]["recommendations"] = str(e)
+
+    try:
+        # Use the same logic as /forecasts but without re-implementing NaiveSeasonal
+        # — call the service directly with a short horizon
+        from app.api.v1.ml import _active_model
+
+        org_id = None if is_super_admin(user) else user.org_id
+        model = await _active_model(db, "revenue_daily", {}, org_id=org_id)
+        if model is not None:
+            rows = (
+                (
+                    await db.execute(
+                        sa_select(Forecast)
+                        .where(Forecast.model_id == model.id)
+                        .order_by(Forecast.forecast_date)
+                        .limit(30)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            out["forecasts"] = {
+                "model_type": model.model_type,
+                "model_version": model.version,
+                "points": [{"forecast_date": r.forecast_date.isoformat(), "yhat": float(r.yhat)} for r in rows],
+            }
+    except Exception as e:
+        out["errors"]["forecasts"] = str(e)
+
+    try:
+        # Only for manager/admin — otherwise skip to avoid 403 noise
+        from app.api.deps import is_super_admin as _is_super
+
+        if user.role in ("manager", "admin") or _is_super(user):
+            out["pnl"] = await queries.monthly_pnl(db, f)
+    except Exception as e:
+        out["errors"]["pnl"] = str(e)
+
+    if not out["errors"]:
+        out.pop("errors", None)
+
+    # Cache the successful shape for 30s; errors are cached too but for 10s
+    # so a transient DB hiccup self-heals quickly.
+    ttl = 30 if not out.get("errors") else 10
+    await cache.set(cache_key, out, ttl)
+    return DashboardOut(**out)
 
 
 @router.get("/cache/stats")

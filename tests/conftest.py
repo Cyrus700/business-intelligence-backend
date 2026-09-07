@@ -32,7 +32,7 @@ def pytest_configure(config):  # noqa: C901
             if not exists:
                 conn.execute("CREATE DATABASE bi_test")
         alembic_cfg = Config("alembic.ini")
-        command.upgrade(alembic_cfg, "head")
+        command.upgrade(alembic_cfg, "heads")
     except Exception as e:  # pragma: no cover - DB not available in some envs
         # Allow unit tests to run without DB; integration tests will be skipped
         import warnings
