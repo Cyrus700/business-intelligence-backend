@@ -237,8 +237,8 @@ async def google_callback(
             # Turning first-time Google users away with "register a business
             # first" was the dead end here.
             legacy_org = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
-            ).scalar_one_or_none()
+                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)).order_by(Organization.created_at).limit(1))
+            ).scalars().first()
             if is_admin_login and legacy_org is not None:
                 org_id = legacy_org.id
             else:
@@ -287,8 +287,8 @@ async def google_callback(
         # Backfill org_id if missing and legacy exists
         if profile.org_id is None:
             legacy_org = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
-            ).scalar_one_or_none()
+                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)).order_by(Organization.created_at).limit(1))
+            ).scalars().first()
             if legacy_org:
                 profile.org_id = legacy_org.id
                 updated = True
@@ -1070,8 +1070,8 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
             # The platform operator joins the legacy org when there is one, so
             # they land on the shared seed data rather than an empty workspace.
             legacy = (
-                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)))
-            ).scalar_one_or_none()
+                await db.execute(select(Organization).where(Organization.is_legacy.is_(True)).order_by(Organization.created_at).limit(1))
+            ).scalars().first()
             if legacy is not None:
                 org_id = legacy.id
                 assigned_role = "admin"
