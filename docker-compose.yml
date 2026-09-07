@@ -9,8 +9,7 @@ services:
         condition: service_healthy
     profiles: ["full"]  # `docker compose --profile full up` to run the API too
 
-  # Local Postgres for development & tests (Supabase cloud is the real dev DB;
-  # this keeps tests hermetic and CI-friendly).
+  # Local Postgres for development & tests (keeps tests hermetic and CI-friendly).
   db:
     image: postgres:16-alpine
     environment:

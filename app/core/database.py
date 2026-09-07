@@ -17,7 +17,7 @@ def get_engine() -> AsyncEngine:
     global _engine, _session_factory
     if _engine is None:
         settings = get_settings()
-        # statement_cache_size=0: required for Supabase's transaction pooler (pgbouncer),
+        # statement_cache_size=0: required for transaction pooler (pgbouncer),
         # harmless on direct/session connections.
         _engine = create_async_engine(
             settings.database_url,

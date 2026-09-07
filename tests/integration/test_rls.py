@@ -1,11 +1,11 @@
-"""Row Level Security tests, run locally against the same policies Supabase
-enforces in production.
+"""Row Level Security tests, run locally against the same policies
+enforced in production.
 
 The RLS migration installs `auth.jwt()` / `auth.uid()` stubs that read the
-`request.jwt.claims` setting — the exact mechanism Supabase/PostgREST uses.
-Here we assume a non-owner role (`rls_probe`) and set claims per test, so the
-policies are exercised without needing a Supabase project. The backend's own
-connection (table owner / service role) bypasses RLS by design.
+`request.jwt.claims` setting. Here we assume a non-owner role (`rls_probe`)
+and set claims per test, so the policies are exercised without needing an
+external project. The backend's own connection (table owner) bypasses RLS by
+design.
 """
 
 import json
@@ -24,7 +24,7 @@ SETUP = [
         END IF;
     END $$""",
     "GRANT USAGE ON SCHEMA public TO rls_probe",
-    "GRANT USAGE ON SCHEMA auth TO rls_probe",  # Supabase grants this to authenticated
+    "GRANT USAGE ON SCHEMA auth TO rls_probe",
     "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO rls_probe",
 ]
 

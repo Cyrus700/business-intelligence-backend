@@ -62,11 +62,7 @@ class Settings(BaseSettings):
     env: str = Field(default="dev", description="Runtime env: dev|test|ci|prod")
     database_url: str = Field(default="", description="Postgres DSN (postgresql+asyncpg://)")
 
-    supabase_url: str = Field(default="", description="Supabase project URL")
-    supabase_jwt_secret: str = Field(default="", description="HS256 secret for JWT mint/verify")
-    supabase_service_key: str = Field(default="", description="Supabase service_role key (server-only)")
-    supabase_anon_key: str = Field(default="", description="Supabase anon key")
-
+    jwt_secret: str = Field(default="", description="HS256 secret for JWT mint/verify")
     jwt_audience: str = Field(default="authenticated")
     jwt_expiry_hours: int = Field(default=24, ge=1, le=720, description="Auth token TTL in hours (prod default 24h)")
     jwt_reset_expiry_minutes: int = Field(default=30, ge=5, le=120, description="Password-reset token TTL")
@@ -157,10 +153,10 @@ class Settings(BaseSettings):
             warnings.warn("DATABASE_URL points to localhost in prod — is this intended?")
 
         # ── JWT secret ────────────────────────────────────────────────
-        if not self.supabase_jwt_secret and is_prod:
-            raise ValueError("SUPABASE_JWT_SECRET is required in prod")
-        if self.supabase_jwt_secret and not _is_strong_secret(self.supabase_jwt_secret):
-            msg = "SUPABASE_JWT_SECRET is weak (min 32 chars)."
+        if not self.jwt_secret and is_prod:
+            raise ValueError("JWT_SECRET is required in prod")
+        if self.jwt_secret and not _is_strong_secret(self.jwt_secret):
+            msg = "JWT_SECRET is weak (min 32 chars)."
             if is_prod:
                 raise ValueError(msg + " Use: openssl rand -hex 32")
             warnings.warn(msg + " — ok in dev, will fail in prod")
@@ -228,9 +224,7 @@ class Settings(BaseSettings):
         return {
             "env": self.env,
             "database_url": _mask(self.database_url),
-            "supabase_url": self.supabase_url or "(empty)",
-            "supabase_jwt_secret": _mask(self.supabase_jwt_secret),
-            "supabase_service_key": _mask(self.supabase_service_key),
+            "jwt_secret": _mask(self.jwt_secret),
             "frontend_origins": self.frontend_origins,
             "smtp_host": self.smtp_host or "(disabled)",
             "smtp_port": str(self.smtp_port),

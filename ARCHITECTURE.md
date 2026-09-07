@@ -26,7 +26,7 @@ flowchart TB
     end
 
     subgraph External["External services"]
-        Supabase[("Supabase\nPostgres + Auth (JWT issuer)")]
+        Postgres[("Postgres\nPostgres + Auth (JWT issuer)")]
         S3[("AWS S3\nuploads / report files")]
         Groq["Groq LLM (primary)"]
         Gemini["Google Gemini (fallback)"]
@@ -42,8 +42,8 @@ flowchart TB
     API --> Core
     Services --> Core
     Scheduler --> Services
-    Core -->|asyncpg| Supabase
-    Core -->|verify JWT| Supabase
+    Core -->|asyncpg| Postgres
+    Core -->|verify JWT| Postgres
     Services -->|read/write files| S3
     Services -->|AI chat/insights| Groq
     Services -->|fallback| Gemini
@@ -111,10 +111,10 @@ sequenceDiagram
     actor User as Analyst (Browser)
     participant FE as Next.js Frontend
     participant API as FastAPI (/api/v1)
-    participant Auth as Supabase Auth
+    participant Auth as Postgres Auth
     participant Store as Storage Service (S3/local)
     participant ETL as ETL Service
-    participant DB as Postgres (Supabase)
+    participant DB as Postgres (Postgres)
     participant Sched as APScheduler
     participant AI as AI Provider (Groq/Gemini)
 

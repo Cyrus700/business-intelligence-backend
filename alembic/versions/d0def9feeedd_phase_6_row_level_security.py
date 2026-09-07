@@ -1,14 +1,13 @@
 """phase 6 row level security
 
-Enables RLS on every application table with policies driven by the Supabase
+Enables RLS on every application table with policies driven by the
 JWT role claim (``auth.jwt() -> 'app_metadata' ->> 'role'``). The FastAPI
-service connects as the table owner (local dev) or with the Supabase
-service-role key (production), both of which bypass RLS by design — RLS here
-is defence-in-depth for any client-side / anon-key access path.
+service connects as the table owner, which bypasses RLS by design — RLS here
+is defence-in-depth for any direct-db access path.
 
-On local Postgres (no Supabase) the ``auth`` schema does not exist, so this
+The ``auth`` schema does not exist on a fresh Postgres, so this
 migration creates compatible ``auth.jwt()`` / ``auth.uid()`` stubs reading
-``request.jwt.claims`` — the same mechanism Supabase uses — only when absent.
+``request.jwt.claims`` only when absent.
 
 Revision ID: d0def9feeedd
 Revises: 7659907cb5db

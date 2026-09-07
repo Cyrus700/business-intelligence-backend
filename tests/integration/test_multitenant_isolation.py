@@ -165,8 +165,8 @@ async def test_client_supplied_org_id_ignored(client, two_orgs):
         assert created["org_id"] == str(org_a.id), "Client-supplied org_id was trusted — must use JWT's org_id"
         assert created["org_id"] != str(org_b.id)
     else:
-        # If creation failed due to Supabase admin mock not configured, that's okay — the check above is about org enforcement
-        assert resp2.status_code in (403, 422, 502), resp2.text
+        # If creation failed due to org enforcement, that's okay — the check above is about org enforcement
+        assert resp2.status_code in (403, 422), resp2.text
 
 
 async def test_register_org_atomicity(client):

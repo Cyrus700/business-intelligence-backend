@@ -6,7 +6,7 @@ import jwt
 
 from app.core.config import get_settings
 
-LEEWAY_SECONDS = 30  # tolerate small clock skew between Supabase and this host
+LEEWAY_SECONDS = 30  # tolerate small clock skew between token issuer and this host
 
 
 class AuthError(Exception):
@@ -19,7 +19,7 @@ class AuthError(Exception):
 class TokenClaims:
     user_id: UUID
     email: str | None
-    role: str | None  # application role from app_metadata, NOT Supabase's postgres role
+    role: str | None  # application role from app_metadata
     token_version: int | None = None  # "ver" claim — compared to profiles.token_version
     org_id: UUID | None = None
     purpose: str | None = None
@@ -27,7 +27,7 @@ class TokenClaims:
 
 def _jwt_secret() -> str:
     settings = get_settings()
-    secret = settings.supabase_jwt_secret or "dev-secret-do-not-use-in-production"
+    secret = settings.jwt_secret or "dev-secret-do-not-use-in-production"
     # In prod a weak secret would have already aborted at Settings validation,
     # but defend-in-depth here as well.
     if len(secret) < 32 and settings.is_prod:
@@ -102,13 +102,13 @@ def sign_reset_token(
 
 
 def verify_token(token: str, *, expected_purpose: str | None = None) -> TokenClaims:
-    """Verify a Supabase-issued JWT (HS256, aud=authenticated) and extract claims.
+    """Verify an internally-issued JWT (HS256, aud=authenticated) and extract claims.
 
     ``expected_purpose`` — when given, the ``purpose`` claim must match.
     Legacy tokens without a ``purpose`` claim are accepted only when
     ``expected_purpose`` is ``None`` or ``"auth"`` (backwards compat).
     """
-    # In dev/test we allow the fallback dev secret so local `uvicorn` works without SUPABASE_JWT_SECRET;
+    # In dev/test we allow the fallback dev secret so local `uvicorn` works without JWT_SECRET;
     # in prod `get_settings()` already hard-fails if the secret is weak/missing.
     settings = get_settings()
     secret = _jwt_secret()

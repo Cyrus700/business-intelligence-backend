@@ -42,7 +42,7 @@ class Organization(Base, TimestampMixin):
 
 
 class Profile(Base, TimestampMixin):
-    """1:1 extension of Supabase auth.users (same id)."""
+    """Application user profile — primary auth identity."""
 
     __tablename__ = "profiles"
 

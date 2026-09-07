@@ -2,7 +2,7 @@
 
 This is the operator account: ``is_super_admin`` — the one that approves or
 rejects new businesses and can see every org. Unlike ``create_admin.py`` it does
-not go through Supabase; it writes the bcrypt hash straight into ``profiles``,
+not go through Postgres; it writes the bcrypt hash straight into ``profiles``,
 which is what ``POST /auth/login`` checks.
 
 Usage:

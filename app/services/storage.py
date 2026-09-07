@@ -25,7 +25,7 @@ class FileStorage:
     def __init__(self) -> None:
         settings = get_settings()
         self._bucket = settings.s3_bucket
-        self._use_s3 = bool(settings.supabase_url and settings.s3_bucket and settings.env != "dev")
+        self._use_s3 = bool(settings.s3_bucket and settings.env != "dev")
         # explicit opt-in beats guessing: S3 only when AWS creds resolve
         try:
             self._use_s3 = self._use_s3 and boto3.Session().get_credentials() is not None

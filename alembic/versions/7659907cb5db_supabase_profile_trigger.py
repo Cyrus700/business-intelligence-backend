@@ -1,6 +1,6 @@
-"""supabase profile trigger
+"""legacy profile trigger (no-op on plain Postgres)
 
-Creates a trigger on Supabase's auth.users that inserts a matching public.profiles
+Creates a trigger on auth.users that inserts a matching public.profiles
 row on signup (default role: analyst). Guarded by a check for the auth schema so the
 migration is a clean no-op on plain Postgres (local dev / CI databases).
 

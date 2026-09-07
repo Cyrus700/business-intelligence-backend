@@ -23,7 +23,6 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.database import get_session_factory
 from app.models import Profile
-from app.services.supabase_admin import SupabaseAdmin, SupabaseAdminError
 
 SEED_USERS = [
     {
@@ -73,14 +72,10 @@ async def main() -> None:
             # Keep only admin
             SEED_USERS[:] = SEED_USERS[:1]
 
-    SEED_USERS[0]["email"] = settings.admin_email
+    SEED_USERS[0]["email"] = (
+        settings.admin_email.split(",")[0].strip() if settings.admin_email else SEED_USERS[0]["email"]
+    )
     SEED_USERS[0]["password"] = settings.admin_password
-
-    admin_api: SupabaseAdmin | None = None
-    try:
-        admin_api = SupabaseAdmin()
-    except SupabaseAdminError:
-        print("Supabase admin API not available — will seed DB profiles only (no auth users)")
 
     async with get_session_factory()() as session:
         for user in SEED_USERS:
@@ -103,24 +98,9 @@ async def main() -> None:
                     print(f"Skipped {user['email']} (already exists)")
                 continue
 
-            user_id = None
-            if admin_api:
-                try:
-                    user_id = await admin_api.create_user(
-                        email=user["email"],
-                        password=user["password"],
-                        role=user["role"],
-                        full_name=user["full_name"],
-                    )
-                    print(f"Created auth user {user['email']} (id={user_id})")
-                except SupabaseAdminError as e:
-                    print(f"Failed to create auth user {user['email']}: {e}")
-                    continue
+            import uuid
 
-            if user_id is None:
-                import uuid
-
-                user_id = uuid.uuid5(uuid.NAMESPACE_URL, f"https://seed/{user['email']}")
+            user_id = uuid.uuid5(uuid.NAMESPACE_URL, f"https://seed/{user['email']}")
 
             profile = Profile(
                 id=user_id,

@@ -371,7 +371,7 @@ async def update_preferences(body: PreferencesIn, user: CurrentUser, db: DbSessi
     return PreferencesOut(**user.preferences)
 
 
-# ── Email / Password Auth (local dev fallback, no Supabase needed) ──
+# ── Email / Password Auth ──
 
 
 class LoginBody(BaseModel):
@@ -716,7 +716,11 @@ async def admin_list_all_organizations(
     # Status breakdown for the current search (ignoring the status filter itself, but keeping search)
     counts: dict[str, int] = {"pending": 0, "approved": 0, "rejected": 0, "total": 0}
     for st in ("pending", "approved", "rejected"):
-        status_q = select(func.count()).select_from(Organization).where(Organization.status == st, Organization.is_legacy.is_(False))
+        status_q = (
+            select(func.count())
+            .select_from(Organization)
+            .where(Organization.status == st, Organization.is_legacy.is_(False))
+        )
         if search:
             s2 = f"%{search.strip()}%"
             status_q = status_q.where(or_(Organization.name.ilike(s2), Organization.slug.ilike(s2)))
@@ -1240,7 +1244,15 @@ async def revoke_invite(invite_id: UUID, db: DbSession, user: CurrentUser) -> No
 async def list_organizations(db: DbSession, user: CurrentUser) -> list[OrganizationOut]:
     """List organizations — super-admin sees all non-legacy, everyone else sees own org only. Legacy backfill is hidden for all."""
     if getattr(user, "is_super_admin", False):
-        rows = (await db.execute(select(Organization).where(Organization.is_legacy.is_(False)).order_by(Organization.name))).scalars().all()
+        rows = (
+            (
+                await db.execute(
+                    select(Organization).where(Organization.is_legacy.is_(False)).order_by(Organization.name)
+                )
+            )
+            .scalars()
+            .all()
+        )
     else:
         if not user.org_id:
             raise HTTPException(403, "Organization membership required")

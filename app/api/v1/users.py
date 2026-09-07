@@ -1,6 +1,7 @@
-from typing import Annotated, Any
-from uuid import UUID
+from typing import Any
+from uuid import NAMESPACE_URL, UUID, uuid5
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 
@@ -8,15 +9,8 @@ from app.api.deps import CurrentUser, DbSession, require_role
 from app.models import AuditLog, Profile
 from app.schemas.identity import ProfileOut, UserCreate, UserUpdate
 from app.services import rbac
-from app.services.supabase_admin import (
-    SupabaseAdmin,
-    SupabaseAdminError,
-    get_supabase_admin,
-)
 
 router = APIRouter(prefix="/users", tags=["users"], dependencies=[Depends(require_role("admin"))])
-
-AdminApi = Annotated[SupabaseAdmin, Depends(get_supabase_admin)]
 
 
 def _get_ip(request: Request) -> str | None:
@@ -92,18 +86,20 @@ async def get_user(user_id: UUID, db: DbSession, user: CurrentUser) -> ProfileOu
 
 
 @router.post("", response_model=ProfileOut, status_code=status.HTTP_201_CREATED)
-async def create_user(
-    body: UserCreate, db: DbSession, admin_api: AdminApi, request: Request, user: CurrentUser
-) -> ProfileOut:
+async def create_user(body: UserCreate, db: DbSession, request: Request, user: CurrentUser) -> ProfileOut:
     await _validate_role(db, body.role)
     normalized_body_email = body.email.strip().lower()
     existing = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_body_email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "A user with this email already exists")
-    try:
-        user_id = await admin_api.create_user(body.email, body.password, body.role, body.full_name)
-    except SupabaseAdminError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+
+    # Password policy — same as signup / register-org
+    if len(body.password) < 8:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Password must be at least 8 characters")
+    if not (any(c.isalpha() for c in body.password) and any(c.isdigit() for c in body.password)):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Password must contain at least one letter and one number"
+        )
 
     from app.api.deps import is_super_admin
 
@@ -115,13 +111,28 @@ async def create_user(
         if body.org_id is not None and body.org_id != target_org:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot create user in another organization")
 
+    # Generate deterministic id from email (same as signup) so re-attempts collide cleanly
+    user_id = uuid5(NAMESPACE_URL, f"email://{normalized_body_email}")
+    # If somehow that id already exists (edge: different casing collision handled above),
+    # fall back to random v4
+    existing_id = await db.get(Profile, user_id)
+    if existing_id is not None:
+        import uuid
+
+        user_id = uuid.uuid4()
+
+    pw_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt(rounds=12)).decode()
+
     profile = Profile(
         id=user_id,
         email=normalized_body_email,
+        password_hash=pw_hash,
         full_name=body.full_name,
         role=body.role,
         department=body.department,
         org_id=target_org,
+        is_active=True,
+        email_verified=True,
     )
     db.add(profile)
     await db.flush()
@@ -145,7 +156,6 @@ async def update_user(
     user_id: UUID,
     body: UserUpdate,
     db: DbSession,
-    admin_api: AdminApi,
     request: Request,
     user: CurrentUser,
 ) -> ProfileOut:
@@ -177,12 +187,6 @@ async def update_user(
         await _validate_role(db, changes["role"])
     for field, value in changes.items():
         setattr(profile, field, value)
-
-    if role_changed:
-        try:
-            await admin_api.set_role(user_id, profile.role)
-        except SupabaseAdminError as e:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
 
     # session revocation: role change or account disable invalidates every
     # outstanding JWT (the "ver" claim in security.py vs token_version here)
