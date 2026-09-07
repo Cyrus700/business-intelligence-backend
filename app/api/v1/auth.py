@@ -1,6 +1,8 @@
 import logging
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote, unquote
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import bcrypt
@@ -82,10 +84,33 @@ async def create_personal_org(db: AsyncSession, email: str, full_name: str | Non
 
 
 @router.get("/google/login")
-async def google_login(request: Request, invite_token: str | None = Query(None)):
+async def google_login(
+    request: Request,
+    invite_token: str | None = Query(None),
+    next: str | None = Query(None),
+):
     s = get_settings()
     if not s.google_client_id:
         raise HTTPException(503, "Google OAuth not configured")
+    # Validate `next` server-side (same guard as frontend) — only dashboard destinations
+    safe_next: str | None = None
+    if next:
+        try:
+            decoded = next  # FastAPI already URL-decodes query values
+            # Some clients double-encode; try once more
+            try:
+                decoded2 = unquote(decoded)
+                # only adopt double-decoded if it looks different and still safe
+                if decoded2 != decoded and decoded2.startswith("/"):
+                    decoded = decoded2
+            except Exception:
+                pass
+            if decoded.startswith("//"):
+                safe_next = None
+            elif re.match(r"^\/(?:dashboard(?:\/|$|\?)|[a-z][a-z0-9_-]{1,31}\/dashboard(?:\/|$|\?))", decoded):
+                safe_next = decoded
+        except Exception:
+            safe_next = None
     state = secrets.token_urlsafe(16)
     # Include invite_token in state if provided (format: state:invite_token)
     state_with_invite = f"{state}:{invite_token}" if invite_token else state
@@ -101,6 +126,11 @@ async def google_login(request: Request, invite_token: str | None = Query(None))
     resp = RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}")
     # Store state in httpOnly cookie for 10 min to verify on callback (CSRF protection)
     resp.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="lax", secure=s.is_prod, path="/")
+    # Stash validated next in a short-lived cookie so google_callback can echo it to /auth/callback
+    if safe_next:
+        resp.set_cookie("oauth_next", safe_next, max_age=600, httponly=True, samesite="lax", secure=s.is_prod, path="/")
+    else:
+        resp.delete_cookie("oauth_next", path="/")
     return resp
 
 
@@ -264,12 +294,31 @@ async def google_callback(
     )
 
     frontend_url = s.frontend_url
+    # Preserve post-login destination if the login hop carried one (via oauth_next cookie)
+    oauth_next = request.cookies.get("oauth_next")
+    # Validate again before echoing (defence in depth)
+    safe_oauth_next: str | None = None
+    if oauth_next:
+        try:
+            decoded_next = oauth_next
+            if decoded_next.startswith("//"):
+                safe_oauth_next = None
+            elif re.match(r"^\/(?:dashboard(?:\/|$|\?)|[a-z][a-z0-9_-]{1,31}\/dashboard(?:\/|$|\?))", decoded_next):
+                safe_oauth_next = decoded_next
+        except Exception:
+            safe_oauth_next = None
+
+    if safe_oauth_next:
+        dest = f"{frontend_url}/auth/callback?token={token}&next={quote(safe_oauth_next, safe='')}"
+    else:
+        dest = f"{frontend_url}/auth/callback?token={token}"
     resp = RedirectResponse(
-        f"{frontend_url}/auth/callback?token={token}",
+        dest,
         status_code=302,
     )
-    # Clear state cookie
+    # Clear state cookies
     resp.delete_cookie("oauth_state", path="/")
+    resp.delete_cookie("oauth_next", path="/")
     return resp
 
 
@@ -649,8 +698,8 @@ async def admin_list_all_organizations(
     if not getattr(user, "is_super_admin", False):
         raise HTTPException(403, "System Admin privileges required")
 
-    # Base filter (search)
-    base = select(Organization)
+    # Base filter (search) — hide Legacy backfill for all, including super-admin
+    base = select(Organization).where(Organization.is_legacy.is_(False))
     filters: list = []
     if status:
         filters.append(Organization.status == status)
@@ -667,7 +716,7 @@ async def admin_list_all_organizations(
     # Status breakdown for the current search (ignoring the status filter itself, but keeping search)
     counts: dict[str, int] = {"pending": 0, "approved": 0, "rejected": 0, "total": 0}
     for st in ("pending", "approved", "rejected"):
-        status_q = select(func.count()).select_from(Organization).where(Organization.status == st)
+        status_q = select(func.count()).select_from(Organization).where(Organization.status == st, Organization.is_legacy.is_(False))
         if search:
             s2 = f"%{search.strip()}%"
             status_q = status_q.where(or_(Organization.name.ilike(s2), Organization.slug.ilike(s2)))
@@ -1189,14 +1238,18 @@ async def revoke_invite(invite_id: UUID, db: DbSession, user: CurrentUser) -> No
 
 @router.get("/organizations", response_model=list[OrganizationOut])
 async def list_organizations(db: DbSession, user: CurrentUser) -> list[OrganizationOut]:
-    """List organizations — super-admin sees all, everyone else sees own org only."""
+    """List organizations — super-admin sees all non-legacy, everyone else sees own org only. Legacy backfill is hidden for all."""
     if getattr(user, "is_super_admin", False):
-        rows = (await db.execute(select(Organization).order_by(Organization.name))).scalars().all()
+        rows = (await db.execute(select(Organization).where(Organization.is_legacy.is_(False)).order_by(Organization.name))).scalars().all()
     else:
         if not user.org_id:
             raise HTTPException(403, "Organization membership required")
         org = await db.get(Organization, user.org_id)
-        rows = [org] if org else []
+        # Hide legacy even if user is somehow still in it (should have been migrated)
+        if org and org.is_legacy:
+            rows = []
+        else:
+            rows = [org] if org else []
     return [OrganizationOut.model_validate(r) for r in rows]
 
 
