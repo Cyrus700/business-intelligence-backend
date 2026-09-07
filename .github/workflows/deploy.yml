@@ -127,6 +127,20 @@ jobs:
             echo "ERROR: business-intelligence-backend/.env missing — create from .env.example"
             exit 1
           fi
+          # --- fix stale prod .env left from pre-domain infra ---
+          if grep -q "SUPABASE_JWT_SECRET" business-intelligence-backend/.env 2>/dev/null; then
+            echo "→ migrate SUPABASE_JWT_SECRET → JWT_SECRET in .env"
+            sed -i "s/^SUPABASE_JWT_SECRET=/JWT_SECRET=/" business-intelligence-backend/.env || true
+          fi
+          if grep -q "FRONTEND_ORIGINS=http://localhost" business-intelligence-backend/.env 2>/dev/null; then
+            echo "→ patch FRONTEND_ORIGINS to prod domains"
+            sed -i "s|^FRONTEND_ORIGINS=.*|FRONTEND_ORIGINS=https://www.insightflowai.tech,https://insightflowai.tech,https://api.insightflowai.tech|" business-intelligence-backend/.env || true
+          fi
+          if grep -q "GOOGLE_REDIRECT_URI=http://localhost" business-intelligence-backend/.env 2>/dev/null; then
+            echo "→ patch GOOGLE_REDIRECT_URI to prod"
+            sed -i "s|^GOOGLE_REDIRECT_URI=.*|GOOGLE_REDIRECT_URI=https://api.insightflowai.tech/api/v1/auth/google/callback|" business-intelligence-backend/.env || true
+          fi
+          cat business-intelligence-backend/.env | grep -E "FRONTEND_ORIGINS|GOOGLE_REDIRECT|JWT_SECRET" | sed "s/JWT_SECRET=.*/JWT_SECRET=***/" || true
           # Pull GHCR (public) — no build on 1GB
           export TAG=$TAG
           export OWNER_LC=$OWNER_LC
