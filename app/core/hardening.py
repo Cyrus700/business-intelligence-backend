@@ -67,7 +67,7 @@ STRICT_PATHS = (
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, limit_per_minute: int = 240, strict_per_minute: int = 20) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, app, limit_per_minute: int = 600, strict_per_minute: int = 20) -> None:  # type: ignore[no-untyped-def]
         super().__init__(app)
         self.default = FixedWindowLimiter(limit_per_minute)
         self.strict = FixedWindowLimiter(strict_per_minute)
@@ -81,13 +81,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return f"ip:{client}"
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # OPTIONS preflight must never count toward the budget — every
+        # browser issues one before the real GET and the dashboard would
+        # double its budget on first paint.
+        if request.method == "OPTIONS":
+            return await call_next(request)
         limiter = self.strict if request.method == "POST" and request.url.path in STRICT_PATHS else self.default
         allowed, remaining = limiter.hit(self._key(request))
         if not allowed:
             return JSONResponse(
-                {"detail": "Rate limit exceeded. Try again shortly."},
+                {"detail": "Too many requests — the dashboard is refreshing. Please wait a moment and retry."},
                 status_code=429,
-                headers={"Retry-After": "60", "X-RateLimit-Remaining": "0"},
+                headers={"Retry-After": "30", "X-RateLimit-Remaining": "0"},
             )
         response = await call_next(request)
         response.headers["X-RateLimit-Remaining"] = str(remaining)

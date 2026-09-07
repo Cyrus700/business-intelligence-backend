@@ -499,7 +499,16 @@ def _needs_live_tools(question: str, intent: Intent) -> bool:
     any novel phrasing (including about future tables) gets a precise, live
     answer instead of a snapshot guess. All other intents keep the prior
     precise routing so simple 'How is revenue doing?' still streams.
+
+    HIGH-ACCURACY: anomalies / inventory / forecast are always tool-grounded
+    so "Any anomalies detected?" returns the live alerts table (observed vs
+    expected, deviation, severity) instead of the snapshot's 1-line summary,
+    and inventory / forecast answers are scoped to the live warehouse, not
+    the 30-day KPI slice.
     """
+    # Always tool-grounded — need live warehouse, not snapshot summary
+    if intent in (Intent.ANOMALIES, Intent.INVENTORY, Intent.FORECAST):
+        return True
     if intent in (Intent.BUSINESS, Intent.PLATFORM, Intent.USERS, Intent.CATALOG, Intent.UPDATE):
         return True
     # UNKNOWN keeps the previous precise routing — DETAIL_RE catches count/table

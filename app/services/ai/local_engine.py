@@ -356,7 +356,12 @@ async def _anomalies(db: AsyncSession, f: Filters, q: str) -> str:
         aq = aq.where(Anomaly.org_id == f.org_id)
     rows = (await db.execute(aq)).scalars().all()
     if not rows:
-        return "No **open anomalies** detected in the current window — operations look stable. ✔"
+        period = _period_label(f)
+        return (
+            f"No **open anomalies** detected for **{period}** — operations look stable. ✔\n\n"
+            f"Checked **{period}** live from your warehouse. If you expected alerts, widen the period or open the **Anomaly Alerts** panel.\n\n"
+            "**Suggested action:** no action needed — keep monitoring; ask `show anomalies last 7 days` to verify."
+        )
     lines = [
         f"### Anomaly Alerts — {len(rows)} open",
         "",

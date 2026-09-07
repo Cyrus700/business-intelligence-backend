@@ -405,8 +405,10 @@ class InsightOut(BaseModel):
     priority: str
 
 
-@router.get("/ai/insights", response_model=list[InsightOut])
+@router.get("/insights", response_model=list[InsightOut])
 async def ai_insights(
+    # alias for legacy frontend that still calls /ai/insights (see below)
+
     db: DbSession,
     user: CurrentUser,
     scope: str = Query("dashboard", pattern="^(dashboard|forecast|anomalies|inventory|all)$"),

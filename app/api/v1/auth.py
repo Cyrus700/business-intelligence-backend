@@ -195,9 +195,16 @@ async def google_callback(
 
     existing = await db.get(Profile, profile_id)
     if existing is None:
+        # Use first() not scalar_one_or_none() — stale data may have duplicate lower(email)
+        # (e.g. after a partial restore). Pick the most recent to avoid 500.
         existing = (
-            await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_google_email))
-        ).scalar_one_or_none()
+            await db.execute(
+                select(Profile)
+                .where(func.lower(Profile.email) == normalized_google_email)
+                .order_by(Profile.created_at.desc())
+                .limit(1)
+            )
+        ).scalars().first()
 
     # ADMIN_EMAIL from env is the source of truth — any login matching it becomes admin
     is_admin_login = s.is_admin_email(normalized_google_email)
@@ -467,15 +474,15 @@ async def register_org(body: RegisterOrgBody, db: DbSession, background_tasks: B
         raise HTTPException(422, "Password is too common")
 
     normalized_email = body.email.strip().lower()
-    existing = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_email))
-    if existing.scalar_one_or_none() is not None:
+    existing = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_email).limit(1))).scalars().first()
+    if existing is not None:
         raise HTTPException(409, "An account with this email already exists")
 
     normalized = body.org_name.strip()
     if not normalized:
         raise HTTPException(422, "Organization name is required")
-    existing_org = await db.execute(select(Organization).where(func.lower(Organization.name) == normalized.lower()))
-    if existing_org.scalar_one_or_none() is not None:
+    existing_org = (await db.execute(select(Organization).where(func.lower(Organization.name) == normalized.lower()).limit(1))).scalars().first()
+    if existing_org is not None:
         raise HTTPException(409, "An organization with this name already exists")
 
     profile_id = uuid5(NAMESPACE_URL, f"email://{normalized_email}")
@@ -618,8 +625,7 @@ async def resend_verification(
 ) -> dict[str, str]:
     """Resend verification email for pending business."""
     normalized = body.email.strip().lower()
-    result = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized))
-    profile = result.scalar_one_or_none()
+    profile = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized).limit(1))).scalars().first()
     if profile is None:
         return {"message": "If an account exists, a verification email has been sent."}
     if profile.email_verified:
@@ -926,8 +932,7 @@ async def login(body: LoginBody, db: DbSession, request: Request) -> AuthOut:
     # Their org's approval state and email-verification state are irrelevant:
     # they are the person who approves organizations in the first place.
     is_operator = get_settings().is_admin_email(normalized_login)
-    result = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_login))
-    profile = result.scalar_one_or_none()
+    profile = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_login).limit(1))).scalars().first()
     # Use generic error to avoid account enumeration (same message for not-found vs wrong password)
     generic_auth_failed = HTTPException(401, "Invalid email or password")
     if profile is None:
@@ -1016,8 +1021,8 @@ async def signup(body: SignupBody, db: DbSession, background_tasks: BackgroundTa
     them, and no access to any other tenant's data.
     """
     normalized_signup_email = body.email.strip().lower()
-    existing = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_signup_email))
-    if existing.scalar_one_or_none() is not None:
+    existing = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_signup_email).limit(1))).scalars().first()
+    if existing is not None:
         raise HTTPException(409, "An account with this email already exists")
 
     if len(body.password) < 8:
@@ -1278,8 +1283,7 @@ async def get_organization(org_id: UUID, db: DbSession, user: CurrentUser) -> Or
 @router.post("/forgot-password")
 async def forgot_password(body: ForgotPasswordBody, db: DbSession, background_tasks: BackgroundTasks) -> dict[str, str]:
     normalized_forgot = body.email.strip().lower()
-    result = await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_forgot))
-    profile = result.scalar_one_or_none()
+    profile = (await db.execute(select(Profile).where(func.lower(Profile.email) == normalized_forgot).limit(1))).scalars().first()
     if profile is None:
         return {"message": "If an account exists for this email, a reset link has been sent."}
 

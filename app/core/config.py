@@ -113,7 +113,10 @@ class Settings(BaseSettings):
     )
 
     # ── Rate limiting ─────────────────────────────────────────────────────
-    rate_limit_per_minute: int = Field(default=240, ge=10, le=100_000)
+    # Dashboard first paint is ~25 parallel GETs; 240 was tight with
+    # multiple tabs / rapid filter changes → 429 storm (430 req in screenshot).
+    # 600 sustains ~10/s with burst headroom, still blocks real abuse.
+    rate_limit_per_minute: int = Field(default=600, ge=10, le=100_000)
 
     # ------------------------------------------------------------------
     # Validators
