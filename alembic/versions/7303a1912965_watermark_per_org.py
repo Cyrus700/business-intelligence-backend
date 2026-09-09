@@ -7,7 +7,7 @@ Create Date: 2026-09-08
 - Adds org_id to data_watermarks (FK to organizations, unique)
 - Drops single-row check constraint (id = 1) to allow per-org rows
 - Backfills existing global row to legacy org if present
-- Creates index/unique on org_id
+- Creates index/unique on org_id — robust via DO blocks
 
 """
 from collections.abc import Sequence
@@ -27,75 +27,94 @@ def upgrade() -> None:
     conn = op.get_bind()
     insp = sa.inspect(conn)
 
-    # ensure table exists (migration 6ad649...)
     tables = insp.get_table_names()
     if "data_watermarks" not in tables:
         return
 
     cols = [c["name"] for c in insp.get_columns("data_watermarks")]
     if "org_id" not in cols:
-        op.add_column("data_watermarks", sa.Column("org_id", UUID(as_uuid=True), nullable=True))
         try:
-            op.create_foreign_key(
-                "fk_data_watermarks_org_id_organizations",
-                "data_watermarks",
-                "organizations",
-                ["org_id"],
-                ["id"],
-                ondelete="CASCADE",
-            )
+            with conn.begin_nested():
+                op.add_column("data_watermarks", sa.Column("org_id", UUID(as_uuid=True), nullable=True))
         except Exception:
             pass
         try:
-            op.create_index("ix_data_watermarks_org_id", "data_watermarks", ["org_id"], unique=True)
+            with conn.begin_nested():
+                op.create_foreign_key(
+                    "fk_data_watermarks_org_id_organizations",
+                    "data_watermarks",
+                    "organizations",
+                    ["org_id"],
+                    ["id"],
+                    ondelete="CASCADE",
+                )
         except Exception:
             pass
+        # Drop single-row check if exists — use IF EXISTS
         try:
-            op.create_unique_constraint("uq_data_watermarks_org_id", "data_watermarks", ["org_id"])
+            conn.execute(sa.text("ALTER TABLE data_watermarks DROP CONSTRAINT IF EXISTS single_watermark_row"))
         except Exception:
             pass
+        # Backfill existing global watermark to legacy org before creating unique
+        try:
+            legacy_id = conn.execute(sa.text("SELECT id FROM organizations WHERE is_legacy = true LIMIT 1")).scalar()
+            if legacy_id is not None:
+                conn.execute(sa.text("UPDATE data_watermarks SET org_id = :lid WHERE org_id IS NULL AND id = 1"), {"lid": legacy_id})
+                conn.execute(sa.text("UPDATE data_watermarks SET org_id = :lid WHERE org_id IS NULL"), {"lid": legacy_id})
+        except Exception as e:
+            print(f"watermark backfill skipped: {e}")
 
-        # Drop single-row check if exists
+        # Create unique/index — allow multiple NULLs in PG, so safe; use DO block
+        try:
+            dup = conn.execute(sa.text("SELECT 1 FROM data_watermarks WHERE org_id IS NOT NULL GROUP BY org_id HAVING COUNT(*) >1 LIMIT 1")).scalar()
+            if dup is None:
+                conn.execute(sa.text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_data_watermarks_org_id') THEN
+                            ALTER TABLE data_watermarks ADD CONSTRAINT uq_data_watermarks_org_id UNIQUE (org_id);
+                        END IF;
+                    EXCEPTION WHEN duplicate_table OR duplicate_object THEN
+                        RAISE WARNING 'uq_data_watermarks_org_id exists';
+                    WHEN unique_violation THEN
+                        RAISE WARNING 'watermark org_id duplicate';
+                    END
+                    $$;
+                """))
+            else:
+                print("WARNING: data_watermarks duplicate org_id — skipping unique")
+        except Exception as e:
+            print(f"uq_data_watermarks_org_id: {e}")
+
+        try:
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_data_watermarks_org_id ON data_watermarks (org_id)"))
+        except Exception:
+            pass
+    else:
+        # Ensure index exists
+        try:
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_data_watermarks_org_id ON data_watermarks (org_id)"))
+        except Exception:
+            pass
+        # Ensure single_watermark_row dropped
         try:
             conn.execute(sa.text("ALTER TABLE data_watermarks DROP CONSTRAINT IF EXISTS single_watermark_row"))
         except Exception:
             pass
 
-        # Migrate existing global watermark (id=1, org_id NULL) to legacy org or keep as global fallback
-        try:
-            legacy_id = conn.execute(sa.text("SELECT id FROM organizations WHERE is_legacy = true LIMIT 1")).scalar()
-            if legacy_id is not None:
-                # If there's a global row with NULL org, duplicate it for legacy org, keep original as fallback?
-                # For simplicity, assign NULL org row to legacy org where org_id IS NULL and id=1
-                conn.execute(sa.text("UPDATE data_watermarks SET org_id = :lid WHERE org_id IS NULL AND id = 1"), {"lid": legacy_id})
-                # If multiple rows with NULL, assign them too
-                conn.execute(sa.text("UPDATE data_watermarks SET org_id = :lid WHERE org_id IS NULL"), {"lid": legacy_id})
-        except Exception as e:
-            print(f"watermark backfill skipped: {e}")
-
-        # Make org_id nullable for super_admin global view? Keep nullable to allow global fallback.
-        # But for strict per-org, we keep nullable and allow multiple rows with distinct orgs.
-
-    # Ensure constraint for id primary still exists; we keep id as PK but allow multiple rows with different ids per org
-    # Change primary maybe not needed; we just need org_id unique.
-    # Ensure we have at least index for org_id filter
-    try:
-        op.create_index("ix_data_watermarks_org_id", "data_watermarks", ["org_id"])
-    except Exception:
-        pass
-
 
 def downgrade() -> None:
+    conn = op.get_bind()
     try:
-        op.drop_constraint("uq_data_watermarks_org_id", "data_watermarks", type_="unique")
+        conn.execute(sa.text("ALTER TABLE data_watermarks DROP CONSTRAINT IF EXISTS uq_data_watermarks_org_id"))
     except Exception:
         pass
     try:
-        op.drop_index("ix_data_watermarks_org_id", table_name="data_watermarks")
+        conn.execute(sa.text("DROP INDEX IF EXISTS ix_data_watermarks_org_id"))
     except Exception:
         pass
     try:
-        op.drop_constraint("fk_data_watermarks_org_id_organizations", "data_watermarks", type_="foreignkey")
+        conn.execute(sa.text("ALTER TABLE data_watermarks DROP CONSTRAINT IF EXISTS fk_data_watermarks_org_id_organizations"))
     except Exception:
         pass
     try:
@@ -103,6 +122,6 @@ def downgrade() -> None:
     except Exception:
         pass
     try:
-        op.create_check_constraint("single_watermark_row", "data_watermarks", "id = 1")
+        conn.execute(sa.text("ALTER TABLE data_watermarks ADD CONSTRAINT single_watermark_row CHECK (id = 1)"))
     except Exception:
         pass
