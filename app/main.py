@@ -31,6 +31,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT false"
                     )
                 )
+                # ---- Upload history timestamp fix (TimestampAgent) ----
+                # RawUpload lacked updated_at / etl_job_id and had unstable ordering (only created_at)
+                # Self-heal adds them without needing a manual alembic run on prod.
+                for stmt in (
+                    "ALTER TABLE staging.raw_uploads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()",
+                    "ALTER TABLE staging.raw_uploads ADD COLUMN IF NOT EXISTS etl_job_id UUID REFERENCES etl_jobs(id) ON DELETE SET NULL",
+                    "CREATE INDEX IF NOT EXISTS ix_raw_uploads_org_created ON staging.raw_uploads (org_id, created_at DESC, id DESC)",
+                ):
+                    try:
+                        await conn.execute(text(stmt))
+                    except Exception:
+                        pass
                 # Hot indexes for the dashboard's filtered aggregates. The 3–4s /me
                 # and 500s on summary/timeseries were partly sequential table scans
                 # when filtering by channel/region/category — these were missing.

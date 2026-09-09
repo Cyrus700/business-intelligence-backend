@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 SourceKind = Literal["csv_upload", "excel_upload", "rest_api", "postgres"]
 TargetDomain = Literal["sales", "finance", "inventory"]
@@ -46,7 +46,18 @@ class UploadOut(BaseModel):
     row_count: int | None
     error_report: dict[str, Any] | None
     created_at: datetime
-    etl_job_id: str | None = None
+    updated_at: datetime | None = None
+    etl_job_id: UUID | None = None
+
+    @field_serializer("created_at", "updated_at", when_used="always")
+    def _serialize_utc(self, v: datetime | None) -> str | None:
+        if v is None:
+            return None
+        from datetime import timezone
+
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class PaginatedUploads(BaseModel):

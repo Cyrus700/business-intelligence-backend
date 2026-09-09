@@ -40,6 +40,7 @@ class RawUpload(Base):
     __table_args__ = (
         CheckConstraint("status IN ('received', 'validated', 'loaded', 'failed')", name="valid_status"),
         Index("ix_raw_uploads_org_id", "org_id"),
+        Index("ix_raw_uploads_org_created", "org_id", "created_at", "id"),
         {"schema": "staging"},
     )
 
@@ -57,7 +58,11 @@ class RawUpload(Base):
     row_count: Mapped[int | None]
     status: Mapped[str] = mapped_column(default="received")
     error_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Timezone-aware timestamps: server stores UTC, API serializes as ISO-8601 UTC
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    # Persisted ETL job link so history can show pipeline result without relying on transient JSON
+    etl_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("etl_jobs.id", ondelete="SET NULL"))
 
 
 class EtlJob(Base):

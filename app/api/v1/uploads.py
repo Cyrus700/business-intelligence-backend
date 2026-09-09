@@ -180,6 +180,8 @@ async def _process_upload_background(
     data_source_id: UUID | None = None,
 ) -> None:
     """Background worker for large files — runs outside the request lifecycle."""
+    from sqlalchemy.orm.attributes import flag_modified
+
     factory = get_session_factory()
     async with factory() as db:
         upload = await db.get(RawUpload, upload_id)
@@ -198,11 +200,13 @@ async def _process_upload_background(
                 preview=extract.preview,
                 warnings=extract.warnings,
             )
+            flag_modified(upload, "error_report")
             await db.flush()
             result = await run_frame_pipeline(
                 db, domain, extract.frame, trigger="upload", source_id=data_source_id, org_id=org_id
             )
             upload.status = "loaded"
+            upload.etl_job_id = result.job_id  # type: ignore[assignment]
             upload.error_report = _report(
                 upload=upload,
                 target_domain=domain,
@@ -217,24 +221,26 @@ async def _process_upload_background(
                     "skipped_duplicates": result.skipped_duplicates,
                     "details": result.error_report.get("details", []),
                     "file_size": len(data),
+                    "etl_job_id": str(result.job_id),
                 },
             )
-            # attach job id
-            upload.error_report["etl_job_id"] = result.job_id
+            flag_modified(upload, "error_report")
             await db.commit()
             logger.info("background upload %s completed: %s rows", upload_id, result.rows_loaded)
         except ValueError as e:
             upload.status = "failed"
             # preserve prior report if exists
-            prior = upload.error_report or {}
+            prior = dict(upload.error_report or {})
             prior["error"] = str(e)
             upload.error_report = prior
+            flag_modified(upload, "error_report")
             await db.commit()
             logger.warning("background upload %s failed: %s", upload_id, e)
         except Exception as e:
             logger.exception("background upload %s crashed", upload_id)
             upload.status = "failed"
             upload.error_report = {"error": f"internal error: {str(e)[:300]}"}
+            flag_modified(upload, "error_report")
             await db.commit()
 
 
@@ -389,8 +395,11 @@ async def chunked_complete(
 
     if use_background:
         # Mark as processing and offload
+        from sqlalchemy.orm.attributes import flag_modified
+
         upload.status = "received"
         upload.error_report = {"status": "processing", "message": "large file — processing in background", "file_size": len(data)}
+        flag_modified(upload, "error_report")
         await db.commit()
         background_tasks.add_task(
             _process_upload_background,
@@ -415,6 +424,7 @@ async def chunked_complete(
             db, effective_domain, extract.frame, trigger="upload", source_id=data_source_id, org_id=user_org_id(user)
         )
         upload.status = "loaded"
+        upload.etl_job_id = result.job_id  # type: ignore[assignment]
         upload.error_report = _report(
             upload=upload,
             target_domain=effective_domain,
@@ -429,17 +439,22 @@ async def chunked_complete(
                 "skipped_duplicates": result.skipped_duplicates,
                 "details": result.error_report.get("details", []),
                 "file_size": len(data),
+                "etl_job_id": str(result.job_id),
             },
         )
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(upload, "error_report")
         await db.commit()
         await db.refresh(upload)
         out = UploadOut.model_validate(upload)
-        out.etl_job_id = result.job_id
-        orchestrator.chunk_manager.cleanup(session_id)
         return out
     except ValueError as e:
         upload.status = "failed"
         upload.error_report = {"error": str(e)}
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(upload, "error_report")
         await db.commit()
         orchestrator.chunk_manager.cleanup(session_id)
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
@@ -501,6 +516,8 @@ async def upload_file(
 
     if is_large:
         # Persist pending marker and offload heavy work
+        from sqlalchemy.orm.attributes import flag_modified
+
         upload.error_report = {
             "target_domain": effective_domain,
             "status": "processing",
@@ -508,6 +525,7 @@ async def upload_file(
             "file_size": len(data),
             "detected": detection,
         }
+        flag_modified(upload, "error_report")
         await db.commit()
         await db.refresh(upload)
         background_tasks.add_task(
@@ -527,6 +545,9 @@ async def upload_file(
     except ValueError as e:
         upload.status = "failed"
         upload.error_report = {"error": str(e), "target_domain": effective_domain}
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(upload, "error_report")
         await db.commit()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
@@ -535,6 +556,8 @@ async def upload_file(
 
     # If row count is also large, switch to background after validation to keep request snappy
     if upload.row_count and upload.row_count > ASYNC_THRESHOLD_ROWS:
+        from sqlalchemy.orm.attributes import flag_modified
+
         upload.status = "received"
         upload.error_report = _report(
             upload=upload,
@@ -550,6 +573,7 @@ async def upload_file(
                 "file_size": len(data),
             },
         )
+        flag_modified(upload, "error_report")
         await db.commit()
         await db.refresh(upload)
         # Re-run via background using original data (avoids double extraction cost)
@@ -581,10 +605,14 @@ async def upload_file(
             warnings=extract.warnings,
             extra={"error": str(e)},
         )
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(upload, "error_report")
         await db.commit()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
     upload.status = "loaded"
+    upload.etl_job_id = result.job_id  # type: ignore[assignment]
     upload.error_report = _report(
         upload=upload,
         target_domain=effective_domain,
@@ -600,12 +628,15 @@ async def upload_file(
             "details": result.error_report.get("details", []),
             "file_size": len(data),
             "detected": detection,
+            "etl_job_id": str(result.job_id),
         },
     )
+    from sqlalchemy.orm.attributes import flag_modified
+
+    flag_modified(upload, "error_report")
     await db.commit()
     await db.refresh(upload)
     out = UploadOut.model_validate(upload)
-    out.etl_job_id = result.job_id
     return out
 
 
@@ -623,8 +654,8 @@ async def list_uploads(
     if status_filter:
         stmt = stmt.where(RawUpload.status == status_filter)
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
-    # Most recent first so the just-uploaded file appears at top without refresh
-    stmt = stmt.order_by(RawUpload.created_at.desc())
+    # Stable ordering: newest first, tie-break on id to avoid pagination drift
+    stmt = stmt.order_by(RawUpload.created_at.desc(), RawUpload.id.desc())
     rows = (await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))).scalars().all()
     return PaginatedUploads(
         items=[UploadOut.model_validate(r) for r in rows],
