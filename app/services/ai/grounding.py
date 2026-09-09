@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 #: The model reformats and rounds constantly (17.63% → 17.6%), and that is
 #: correct behaviour, not a hallucination.
 TOLERANCE = 0.005
-#: Absolute slack, so small integers survive rounding too.
-ABS_TOLERANCE = 0.51
+#: Absolute slack, so small integers survive rounding too — tightened from 0.51
+ABS_TOLERANCE = 0.05
 #: A bare number below this is a count, a rank or a list index — not a claim
 #: worth challenging. Currency- and percent-tagged figures are checked at any
-#: magnitude.
-BARE_FIGURE_FLOOR = 1000.0
-#: Pairwise derivation is O(n²); past this many evidence numbers we only do
-#: the direct match, which is still the case that matters.
+#: magnitude. Tightened from 1000 to 100 for stricter grounding
+BARE_FIGURE_FLOOR = 100.0
+#: Pairwise derivation is O(n²); past this many evidence numbers we shard
+#: into chunks rather than skipping the check entirely.
 MAX_PAIRWISE = 120
 MAX_EVIDENCE_NUMBERS = 400
 
@@ -121,17 +121,42 @@ def _derivable(value: float, evidence: list[float]) -> bool:
     Totals, gaps, shares and period-over-period changes are exactly what a BI
     assistant is supposed to compute, so they must not read as invention.
     """
-    if len(evidence) > MAX_PAIRWISE:
+    # fix MAX_PAIRWISE sharding: instead of skipping when >120, shard into chunks
+    if len(evidence) <= MAX_PAIRWISE:
+        for a in evidence:
+            for b in evidence:
+                if _close(value, a + b) or _close(value, a - b):
+                    return True
+                if b:
+                    if _close(value, a / b * 100.0):  # share
+                        return True
+                    if _close(value, (a - b) / abs(b) * 100.0):  # change vs previous
+                        return True
         return False
-    for a in evidence:
-        for b in evidence:
-            if _close(value, a + b) or _close(value, a - b):
-                return True
-            if b:
-                if _close(value, a / b * 100.0):  # share
+    # sharded check: break evidence into chunks of MAX_PAIRWISE and test each
+    for start in range(0, len(evidence), MAX_PAIRWISE):
+        chunk = evidence[start:start+MAX_PAIRWISE]
+        for a in chunk:
+            for b in chunk:
+                if _close(value, a + b) or _close(value, a - b):
                     return True
-                if _close(value, (a - b) / abs(b) * 100.0):  # change vs previous
-                    return True
+                if b:
+                    if _close(value, a / b * 100.0):
+                        return True
+                    if _close(value, (a - b) / abs(b) * 100.0):
+                        return True
+        # also cross-check chunk vs full sample (first chunk) to preserve cross-shard derivability
+        # sample first elements for boundary pairs
+        if start > 0:
+            sample = evidence[: min(10, MAX_PAIRWISE)]
+            for a in sample:
+                for b in chunk:
+                    if _close(value, a + b) or _close(value, a - b):
+                        return True
+                    if b and _close(value, a / b * 100.0):
+                        return True
+                    if b and _close(value, (a - b) / abs(b) * 100.0):
+                        return True
     return False
 
 

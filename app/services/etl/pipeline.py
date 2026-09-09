@@ -57,7 +57,7 @@ async def run_frame_pipeline(
     await db.flush()
 
     try:
-        result = transform_frame(domain, frame)
+        result = transform_frame(domain, frame, org_id=org_id)
         loader = LOADERS[domain]
         load_result = await loader(db, result.records, source_id, job.id, org_id=org_id)
 
@@ -112,6 +112,25 @@ async def run_frame_pipeline(
                 await db.rollback()
             except Exception:
                 pass
+
+    # Invalidate caches so the next dashboard read sees fresh warehouse state
+    try:
+        from app.services.analytics.cache import clear_query_cache
+
+        await clear_query_cache(org_id=org_id)
+    except Exception:
+        pass
+    try:
+        from app.services.analytics.compare import clear_compare_cache
+
+        await clear_compare_cache(org_id=org_id)
+    except Exception:
+        try:
+            from app.services.analytics.compare import _compare_cache
+
+            _compare_cache.clear()
+        except Exception:
+            pass
 
     return PipelineResult(
         job_id=_job_id,

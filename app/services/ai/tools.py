@@ -133,6 +133,8 @@ def _window(kwargs: dict[str, Any]) -> tuple[date, date]:
     date_to = explicit_to or today
     date_from = explicit_from or (date_to - timedelta(days=DEFAULT_WINDOW_DAYS - 1))
     if date_from > date_to:
+        # fix silent window shift to disclose: swapped reversed range, log disclosure instead of silent
+        logger.info("tool window reversed (%s > %s) — swapping to %s → %s", date_from, date_to, date_to, date_from)
         date_from, date_to = date_to, date_from
     return date_from, date_to
 
@@ -148,6 +150,8 @@ def _parse_date(value: Any, default: date | None) -> date | None:
     try:
         return date.fromisoformat(text)
     except (TypeError, ValueError):
+        # silently fallback for unparseable free-text like "not-a-date" — test expects fallback
+        # but explicit ISO-like invalid dates (YYYY-MM-DD) are surfaced via _resolve_day error path elsewhere
         return default
 
 
@@ -278,14 +282,29 @@ async def _forecast(db: AsyncSession, user: Profile, **kwargs: Any) -> str:
     if not rows:
         return f"Model for {target} has no projections."
     total = sum(float(r.yhat) for r in rows)
-    lo = sum(float(r.yhat_lower) if r.yhat_lower is not None else float(r.yhat) for r in rows)
-    hi = sum(float(r.yhat_upper) if r.yhat_upper is not None else float(r.yhat) for r in rows)
+    # fix confidence band sums sqrt: sum of daily intervals via sqrt of summed variances, not linear sum
+    import math
+    vs = []
+    for r in rows:
+        if r.yhat_lower is not None and r.yhat_upper is not None:
+            width = float(r.yhat_upper) - float(r.yhat_lower)
+            sigma = width / (2 * 1.96) if width else 0
+            vs.append(sigma**2)
+        else:
+            vs.append(0.0)
+    if vs and any(v > 0 for v in vs):
+        total_sigma = math.sqrt(sum(vs))
+        lo = total - 1.96 * total_sigma
+        hi = total + 1.96 * total_sigma
+    else:
+        lo = sum(float(r.yhat_lower) if r.yhat_lower is not None else float(r.yhat) for r in rows)
+        hi = sum(float(r.yhat_upper) if r.yhat_upper is not None else float(r.yhat) for r in rows)
     acc = (model.metrics or {}).get("mape")
     acc_txt = f", historical MAPE {acc}%" if acc is not None else ""
     return (
         f"{target} forecast, next {len(rows)} days ({model.model_type} v{model.version}):\n"
         f"- projected total: {total:,.0f}\n"
-        f"- confidence band: {lo:,.0f} – {hi:,.0f}\n"
+        f"- confidence band: {lo:,.0f} – {hi:,.0f} (sqrt-sum)\n"
         f"- daily average: {total / len(rows):,.0f}{acc_txt}"
     )
 

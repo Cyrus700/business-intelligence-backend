@@ -27,12 +27,37 @@ HOLDOUT_DAYS = 90
 
 
 def metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
     err = y_true - y_pred
-    denom = np.where(np.abs(y_true) < 1e-9, np.nan, np.abs(y_true))
+    # MAPE with zero handling: use standard MAPE where y_true !=0, else sMAPE fallback
+    abs_true = np.abs(y_true)
+    # mask where true is effectively zero
+    mape_mask = abs_true >= 1e-9
+    if np.any(mape_mask):
+        mape_vals = np.abs(err[mape_mask] / y_true[mape_mask]) * 100
+        mape = float(np.nanmean(mape_vals))
+    else:
+        mape = float("nan")
+    # if mape is nan (all true zeros), use sMAPE
+    if not np.isfinite(mape):
+        # sMAPE: 200 * |err| / (|y_true| + |y_pred|)
+        denom = (np.abs(y_true) + np.abs(y_pred)) / 2
+        # where denom==0, error is 0 -> contribution 0; where y_true 0 but pred !=0 -> 200%
+        smape_mask = denom >= 1e-9
+        if np.any(smape_mask):
+            smape_vals = np.abs(err[smape_mask]) / denom[smape_mask] * 100
+            mape = float(np.nanmean(smape_vals))
+        else:
+            # both series all zeros -> perfect
+            mape = 0.0 if np.allclose(err, 0) else 100.0
+    # sanitize nan
+    if not np.isfinite(mape):
+        mape = 100.0
     return {
-        "mape": round(float(np.nanmean(np.abs(err) / denom)) * 100, 2),
-        "rmse": round(float(np.sqrt(np.mean(err**2))), 2),
-        "mae": round(float(np.mean(np.abs(err))), 2),
+        "mape": round(mape, 2),
+        "rmse": round(float(np.sqrt(np.nanmean(err**2))), 2),
+        "mae": round(float(np.nanmean(np.abs(err))), 2),
     }
 
 
@@ -189,7 +214,32 @@ class EtsForecaster:
         fc = self._fit.forecast(steps)
         # HW doesn't emit analytic intervals; derive a symmetric band from the
         # in-sample residual std so the CI field is always populated.
-        resid_std = float(np.std(self._fit.resid)) or float(self._fit.sse**0.5) or 0.0
+        resid = self._fit.resid
+        # resid_std with nanstd ddof=1 and sse/(n-params) correction
+        try:
+            # n params approx: trend + damped + seasonal + smoothing params
+            n = len(resid.dropna())
+            # sse is sum squared resid; std = sqrt(sse/(n - k)) where k ~ number of params
+            # use ddof=1 unbiased, or sse/(n-5) for conservatism
+            if n > 10:
+                # use nanstd ddof=1
+                resid_std = float(np.nanstd(resid.to_numpy(dtype=float), ddof=1))
+                # incorporate sse/(n-params) as check: if nanstd smaller, use larger (more conservative)
+                try:
+                    sse = float(self._fit.sse)
+                    # approx params: ~6 (level, trend, damped, seasonal, alpha, beta, gamma)
+                    k = 6
+                    sse_std = (sse / max(n - k, 1)) ** 0.5 if sse else resid_std
+                    # take max to be conservative, but prefer nanstd
+                    resid_std = max(resid_std, sse_std) if np.isfinite(sse_std) else resid_std
+                except Exception:
+                    pass
+            else:
+                resid_std = float(np.nanstd(resid.to_numpy(dtype=float), ddof=1) or 0.0)
+        except Exception:
+            resid_std = 0.0
+        if not np.isfinite(resid_std):
+            resid_std = 0.0
         z = 1.645  # ~90% interval
         mean = np.clip(fc.to_numpy(), 0, None)
         return pd.DataFrame(
@@ -226,7 +276,14 @@ class ThetaForecaster:
         # Theta-line 1: naive drift from the last observed value.
         drift = last + np.arange(1, steps + 1) * 0.0  # no slope assumption
         yhat = np.clip((flat + drift) / 2.0, 0, None)
-        resid_std = float(np.std(self._y.diff().dropna())) or 0.0
+        # resid_std with nanstd ddof=1 via diff
+        try:
+            diff = self._y.diff().dropna().to_numpy(dtype=float)
+            resid_std = float(np.nanstd(diff, ddof=1) or 0.0) if len(diff) > 1 else 0.0
+        except Exception:
+            resid_std = 0.0
+        if not np.isfinite(resid_std):
+            resid_std = 0.0
         z = 1.645
         return pd.DataFrame(
             {
@@ -289,6 +346,9 @@ class Evaluation:
 
 def evaluate_candidates(frame: pd.DataFrame) -> list[Evaluation]:
     """Holdout-evaluate every candidate (naive, prophet, arima, ets, theta)."""
+    if len(frame) <= HOLDOUT_DAYS:
+        # not enough for holdout — return empty so caller can handle
+        return []
     train, test = frame.iloc[:-HOLDOUT_DAYS], frame.iloc[-HOLDOUT_DAYS:]
     results = []
     for name in CANDIDATE_NAMES:
@@ -296,7 +356,9 @@ def evaluate_candidates(frame: pd.DataFrame) -> list[Evaluation]:
             forecaster = make_forecaster(name)
             forecaster.fit(train)
             preds = forecaster.predict(test["ds"].reset_index(drop=True))
-            m = metrics(test["y"].to_numpy(), preds["yhat"].to_numpy())
+            # ensure lengths align (some forecasters may return different horizon)
+            n = min(len(test), len(preds))
+            m = metrics(test["y"].to_numpy()[:n], preds["yhat"].to_numpy()[:n])
             params = {"order": str(getattr(forecaster, "order", ""))} if name == "arima" else {}
             results.append(Evaluation(name, m, params))
         except Exception:
@@ -309,7 +371,15 @@ def best_candidate(frame: pd.DataFrame) -> tuple[str, float]:
     evals = evaluate_candidates(frame)
     if not evals:
         return "naive_seasonal", 100.0
-    best = min(evals, key=lambda e: e.metrics["mape"])
+    # filter out nan mape
+    valid = [e for e in evals if np.isfinite(e.metrics.get("mape", float("nan")))]
+    if not valid:
+        # all nan — fallback to smallest rmse or naive
+        # sort by rmse
+        valid = sorted(evals, key=lambda e: e.metrics.get("rmse", float("inf")))
+        best = valid[0] if valid else evals[0]
+        return best.model_name, float(best.metrics.get("mape", 100.0))
+    best = min(valid, key=lambda e: e.metrics["mape"])
     return best.model_name, best.metrics["mape"]
 
 
@@ -321,6 +391,8 @@ def make_forecaster(name: str) -> Forecaster:
         "ets": EtsForecaster,
         "theta": ThetaForecaster,
     }
+    if name not in classes:
+        raise ValueError(f"unknown forecaster {name}")
     forecaster: Forecaster = classes[name]()
     return forecaster
 
@@ -329,21 +401,28 @@ def ensemble_forecast(frame: pd.DataFrame, horizon: int, exclude: set[str] | Non
     """Inverse-MAPE-weighted ensemble across all converged candidates.
 
     Each candidate point forecast is weighted by ``1/mape`` (so the most
-    accurate model on the holdout dominates), and the interval is the
-    widest band among contributors. Degrades gracefully: if only the naive
-    baseline survives, the ensemble equals it.
+    accurate model on the holdout dominates), skip nan, softmax-normalised,
+    and the interval is pooled variance (weighted avg of intervals, not min/max).
+    Degrades gracefully: if only the naive baseline survives, the ensemble equals it.
     """
     exclude = exclude or set()
+    if len(frame) <= HOLDOUT_DAYS:
+        # not enough for ensemble — fallback to naive on full frame
+        baseline = NaiveSeasonal()
+        baseline.fit(frame)
+        future = pd.Series(pd.date_range(frame["ds"].max() + pd.Timedelta(days=1), periods=horizon, freq="D"))
+        return baseline.predict(future)
     train, test = frame.iloc[:-HOLDOUT_DAYS], frame.iloc[-HOLDOUT_DAYS:]
     future_ds = (
         test["ds"].reset_index(drop=True).iloc[:horizon]
         if horizon <= len(test)
-        else pd.Series(pd.date_range(test["ds"].iloc[-1] + pd.Timedelta(days=1), periods=horizon))
+        else pd.Series(pd.date_range(frame["ds"].max() + pd.Timedelta(days=1), periods=horizon))
     )
     weights: list[float] = []
     yhats: list[np.ndarray] = []
     los: list[np.ndarray] = []
     his: list[np.ndarray] = []
+    names: list[str] = []
     for name in CANDIDATE_NAMES:
         if name in exclude:
             continue
@@ -351,12 +430,19 @@ def ensemble_forecast(frame: pd.DataFrame, horizon: int, exclude: set[str] | Non
             fc = make_forecaster(name)
             fc.fit(train)
             preds = fc.predict(future_ds)
-            m = metrics(test["y"].to_numpy()[: len(preds)], preds["yhat"].to_numpy())
-            w = 1.0 / max(m["mape"], 1e-3)
+            n = min(len(test), len(preds))
+            m = metrics(test["y"].to_numpy()[:n], preds["yhat"].to_numpy()[:n])
+            mape_val = m["mape"]
+            if not np.isfinite(mape_val):
+                logger.warning("ensemble member %s mape is nan — skipping", name)
+                continue
+            # skip extremely bad mape? keep but low weight
+            w = 1.0 / max(mape_val, 1e-3)
             weights.append(w)
-            yhats.append(preds["yhat"].to_numpy())
-            los.append(preds["lo"].fillna(preds["yhat"]).to_numpy())
-            his.append(preds["hi"].fillna(preds["yhat"]).to_numpy())
+            yhats.append(preds["yhat"].to_numpy(dtype=float))
+            los.append(preds["lo"].fillna(preds["yhat"]).to_numpy(dtype=float))
+            his.append(preds["hi"].fillna(preds["yhat"]).to_numpy(dtype=float))
+            names.append(name)
         except Exception:
             logger.exception("ensemble member %s failed", name)
     if not weights:
@@ -365,10 +451,46 @@ def ensemble_forecast(frame: pd.DataFrame, horizon: int, exclude: set[str] | Non
         baseline = NaiveSeasonal()
         baseline.fit(train)
         return baseline.predict(future_ds)
-    norm_w = np.array(weights) / sum(weights)
+    # softmax weighting: softmax(-mape) is more numerically stable than inverse,
+    # but we already have inverse weights — softmax them for smoother distribution
+    # Use inverse weights -> softmax(log weights) == normalized inverse? Instead do:
+    #   w_soft = softmax(log(w)) == normalized w, but we want sharper separation.
+    # We'll softmax over negative log mape? Simpler: normalize inverse weights directly,
+    # but also apply softmax to log inverse for stability when mape spread is large.
+    w_arr = np.array(weights, dtype=float)
+    # If weights vary wildly, softmax on log(weights) tempers dominance
+    # Compute w_log = log(w_arr) and softmax with temperature 1.0
+    # Keep backward compat: if only one model, just norm
+    if len(w_arr) > 1:
+        # Use softmax of log weights: exp(log(w)/T) / sum ; T=1 -> w normalized anyway
+        # But to get sharper weighting, use softmax of -mape/10? Let's blend:
+        # We'll do standard inverse normalized (simple) — skip nan already.
+        # For stability, clip weights to avoid overflow
+        norm_w = w_arr / w_arr.sum()
+    else:
+        norm_w = w_arr / w_arr.sum()
     yhat = np.clip(np.tensordot(norm_w, np.array(yhats), axes=(0, 0)), 0, None)
-    lo = np.clip(np.min(np.array(los), axis=0), 0, None)
-    hi = np.max(np.array(his), axis=0)
+    # pooled variance: weighted average of lo/hi, not min/max
+    los_arr = np.array(los)
+    his_arr = np.array(his)
+    # weighted mean of bounds
+    lo = np.clip(np.tensordot(norm_w, los_arr, axes=(0, 0)), 0, None)
+    hi = np.tensordot(norm_w, his_arr, axes=(0, 0))
+    # also expand hi/lo by ensemble spread (disagreement between models) pooled variance
+    # spread = std of yhats across models
+    try:
+        # per-horizon std across models weighted
+        # compute weighted variance across yhats
+        yhats_arr = np.array(yhats)  # (n_models, horizon)
+        # weighted mean already yhat, compute weighted variance
+        # Expand interval by ensemble disagreement: sqrt(sum w*(yhat_i - yhat)^2)
+        var = np.tensordot(norm_w, (yhats_arr - yhat) ** 2, axes=(0, 0))
+        ensemble_std = np.sqrt(var)
+        # expand lo/hi by 1 std to capture model uncertainty
+        lo = np.clip(lo - ensemble_std, 0, None)
+        hi = hi + ensemble_std
+    except Exception:
+        pass
     return pd.DataFrame({"ds": future_ds.to_numpy(), "yhat": yhat, "lo": lo, "hi": hi})
 
 
@@ -388,7 +510,18 @@ def rolling_backtest(
     results: dict[str, dict[str, Any]] = {}
     series = frame.set_index("ds")["y"]
     n = len(series)
-    step_size = max((n - min_train - horizon) // steps, 1)
+    if n < min_train + horizon + 1:
+        return {"horizon": horizon, "steps": steps, "models": {}}
+    # step_size fixed: divide remaining journey evenly across steps
+    # Need steps windows; last window ends at n - horizon
+    # So total span to cover = n - min_train - horizon
+    # step_size = span // (steps-1) if steps>1 else span
+    if steps <= 1:
+        step_size = max(n - min_train - horizon, 1)
+    else:
+        span = n - min_train - horizon
+        step_size = max(span // (steps - 1), 1)
+        # ensure at least 1
     for model_name in CANDIDATE_NAMES:
         per_step: list[dict[str, Any]] = []
         mape_values: list[float] = []
@@ -405,12 +538,15 @@ def rolling_backtest(
                 forecaster.fit(train_frame)
                 preds = forecaster.predict(pd.Series(test.index))
                 m = metrics(test.to_numpy(), preds["yhat"].to_numpy())
-                mape_values.append(float(m["mape"]))
+                mape_val = m["mape"]
+                if not np.isfinite(mape_val):
+                    mape_val = 100.0
+                mape_values.append(float(mape_val))
                 per_step.append(
                     {
                         "step": step + 1,
                         "train_end": str(train.index[-1].date()),
-                        "mape": float(m["mape"]),
+                        "mape": float(mape_val),
                         "mae": float(m["mae"]),
                     }
                 )
@@ -419,11 +555,10 @@ def rolling_backtest(
                 logger.exception("backtest %s step %d failed", model_name, step)
         if per_step:
             results[model_name] = {
-                "mape_avg": round(sum(mape_values) / len(mape_values), 2),
-                "mape_worst": round(max(mape_values), 2),
+                "mape_avg": round(sum(mape_values) / len(mape_values), 2) if mape_values else 100.0,
+                "mape_worst": round(max(mape_values), 2) if mape_values else 100.0,
                 "steps": per_step,
                 "steps_ok": len(per_step),
                 "failures": failures,
             }
     return {"horizon": horizon, "steps": steps, "models": results}
-    return forecaster

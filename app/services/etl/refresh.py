@@ -112,24 +112,67 @@ async def refresh_derived(db: AsyncSession, start: date, end: date, org_id=None)
         errors.append("recommendations")
         await _rollback(db)
 
-    # Record watermark so the frontend can show "last refreshed"
+    # Record watermark so the frontend can show "last refreshed" — per-org if org_id given
     try:
-        await db.execute(
-            text(
-                """
-                INSERT INTO data_watermarks (id, last_refresh_at, last_source, last_trigger, affected_range_start, affected_range_end)
-                VALUES (1, :now, 'etl', 'auto', :start, :end)
-                ON CONFLICT (id) DO UPDATE SET
-                    last_refresh_at = EXCLUDED.last_refresh_at,
-                    last_source = EXCLUDED.last_source,
-                    last_trigger = EXCLUDED.last_trigger,
-                    affected_range_start = EXCLUDED.affected_range_start,
-                    affected_range_end = EXCLUDED.affected_range_end
-                """
-            ),
-            {"now": business_now(), "start": start, "end": end},
-        )
-        await db.commit()
+        if org_id is not None:
+            # Try per-org watermark (requires org_id column added by 7303a1912965)
+            try:
+                await db.execute(
+                    text(
+                        """
+                        INSERT INTO data_watermarks (org_id, last_refresh_at, last_source, last_trigger, affected_range_start, affected_range_end)
+                        VALUES (:org_id, :now, 'etl', 'auto', :start, :end)
+                        ON CONFLICT (org_id) DO UPDATE SET
+                            last_refresh_at = EXCLUDED.last_refresh_at,
+                            last_source = EXCLUDED.last_source,
+                            last_trigger = EXCLUDED.last_trigger,
+                            affected_range_start = EXCLUDED.affected_range_start,
+                            affected_range_end = EXCLUDED.affected_range_end
+                        """
+                    ),
+                    {"org_id": str(org_id), "now": business_now(), "start": start, "end": end},
+                )
+                await db.commit()
+            except Exception as e:
+                msg = str(e).lower()
+                if "org_id" in msg or "does not exist" in msg or "no unique" in msg or "constraint" in msg or "column" in msg:
+                    await _rollback(db)
+                    # Fallback to legacy global watermark if per-org column not yet migrated
+                    await db.execute(
+                        text(
+                            """
+                            INSERT INTO data_watermarks (id, last_refresh_at, last_source, last_trigger, affected_range_start, affected_range_end)
+                            VALUES (1, :now, 'etl', 'auto', :start, :end)
+                            ON CONFLICT (id) DO UPDATE SET
+                                last_refresh_at = EXCLUDED.last_refresh_at,
+                                last_source = EXCLUDED.last_source,
+                                last_trigger = EXCLUDED.last_trigger,
+                                affected_range_start = EXCLUDED.affected_range_start,
+                                affected_range_end = EXCLUDED.affected_range_end
+                            """
+                        ),
+                        {"now": business_now(), "start": start, "end": end},
+                    )
+                    await db.commit()
+                else:
+                    raise
+        else:
+            await db.execute(
+                text(
+                    """
+                    INSERT INTO data_watermarks (id, last_refresh_at, last_source, last_trigger, affected_range_start, affected_range_end)
+                    VALUES (1, :now, 'etl', 'auto', :start, :end)
+                    ON CONFLICT (id) DO UPDATE SET
+                        last_refresh_at = EXCLUDED.last_refresh_at,
+                        last_source = EXCLUDED.last_source,
+                        last_trigger = EXCLUDED.last_trigger,
+                        affected_range_start = EXCLUDED.affected_range_start,
+                        affected_range_end = EXCLUDED.affected_range_end
+                    """
+                ),
+                {"now": business_now(), "start": start, "end": end},
+            )
+            await db.commit()
     except Exception:
         logger.exception("could not record data watermark")
         errors.append("watermark")

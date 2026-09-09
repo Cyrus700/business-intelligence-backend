@@ -72,11 +72,12 @@ def _remember_label(f: Filters, label: str) -> None:
         _LABELS.clear()
 
 
-async def _resolve_window(db: AsyncSession, today: date | None = None, org_id=None) -> Filters:
+async def _resolve_window(db: AsyncSession, today: date | None = None, org_id=None) -> tuple[Filters, int]:
     """Most recent {WINDOW_DAYS}-day window that actually contains data.
 
     Skips back up to WINDOW_SHIFTS empty windows so the assistant answers with
     the latest real numbers instead of claiming the business has no data.
+    Returns (filters, shifts) so caller can disclose window shift to user (fix silent window shift).
     """
     today = today or business_today()
     for shift in range(WINDOW_SHIFTS + 1):
@@ -89,12 +90,12 @@ async def _resolve_window(db: AsyncSession, today: date | None = None, org_id=No
         try:
             cards = await _kpi_map(db, f)
         except Exception:
-            return f
+            return f, shift
         rev = cards.get("revenue", {}).get("value") or 0
         exp = cards.get("expense_total", {}).get("value") or 0
         if float(rev) > 0 or float(exp) > 0:
-            return f
-    return Filters(date_from=today - timedelta(days=WINDOW_DAYS - 1), date_to=today, org_id=org_id)
+            return f, shift
+    return Filters(date_from=today - timedelta(days=WINDOW_DAYS - 1), date_to=today, org_id=org_id), WINDOW_SHIFTS
 
 
 async def local_answer(db: AsyncSession, question: str, intent: Intent, org_id=None, user=None) -> str:
@@ -108,6 +109,7 @@ async def local_answer(db: AsyncSession, question: str, intent: Intent, org_id=N
     # Resolve org_id from user if not explicitly given
     if org_id is None and user is not None:
         org_id = _org_for_user(user)
+    shift_note = ""
     asked = parse_period(question)
     if asked is not None:
         f = Filters(date_from=asked.start, date_to=asked.end, org_id=org_id)
@@ -116,12 +118,22 @@ async def local_answer(db: AsyncSession, question: str, intent: Intent, org_id=N
         if outside:
             return outside
     else:
-        f = await _resolve_window(db, org_id=org_id)
+        resolved = await _resolve_window(db, org_id=org_id)
+        if isinstance(resolved, tuple):
+            f, shifts = resolved
+            if shifts > 0:
+                # fix silent window shift to disclose — previously shifted silently
+                shift_note = f"\n> Note: your last {WINDOW_DAYS} days had no data, showing the most recent available window {f.date_from} → {f.date_to} ({shifts} window(s) shifted).\n"
+        else:
+            f = resolved
 
     try:
         handler = _HANDLERS.get(intent)
         if handler:
-            return await handler(db, f, question)
+            reply = await handler(db, f, question)
+            if shift_note:
+                return shift_note + reply
+            return reply
     except Exception:
         # Fall through to the generic answer rather than surfacing a 500 to the
         # chat UI. The rollback matters: a failed statement aborts the whole
@@ -129,7 +141,10 @@ async def local_answer(db: AsyncSession, question: str, intent: Intent, org_id=N
         logger.warning("local handler for %s failed", intent, exc_info=True)
         await _rollback(db)
 
-    return await _generic(db, f)
+    generic = await _generic(db, f)
+    if shift_note:
+        return shift_note + generic
+    return generic
 
 
 async def _rollback(db: AsyncSession) -> None:

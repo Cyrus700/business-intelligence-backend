@@ -120,12 +120,14 @@ def _text(value: Any) -> str | None:
     return str(value).strip()
 
 
-def _row_hash(*parts: Any) -> str:
+def _row_hash(*parts: Any, org_id: Any | None = None) -> str:
+    if org_id is not None:
+        parts = (str(org_id),) + tuple(parts)
     canonical = "|".join("" if p is None else str(p) for p in parts)
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def transform_sales_row(raw: dict[str, Any]) -> dict[str, Any]:
+def transform_sales_row(raw: dict[str, Any], org_id: Any | None = None) -> dict[str, Any]:
     txn_date = _parse_date(raw.get("date"))
     sku = _text(raw.get("sku"))
     if not sku:
@@ -162,11 +164,12 @@ def transform_sales_row(raw: dict[str, Any]) -> dict[str, Any]:
         quantity,
         unit_price,
         discount,
+        org_id=org_id,
     )
     return record
 
 
-def transform_expense_row(raw: dict[str, Any]) -> dict[str, Any]:
+def transform_expense_row(raw: dict[str, Any], org_id: Any | None = None) -> dict[str, Any]:
     expense_date = _parse_date(raw.get("date"))
     category = (_text(raw.get("category")) or "").lower()
     if category not in EXPENSE_CATEGORIES:
@@ -186,6 +189,7 @@ def transform_expense_row(raw: dict[str, Any]) -> dict[str, Any]:
         amount,
         record["department"],
         record["description"],
+        org_id=org_id,
     )
     return record
 
@@ -220,7 +224,7 @@ DOMAIN_SPECS: dict[str, dict[str, Any]] = {
 }
 
 
-def transform_frame(domain: str, frame: pd.DataFrame) -> TransformResult:
+def transform_frame(domain: str, frame: pd.DataFrame, org_id: Any | None = None) -> TransformResult:
     spec = DOMAIN_SPECS[domain]
     frame = frame.rename(columns={c: str(c).strip().lower() for c in frame.columns})
     frame = resolve_columns(frame)
@@ -230,9 +234,17 @@ def transform_frame(domain: str, frame: pd.DataFrame) -> TransformResult:
 
     transform: Callable[[dict[str, Any]], dict[str, Any]] = spec["transform"]
     result = TransformResult()
+    # Detect if transform supports org_id (sales/expense) via introspection
+    import inspect
+
+    sig = inspect.signature(transform)
+    supports_org = "org_id" in sig.parameters
     for i, raw in enumerate(frame.to_dict("records"), start=1):
         try:
-            result.records.append(transform(raw))
+            if supports_org:
+                result.records.append(transform(raw, org_id=org_id))
+            else:
+                result.records.append(transform(raw))
         except ValueError as e:
             result.errors.append(RowError(row=i, reason=str(e)))
     return result

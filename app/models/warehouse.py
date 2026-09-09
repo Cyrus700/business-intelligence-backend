@@ -50,12 +50,18 @@ class Customer(Base, TimestampMixin):
     segment: Mapped[str | None]
     city: Mapped[str | None]
     region: Mapped[str | None]
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    )
 
     __table_args__ = (
         CheckConstraint(
             "segment IS NULL OR segment IN ('retail', 'wholesale', 'online')",
             name="valid_segment",
         ),
+        UniqueConstraint("name", "org_id", name="uq_customers_name_org"),
+        Index("ix_customers_org_id", "org_id"),
+        Index("ix_customers_name", "name"),
     )
 
 
@@ -72,8 +78,8 @@ class SalesTransaction(Base):
     total_amount: Mapped[Decimal] = mapped_column(Money)
     channel: Mapped[str | None]
     region: Mapped[str | None]
-    # natural-key hash for idempotent loads (Phase 2)
-    row_hash: Mapped[str | None] = mapped_column(unique=True)
+    # natural-key hash for idempotent loads (Phase 2) — unique per org
+    row_hash: Mapped[str | None] = mapped_column()
     source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
     etl_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("etl_jobs.id", ondelete="SET NULL"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -92,6 +98,8 @@ class SalesTransaction(Base):
         Index("ix_sales_txn_date_region", "txn_date", "region"),
         Index("ix_sales_org_id", "org_id"),
         Index("ix_sales_org_txn_date", "org_id", "txn_date"),
+        UniqueConstraint("org_id", "row_hash", name="uq_sales_row_hash_org"),
+        Index("ix_sales_row_hash", "row_hash"),
         CheckConstraint("quantity > 0", name="positive_quantity"),
     )
 
@@ -105,7 +113,7 @@ class Expense(Base):
     amount: Mapped[Decimal] = mapped_column(Money)
     department: Mapped[str | None]
     description: Mapped[str | None]
-    row_hash: Mapped[str | None] = mapped_column(unique=True)
+    row_hash: Mapped[str | None] = mapped_column()
     source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("data_sources.id", ondelete="SET NULL"))
     etl_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("etl_jobs.id", ondelete="SET NULL"))
     org_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -122,6 +130,8 @@ class Expense(Base):
         Index("ix_expenses_ingested_at", "ingested_at"),
         Index("ix_expenses_org_id", "org_id"),
         Index("ix_expenses_org_date", "org_id", "expense_date"),
+        UniqueConstraint("org_id", "row_hash", name="uq_expenses_row_hash_org"),
+        Index("ix_expenses_row_hash", "row_hash"),
         CheckConstraint(
             "category IN ('rent', 'salaries', 'utilities', 'marketing', 'logistics', 'other')",
             name="valid_category",

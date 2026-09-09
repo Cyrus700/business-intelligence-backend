@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ARRAY, CheckConstraint, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy import ARRAY, CheckConstraint, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,7 +34,8 @@ class Insight(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
     )
     # dedupe key so re-runs don't duplicate insights (Phase 5)
-    dedupe_key: Mapped[str | None] = mapped_column(unique=True)
+    # fix dedupe index to (org_id, dedupe_key) for per-org isolation
+    dedupe_key: Mapped[str | None] = mapped_column()
 
     __table_args__ = (
         CheckConstraint(
@@ -47,6 +48,14 @@ class Insight(Base):
             name="ck_insight_status",
         ),
         CheckConstraint("priority IN ('low', 'medium', 'high')", name="valid_priority"),
+        UniqueConstraint("org_id", "dedupe_key", name="uq_insights_org_dedupe"),
+        Index("ix_insights_dedupe_key", "dedupe_key"),
+        Index(
+            "uq_insights_dedupe_global",
+            "dedupe_key",
+            unique=True,
+            postgresql_where=text("org_id IS NULL"),
+        ),
         Index("ix_insights_generated_at", "generated_at"),
         Index("ix_insights_type_generated", "insight_type", "generated_at"),
         Index("ix_insights_org_id", "org_id"),

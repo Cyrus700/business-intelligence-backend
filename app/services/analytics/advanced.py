@@ -14,6 +14,7 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Product, SalesTransaction
+from app.services.analytics.cache import cached_query
 from app.services.analytics.queries import Filters
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ _METRIC_AGG = {
     "units": func.sum(SalesTransaction.quantity),
 }
 
+ALLOWED_METRICS = set(_METRIC_AGG.keys())
+ALLOWED_GRANULARITIES = {"day", "week", "month", "quarter", "year"}
 
 def _col(dim: str):
     if dim == "product":
@@ -51,10 +54,30 @@ def _conditions(f: Filters):
     return _sales_conditions(f, f.date_from, f.date_to)
 
 
+def _validate_metric(metric: str, fallback: str = "revenue") -> str:
+    if metric in ALLOWED_METRICS:
+        return metric
+    return fallback
+
+
+def _validate_granularity(g: str, fallback: str = "month") -> str:
+    if g in ALLOWED_GRANULARITIES:
+        return g
+    return fallback
+
+
+def _validate_dim(dim: str, fallback: str = "region") -> str:
+    if dim in DIMS:
+        return dim
+    return fallback
+
+
 # ── Decomposition tree ──────────────────────────────────────────────
+@cached_query(ttl_seconds=30)
 async def decomposition_tree(
     db: AsyncSession, f: Filters, metric: str = "revenue", hierarchy: str = "region,category,product"
 ) -> dict:
+    metric = _validate_metric(metric)
     levels = [d.strip() for d in hierarchy.split(",") if d.strip() in DIMS]
     if not levels:
         levels = ["region", "category"]
@@ -95,9 +118,12 @@ async def decomposition_tree(
 
 
 # ── Waterfall / variance bridge ─────────────────────────────────────
+@cached_query(ttl_seconds=30)
 async def waterfall(
     db: AsyncSession, f: Filters, metric: str = "revenue", dimension: str = "category", top_n: int = 8
 ) -> dict:
+    metric = _validate_metric(metric)
+    dimension = _validate_dim(dimension, "category")
     cur_stmt = (
         select(_col(dimension).label("k"), func.sum(_METRIC_AGG[metric]).label("v"))
         .select_from(_join_for(dimension))
@@ -128,10 +154,72 @@ async def waterfall(
     steps = []
     for k in keys:
         delta = cur.get(k, 0.0) - prev.get(k, 0.0)
-        steps.append({"label": k, "delta": round(delta, 2)})
-    steps.sort(key=lambda s: s["delta"])
+        # change_pct per step relative to start
+        start_total = sum(prev.values())
+        change_pct = (delta / start_total * 100) if start_total else None
+        steps.append({"label": k, "delta": round(delta, 2), "prev": round(prev.get(k, 0.0), 2), "cur": round(cur.get(k, 0.0), 2), "change_pct": round(change_pct, 1) if change_pct is not None else None})
+    # split positive/negative, cumulative, then recombine
+    positives = sorted([s for s in steps if s["delta"] >= 0], key=lambda s: s["delta"], reverse=True)
+    negatives = sorted([s for s in steps if s["delta"] < 0], key=lambda s: s["delta"])  # most negative first
+    # take top_n balanced: half positive, half negative, or proportional
+    if top_n >= 2:
+        half = top_n // 2
+        # Ensure we cover both signs: take top half positives and top half negatives
+        selected_pos = positives[:half + (top_n % 2)]
+        selected_neg = negatives[:half]
+        # If one side has fewer than half, fill from other side
+        if len(selected_pos) < half:
+            need = half - len(selected_pos)
+            selected_neg = negatives[: half + need + (top_n % 2)]
+        if len(selected_neg) < half:
+            need = half - len(selected_neg)
+            selected_pos = positives[: half + need + (top_n % 2)]
+        selected = selected_pos + selected_neg
+        # sort selected by delta descending for cumulative? But cumulative needs sequential order.
+        # For waterfall, order by absolute delta magnitude descending, then compute cumulative
+        selected_sorted = sorted(selected, key=lambda s: s["delta"], reverse=True)
+        # recompute cumulative
+        start = round(sum(prev.values()), 2)
+        end = round(sum(cur.values()), 2)
+        cum = start
+        for s in selected_sorted:
+            cum += s["delta"]
+            s["cumulative"] = round(cum, 2)
+            s["start"] = round(cum - s["delta"], 2)
+            s["end"] = round(cum, 2)
+        # final sort for display: largest positive first, then negatives at bottom? Keep delta desc
+        selected_sorted.sort(key=lambda s: s["delta"], reverse=True)
+        steps_out = selected_sorted[:top_n]
+        # If top_n larger than selected, fill remaining by next largest absolute
+        if len(steps_out) < top_n:
+            remaining = [s for s in steps if s not in selected]
+            remaining_sorted = sorted(remaining, key=lambda s: abs(s["delta"]), reverse=True)
+            extra = remaining_sorted[: top_n - len(steps_out)]
+            for s in extra:
+                cum += s["delta"]
+                s["cumulative"] = round(cum, 2)
+                s["start"] = round(cum - s["delta"], 2)
+                s["end"] = round(cum, 2)
+            steps_out.extend(extra)
+            steps_out.sort(key=lambda s: s["delta"], reverse=True)
+    else:
+        steps.sort(key=lambda s: s["delta"], reverse=True)
+        steps_out = steps[:top_n]
+        cum = sum(prev.values())
+        for s in steps_out:
+            start_cum = cum
+            cum += s["delta"]
+            s["cumulative"] = round(cum, 2)
+            s["start"] = round(start_cum, 2)
+            s["end"] = round(cum, 2)
     start = round(sum(prev.values()), 2)
     end = round(sum(cur.values()), 2)
+    # Ensure steps_out cumulative is consistent (recompute if needed)
+    if steps_out and "cumulative" not in steps_out[0]:
+        cum = start
+        for s in steps_out:
+            cum += s["delta"]
+            s["cumulative"] = round(cum, 2)
     return {
         "metric": metric,
         "dimension": dimension,
@@ -139,14 +227,18 @@ async def waterfall(
         "end": end,
         "total_change": round(end - start, 2),
         "change_pct": round((end - start) / start * 100, 1) if start else None,
-        "steps": steps[:top_n],
+        "steps": steps_out,
     }
 
 
 # ── Heatmap matrix ─────────────────────────────────────────────────
+@cached_query(ttl_seconds=30)
 async def heatmap(
     db: AsyncSession, f: Filters, metric: str = "revenue", row_dim: str = "region", col_dim: str = "category"
 ) -> dict:
+    metric = _validate_metric(metric)
+    row_dim = _validate_dim(row_dim, "region")
+    col_dim = _validate_dim(col_dim, "category")
     if row_dim not in DIMS or col_dim not in DIMS:
         row_dim, col_dim = "region", "category"
     rcol, ccol = _col(row_dim), _col(col_dim)
@@ -162,6 +254,21 @@ async def heatmap(
     c_keys = sorted({k[1] for k in data})
     matrix = [[round(data.get((rk, ck), 0.0), 2) for ck in c_keys] for rk in r_keys]
     flat = [v for row in matrix for v in row] or [0]
+    # p95 clipping for color scale — prevents one outlier washing out the heatmap
+    if flat:
+        arr = np.array(flat, dtype=float)
+        p95 = float(np.percentile(arr, 95)) if len(arr) > 1 else float(arr[0])
+        p5 = float(np.percentile(arr, 5)) if len(arr) > 1 else 0.0
+        vmax = p95 if p95 > 0 else max(flat)
+        vmin = p5
+        # clipped matrix for display scaling (original values kept in matrix)
+        clipped = np.clip(arr, vmin, vmax)
+        display_max = float(vmax)
+        display_min = float(vmin)
+    else:
+        display_max = 0.0
+        display_min = 0.0
+        clipped = np.array([])
     return {
         "metric": metric,
         "row_dim": row_dim,
@@ -169,12 +276,17 @@ async def heatmap(
         "rows": r_keys,
         "cols": c_keys,
         "matrix": matrix,
-        "min": min(flat),
-        "max": max(flat),
+        "min": min(flat) if flat else 0,
+        "max": max(flat) if flat else 0,
+        "p95": round(float(p95), 2) if flat and len(flat) > 1 else (max(flat) if flat else 0),
+        "p5": round(float(p5), 2) if flat and len(flat) > 1 else 0,
+        "display_min": round(display_min, 2),
+        "display_max": round(display_max, 2),
     }
 
 
 # ── Scatter / bubble ───────────────────────────────────────────────
+@cached_query(ttl_seconds=30)
 async def scatter(
     db: AsyncSession,
     f: Filters,
@@ -183,8 +295,19 @@ async def scatter(
     y: str = "margin_pct",
     size: str = "units",
 ) -> dict:
-    if dimension not in DIMS:
-        dimension = "product"
+    dimension = _validate_dim(dimension, "product")
+    # whitelist metrics for axes
+    allowed_axes = {"revenue", "units", "orders", "aov", "gross_margin", "margin_pct", "margin", "avg_order_value"}
+    # normalize axis names
+    # map frontend names to internal point keys
+    # points have keys: revenue, units, orders, aov, gross_margin, margin_pct
+    # accept both
+    if x not in allowed_axes:
+        x = "revenue"
+    if y not in allowed_axes:
+        y = "margin_pct"
+    if size not in allowed_axes:
+        size = "units"
     key = _col(dimension)
     stmt = (
         select(
@@ -201,8 +324,21 @@ async def scatter(
         .where(*_conditions(f))
         .group_by(key)
     )
+    # Fix GROUP BY when adding category: need to group by both key and category
+    cat_col = None
     if dimension in ("category", "product"):
-        stmt = stmt.add_columns(Product.category.label("cat"))
+        cat_col = Product.category.label("cat")
+        stmt = stmt.add_columns(cat_col)
+        # Need to group by both key and product category to satisfy SQL
+        # For product dimension, category is functionally dependent but SQL requires it
+        try:
+            stmt = stmt.group_by(key, Product.category)
+        except Exception:
+            # if already grouped, reconstruct
+            stmt = stmt.group_by(key, Product.category)
+    else:
+        # ensure group_by only key
+        pass
     rows = (await db.execute(stmt)).all()
     pts = []
     for r in rows:
@@ -222,27 +358,44 @@ async def scatter(
                 "aov": round(aov, 2),
                 "gross_margin": round(margin, 2),
                 "margin_pct": round(margin_pct, 1),
+                "margin": round(margin, 2),
+                "avg_order_value": round(aov, 2),
             }
         )
     picks = {"x": x, "y": y, "size": size}
 
     def pick(p, field):
+        # map aliases
+        if field == "margin":
+            field = "gross_margin"
         v = p.get(field)
         return float(v if v is not None else 0.0)
 
+    # handle empty pts
+    if pts:
+        x_vals = [pick(p, x) for p in pts]
+        y_vals = [pick(p, y) for p in pts]
+        x_range = [round(float(min(x_vals)), 2), round(float(max(x_vals)), 2)]
+        y_range = [round(float(min(y_vals)), 2), round(float(max(y_vals)), 2)]
+    else:
+        x_range = [0, 0]
+        y_range = [0, 0]
     return {
         "dimension": dimension,
         "axes": picks,
         "points": pts,
-        "x_range": [min((pick(p, x) for p in pts), default=0), max((pick(p, x) for p in pts), default=0)],
-        "y_range": [min((pick(p, y) for p in pts), default=0), max((pick(p, y) for p in pts), default=0)],
+        "x_range": x_range,
+        "y_range": y_range,
     }
 
 
 # ── Funnel ─────────────────────────────────────────────────────────
+@cached_query(ttl_seconds=30)
 async def funnel(
     db: AsyncSession, f: Filters, metric: str = "revenue", dimension: str = "category", top_n: int = 8
 ) -> dict:
+    metric = _validate_metric(metric)
+    dimension = _validate_dim(dimension, "category")
     stmt = (
         select(_col(dimension).label("k"), func.sum(_METRIC_AGG[metric]).label("v"))
         .select_from(_join_for(dimension))
@@ -256,11 +409,11 @@ async def funnel(
 
 
 # ── Radar (multi-metric comparison of entities) ────────────────────
+@cached_query(ttl_seconds=30)
 async def radar(
     db: AsyncSession, f: Filters, dimension: str = "region", metrics: str = "revenue,orders,gross_margin,aov,units"
 ) -> dict:
-    if dimension not in DIMS:
-        dimension = "region"
+    dimension = _validate_dim(dimension, "region")
     metric_list = [m.strip() for m in metrics.split(",") if m.strip() in _METRIC_AGG]
     if not metric_list:
         metric_list = ["revenue", "orders"]
@@ -272,7 +425,7 @@ async def radar(
     raw = {m: np.array([float(getattr(r, m) or 0) for r in rows]) for m in metric_list}
     series = {}
     for m, arr in raw.items():
-        lo, hi = (arr.min(), arr.max())
+        lo, hi = (arr.min(), arr.max()) if len(arr) else (0, 0)
         rng = (hi - lo) or 1.0
         series[m] = ((arr - lo) / rng * 100).tolist()
     out = []
@@ -288,11 +441,13 @@ async def radar(
 
 
 # ── Small multiples (metric trend split by dimension) ──────────────
+@cached_query(ttl_seconds=30)
 async def small_multiples(
     db: AsyncSession, f: Filters, metric: str = "revenue", dimension: str = "region", granularity: str = "month"
 ) -> dict:
-    if dimension not in DIMS:
-        dimension = "region"
+    metric = _validate_metric(metric)
+    dimension = _validate_dim(dimension, "region")
+    granularity = _validate_granularity(granularity, "month")
     key = _col(dimension)
     bucket = cast(func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date)
     stmt = (
@@ -304,18 +459,40 @@ async def small_multiples(
     )
     rows = (await db.execute(stmt)).all()
     members: dict[str, list[dict]] = {}
-    periods: set = set()
+    periods_set: set = set()
     for r in rows:
         k = r.k or "(unknown)"
-        members.setdefault(k, []).append({"period": str(r.period), "value": round(float(r.v or 0), 2)})
-        periods.add(str(r.period))
+        # store raw
+        members.setdefault(k, []).append({"period": str(r.period), "value": round(float(r.v or 0), 2), "_date": r.period})
+        periods_set.add(r.period)
+    # zero-fill: ensure every member has an entry for every period
+    sorted_periods = sorted(periods_set)
+    sorted_period_str = [str(p) for p in sorted_periods]
+    # Build lookup per member
+    filled_members: dict[str, list[dict]] = {}
+    for member, pts in members.items():
+        lookup = {p["_date"]: p["value"] for p in pts}
+        filled = []
+        for p in sorted_periods:
+            filled.append({"period": str(p), "value": round(float(lookup.get(p, 0.0)), 2)})
+        filled_members[member] = filled
+    # also handle case where no rows: still return periods from f date range
+    if not sorted_periods:
+        # try to generate periods from filter range
+        try:
+            from datetime import timedelta as td
+            # generate based on granularity
+            # simple fallback: empty
+            pass
+        except Exception:
+            pass
     return {
         "metric": metric,
         "dimension": dimension,
         "granularity": granularity,
-        "periods": sorted(periods),
+        "periods": sorted_period_str,
         "series": [
             {"member": m, "points": pts}
-            for m, pts in sorted(members.items(), key=lambda kv: -sum(p["value"] for p in kv[1]))
+            for m, pts in sorted(filled_members.items(), key=lambda kv: -sum(p["value"] for p in kv[1]))
         ],
     }

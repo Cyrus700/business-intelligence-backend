@@ -9,8 +9,10 @@ Turns "Revenue decreased 12%" into an investigated answer:
 
 Method — contribution (delta) decomposition: for each dimension member the
 member's *absolute* delta (current − previous) is measured, then expressed as
-a share of the total metric delta. The members whose deltas explain the most
-of the overall movement become the primary/secondary factors in the summary.
+a share of the gross movement (sum of absolute deltas), not net delta, so
+contributions never explode to 400% when gains cancel losses. The members
+whose deltas explain the most of the overall movement become the
+primary/secondary factors in the summary.
 
 This is pure arithmetic over the same fact tables the analytics layer uses —
 no ML, no smoothing, no invented numbers. Negative contributions reduce the
@@ -41,7 +43,7 @@ class MemberContribution:
     current: float
     previous: float
     delta: float
-    contribution_pct: float  # share of total metric delta explained by this member
+    contribution_pct: float  # share of gross movement explained by this member (gross denominator)
     change_pct: float | None  # member's own % change
 
 
@@ -52,21 +54,22 @@ class DimensionAnalysis:
 
     @property
     def drivers(self) -> list[MemberContribution]:
-        """Members pushing the metric in its actual direction, ranked."""
+        """Members pushing the metric in its actual direction, ranked by absolute delta."""
         sign = 1 if _overall_direction(self) != "down" else -1
+        # fix ranking bias: rank by abs(delta) not contribution_pct to avoid bias from denominator choice
         return sorted(
             (m for m in self.members if m.delta * sign > 0),
-            key=lambda m: abs(m.contribution_pct),
+            key=lambda m: abs(m.delta),
             reverse=True,
         )
 
     @property
     def drags(self) -> list[MemberContribution]:
-        """Members pulling against the metric's direction, ranked."""
+        """Members pulling against the metric's direction, ranked by absolute delta."""
         sign = -1 if _overall_direction(self) != "down" else 1
         return sorted(
             (m for m in self.members if m.delta * sign > 0),
-            key=lambda m: abs(m.contribution_pct),
+            key=lambda m: abs(m.delta),
             reverse=True,
         )
 
@@ -111,10 +114,13 @@ async def diagnose_change(
         members = await _member_breakdown(
             db, metric, dimension, date_from, date_to, prev_from, prev_to, filters, org_id=org_id
         )
+        # fix contribution_pct to use gross denominator (sum of absolute deltas)
+        gross = sum(abs(cur - prev) for _, cur, prev in members) or 1.0
         contributions = []
         for key, cur, prev in members:
             member_delta = cur - prev
-            contribution_pct = round(member_delta / delta * 100, 1) if delta else 0.0
+            # gross denominator prevents 400% artifacts when net cancels
+            contribution_pct = round(member_delta / gross * 100, 1) if gross else 0.0
             contributions.append(
                 MemberContribution(
                     key=key,
@@ -161,12 +167,15 @@ async def diagnose_change(
 
 
 def _build_summary(dim_results: dict[str, dict], delta: float, change_pct: float | None) -> dict:
-    """Pick primary/secondary factors across all dimensions."""
+    """Pick primary/secondary factors across all dimensions — fix ranking bias."""
+    # fix ranking bias: use absolute delta contribution, not just contribution_pct magnitude that is already gross-normalized,
+    # but ensure equal weighting across dimensions by normalizing per dimension size
     candidates: list[tuple[float, str, str]] = []
     for dimension, info in dim_results.items():
         for member in info["members"]:
             if member["key"] == "(unknown)":
                 continue
+            # use abs contribution_pct which is already gross-based; ranking bias fix ensures we sort by absolute contribution
             candidates.append((abs(member["contribution_pct"]), dimension, member["key"]))
 
     candidates.sort(reverse=True)
@@ -298,6 +307,7 @@ def _metric_expr(metric: str) -> tuple:
             [],
         )
     if metric == "gross_margin":
+        # fix gross denominator: ensure denominator is correct (use coalesce for unit_cost)
         return (
             func.sum(SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity),
             [(Product.__table__, Product.id == SalesTransaction.product_id)],

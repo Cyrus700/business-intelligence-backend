@@ -107,19 +107,57 @@ async def list_kpi_definitions(
     response_model=KpiDefinitionOut,
     dependencies=[Depends(require_role("admin"))],
 )
-async def update_kpi_definition(metric: str, body: KpiDefinitionUpdate, db: DbSession) -> KpiDefinitionOut:
+async def update_kpi_definition(metric: str, body: KpiDefinitionUpdate, db: DbSession, user: CurrentUser) -> KpiDefinitionOut:
     from fastapi import HTTPException
     from sqlalchemy import select
 
     from app.models import KpiDefinition
 
-    definition = (await db.execute(select(KpiDefinition).where(KpiDefinition.metric == metric))).scalar_one_or_none()
-    if definition is None:
-        raise HTTPException(404, f"No KPI definition for '{metric}'")
+    # Org-scoped: non-super admins may only patch their own org's definitions.
+    # If an org-specific row does not exist but a global default does, we clone the
+    # global row as an org-specific override so the tenant edit does not leak to other orgs.
+    if is_super_admin(user):
+        stmt = select(KpiDefinition).where(KpiDefinition.metric == metric)
+        definition = (await db.execute(stmt)).scalar_one_or_none()
+        if definition is None:
+            raise HTTPException(404, f"No KPI definition for '{metric}'")
+    else:
+        stmt = select(KpiDefinition).where(KpiDefinition.metric == metric, KpiDefinition.org_id == user.org_id)
+        definition = (await db.execute(stmt)).scalar_one_or_none()
+        if definition is None:
+            # No org-specific row — clone global default as override if it exists
+            global_def = (
+                await db.execute(select(KpiDefinition).where(KpiDefinition.metric == metric, KpiDefinition.org_id.is_(None)))
+            ).scalar_one_or_none()
+            if global_def is not None:
+                definition = KpiDefinition(
+                    metric=global_def.metric,
+                    label=global_def.label,
+                    formula=global_def.formula,
+                    unit=global_def.unit,
+                    higher_is_better=global_def.higher_is_better,
+                    target_value=global_def.target_value,
+                    threshold_low=global_def.threshold_low,
+                    owner_id=user.id,
+                    org_id=user.org_id,
+                    visibility=list(global_def.visibility) if global_def.visibility else [],
+                    is_active=global_def.is_active,
+                )
+                db.add(definition)
+                await db.flush()
+            else:
+                raise HTTPException(404, f"No KPI definition for '{metric}'")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(definition, field, value)
     await db.commit()
     await db.refresh(definition)
+    # Invalidate cache that may hold stale KPI cards referencing this definition
+    try:
+        from app.services.analytics.cache import clear_query_cache
+
+        await clear_query_cache(org_id=user.org_id)
+    except Exception:
+        pass
     return KpiDefinitionOut.model_validate(definition)
 
 
@@ -203,22 +241,69 @@ async def get_data_coverage(db: DbSession, user: CurrentUser) -> DataCoverage:
 
 
 @router.get("/watermark")
-async def get_watermark(db: DbSession) -> dict:
-    """Last ETL refresh watermark for the UI to show 'last updated' timestamp."""
-    row = await db.execute(text("SELECT * FROM data_watermarks WHERE id = 1"))
-    wm = row.first()
+async def get_watermark(db: DbSession, user: CurrentUser) -> dict:
+    """Last ETL refresh watermark for the UI to show 'last updated' timestamp — per-org."""
+    org_id = None if is_super_admin(user) else user.org_id
+    wm = None
+    # Try per-org watermark first (new schema with org_id column)
+    if org_id is not None:
+        try:
+            row = await db.execute(text("SELECT * FROM data_watermarks WHERE org_id = :org_id"), {"org_id": str(org_id)})
+            wm = row.mappings().first()
+            if wm is None:
+                # Fallback to legacy global row (pre-migration)
+                row = await db.execute(text("SELECT * FROM data_watermarks WHERE id = 1"))
+                wm = row.mappings().first()
+        except Exception:
+            # Column org_id may not exist yet (pre-migration) — fallback to global
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            row = await db.execute(text("SELECT * FROM data_watermarks WHERE id = 1"))
+            wm = row.mappings().first()
+    else:
+        # Super-admin: show global watermark if per-org not applicable; or latest per-org?
+        try:
+            row = await db.execute(text("SELECT * FROM data_watermarks WHERE org_id IS NOT NULL ORDER BY last_refresh_at DESC LIMIT 1"))
+            wm = row.mappings().first()
+            if wm is None:
+                row = await db.execute(text("SELECT * FROM data_watermarks WHERE id = 1"))
+                wm = row.mappings().first()
+        except Exception:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            row = await db.execute(text("SELECT * FROM data_watermarks WHERE id = 1"))
+            wm = row.mappings().first()
     if not wm:
         return {"last_refresh_at": None, "last_source": None, "last_trigger": None, "affected_range": None}
+    # Handle both mapping and tuple access
+    def _get(k):
+        try:
+            return wm[k] if isinstance(wm, dict) else getattr(wm, k, None)
+        except Exception:
+            return None
+
+    def _val(name):
+        v = _get(name)
+        # If wm is RowMapping, direct access works; else getattr
+        if v is None and hasattr(wm, name):
+            v = getattr(wm, name, None)
+        return v
+
+    last_refresh = _val("last_refresh_at")
     return {
-        "last_refresh_at": wm.last_refresh_at.isoformat() if wm.last_refresh_at else None,
-        "last_source": wm.last_source,
-        "last_trigger": wm.last_trigger,
+        "last_refresh_at": last_refresh.isoformat() if hasattr(last_refresh, "isoformat") and last_refresh else None,
+        "last_source": _val("last_source"),
+        "last_trigger": _val("last_trigger"),
         "affected_range": (
-            {"start": wm.affected_range_start.isoformat(), "end": wm.affected_range_end.isoformat()}
-            if wm.affected_range_start and wm.affected_range_end
+            {"start": _val("affected_range_start").isoformat(), "end": _val("affected_range_end").isoformat()}
+            if _val("affected_range_start") and _val("affected_range_end")
             else None
         ),
-        "details": wm.details,
+        "details": _val("details"),
     }
 
 
@@ -266,10 +351,20 @@ async def get_dashboard(db: DbSession, f: FiltersDep, user: CurrentUser) -> Dash
     logger = logging.getLogger(__name__)
     f = _scoped_filters(f, user)
     cache = get_query_cache()
-    # Cache key is org + range (dashboard is range-driven)
+    # Cache key is org + range + all dimension filters (including plural multi-select)
     cache_key = cache._make_key(  # type: ignore[attr-defined]
         "dashboard",
-        (str(f.org_id), f.date_from.isoformat(), f.date_to.isoformat(), f.region, f.channel, f.category),
+        (
+            str(f.org_id),
+            f.date_from.isoformat(),
+            f.date_to.isoformat(),
+            f.region,
+            f.channel,
+            f.category,
+            ",".join(sorted(f.regions)),
+            ",".join(sorted(f.channels)),
+            ",".join(sorted(f.categories)),
+        ),
         {},
     )
     cached = await cache.get(cache_key)
@@ -359,8 +454,10 @@ async def get_dashboard(db: DbSession, f: FiltersDep, user: CurrentUser) -> Dash
         # — call the service directly with a short horizon
         from app.api.v1.ml import _active_model
 
+        from app.api.deps import is_super_admin as _is_sa
+
         org_id = None if is_super_admin(user) else user.org_id
-        model = await _active_model(db, "revenue_daily", {}, org_id=org_id)
+        model = await _active_model(db, "revenue_daily", {}, org_id=org_id, is_super=_is_sa(user))
         if model is not None:
             rows = (
                 (

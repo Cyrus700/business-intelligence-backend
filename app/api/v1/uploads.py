@@ -205,6 +205,24 @@ async def _process_upload_background(
             result = await run_frame_pipeline(
                 db, domain, extract.frame, trigger="upload", source_id=data_source_id, org_id=org_id
             )
+            # Invalidate caches so dashboard immediately reflects new rows
+            try:
+                from app.services.analytics.cache import clear_query_cache
+
+                await clear_query_cache(org_id=org_id)
+            except Exception:
+                pass
+            try:
+                from app.services.analytics.compare import clear_compare_cache
+
+                await clear_compare_cache(org_id=org_id)
+            except Exception:
+                try:
+                    from app.services.analytics.compare import _compare_cache
+
+                    _compare_cache.clear()
+                except Exception:
+                    pass
             upload.status = "loaded"
             upload.etl_job_id = result.job_id  # type: ignore[assignment]
             upload.error_report = _report(
@@ -423,6 +441,24 @@ async def chunked_complete(
         result = await run_frame_pipeline(
             db, effective_domain, extract.frame, trigger="upload", source_id=data_source_id, org_id=user_org_id(user)
         )
+        # pipeline already cleared caches, but ensure upload layer also invalidates
+        try:
+            from app.services.analytics.cache import clear_query_cache
+
+            await clear_query_cache(org_id=user_org_id(user))
+        except Exception:
+            pass
+        try:
+            from app.services.analytics.compare import clear_compare_cache
+
+            await clear_compare_cache(org_id=user_org_id(user))
+        except Exception:
+            try:
+                from app.services.analytics.compare import _compare_cache
+
+                _compare_cache.clear()
+            except Exception:
+                pass
         upload.status = "loaded"
         upload.etl_job_id = result.job_id  # type: ignore[assignment]
         upload.error_report = _report(
@@ -593,6 +629,24 @@ async def upload_file(
         result = await run_frame_pipeline(
             db, effective_domain, extract.frame, trigger="upload", source_id=data_source_id, org_id=user_org_id(user)
         )
+        # ensure caches reflect newly loaded warehouse rows
+        try:
+            from app.services.analytics.cache import clear_query_cache
+
+            await clear_query_cache(org_id=user_org_id(user))
+        except Exception:
+            pass
+        try:
+            from app.services.analytics.compare import clear_compare_cache
+
+            await clear_compare_cache(org_id=user_org_id(user))
+        except Exception:
+            try:
+                from app.services.analytics.compare import _compare_cache
+
+                _compare_cache.clear()
+            except Exception:
+                pass
     except ValueError as e:  # e.g. missing required columns
         upload.status = "failed"
         upload.error_report = _report(

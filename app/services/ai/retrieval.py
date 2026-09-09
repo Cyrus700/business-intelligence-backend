@@ -159,17 +159,23 @@ class InsightRetriever:
         if self._matrix is None or not self._docs:
             return []
         q = embed(query)
+        # fix retrieval embedding filter: filter by minimum cosine similarity threshold
+        # previously returned top_k regardless of relevance, leaking irrelevant past insights
+        MIN_SCORE = 0.12
         scores = self._matrix @ q  # rows L2-normalised → cosine similarity
         order = np.argsort(-scores)[:top_k]
         results = []
         for idx in order:
+            sc = float(scores[int(idx)])
+            if sc < MIN_SCORE:
+                continue
             doc = self._docs[int(idx)]
             results.append(
                 RetrieverResult(
                     kind=doc.kind,
                     title=doc.title,
                     text=doc.text,
-                    score=round(float(scores[int(idx)]), 3),
+                    score=round(sc, 3),
                 )
             )
         return results

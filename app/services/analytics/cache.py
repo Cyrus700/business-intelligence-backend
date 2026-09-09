@@ -1,6 +1,8 @@
 """Query cache layer with TTL and hit/miss metrics."""
 
 import asyncio
+import hashlib
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -19,13 +21,12 @@ class CacheEntry:
 @dataclass
 class QueryCache:
     _store: dict[str, CacheEntry] = field(default_factory=dict)
+    _key_json: dict[str, str] = field(default_factory=dict)
     _hits: int = 0
     _misses: int = 0
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def _make_key(self, func_name: str, args: tuple, kwargs: dict) -> str:
-        import json
-
         def _stable(v: Any) -> Any:
             if v is None:
                 return None
@@ -63,7 +64,15 @@ class QueryCache:
             stable_args.append(_stable(a))
         stable_kwargs = {k: _stable(v) for k, v in kwargs.items()}
         key_data = {"fn": func_name, "args": stable_args, "kwargs": stable_kwargs}
-        return f"query:{func_name}:{hash(json.dumps(key_data, sort_keys=True, default=str))}"
+        json_str = json.dumps(key_data, sort_keys=True, default=str)
+        digest = hashlib.md5(json_str.encode()).hexdigest()
+        key = f"query:{func_name}:{digest}"
+        # store mapping for per-org invalidation (org_id substring search)
+        try:
+            self._key_json[key] = json_str
+        except Exception:
+            pass
+        return key
 
     async def get(self, key: str) -> Any | None:
         async with self._lock:
@@ -73,6 +82,7 @@ class QueryCache:
                 return None
             if time.time() > entry.expires_at:
                 del self._store[key]
+                self._key_json.pop(key, None)
                 self._misses += 1
                 return None
             self._hits += 1
@@ -82,9 +92,25 @@ class QueryCache:
         async with self._lock:
             self._store[key] = CacheEntry(value=value, expires_at=time.time() + ttl_seconds)
 
-    async def clear(self) -> None:
+    async def clear(self, org_id: Any | None = None) -> None:
         async with self._lock:
-            self._store.clear()
+            if org_id is None:
+                self._store.clear()
+                self._key_json.clear()
+                return
+            org_str = str(org_id)
+            # Find keys where the original json payload contains the org_id
+            to_delete = [k for k, js in list(self._key_json.items()) if org_str in js]
+            # Fallback: legacy keys may contain org_str directly (pre-md5 keys)
+            for k in list(self._store.keys()):
+                if org_str in k and k not in to_delete:
+                    to_delete.append(k)
+            if not to_delete:
+                # No trackable keys for this org — nothing to do (avoid global clear which would affect other tenants)
+                return
+            for k in to_delete:
+                self._store.pop(k, None)
+                self._key_json.pop(k, None)
 
     async def stats(self) -> dict[str, int]:
         return {"hits": self._hits, "misses": self._misses, "size": len(self._store)}
@@ -132,7 +158,7 @@ async def get_cache_stats() -> dict[str, int]:
     return await cache.stats()
 
 
-async def clear_query_cache() -> None:
-    """Clear all cached queries."""
+async def clear_query_cache(org_id: Any | None = None) -> None:
+    """Clear cached queries — per-org if org_id given, else global."""
     cache = get_query_cache()
-    await cache.clear()
+    await cache.clear(org_id=org_id)

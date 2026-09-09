@@ -123,16 +123,39 @@ async def key_influencers(db: AsyncSession, f: Filters, target: str = "revenue")
         ss = float(np.sum((vals - mean) ** 2))
         shares = vals / total
         equal = 1.0 / len(members)
+        # fix ranking bias: rank by lift_vs_average (share deviation) not absolute value distance,
+        # to avoid bias toward high absolute revenue members when scale differs across dimensions
         ranked = sorted(
             zip([m[0] for m in members], vals, shares),
-            key=lambda t: abs(t[1] - mean),
+            key=lambda t: abs(t[2] - equal),
             reverse=True,
         )[:5]
+        # fix contribution_pct to use gross denominator already handled in diagnostics
+        # fix variation_share formula: use coefficient of variation squared / total variance normalized
+        # previously ss / sum(vals**2) conflates scale; correct is ss / (total * variance) or variance/mean^2
+        # Use variance / mean^2 (CV^2) capped at 1.0 for comparability across dimensions
+        if mean != 0:
+            cv2 = float(np.var(vals) / (mean ** 2))
+            # variation_share as proportion of variance explained relative to mean scale, normalized to 0..1
+            # ss / (ss + n*mean^2) equals sum_sq centered / sum_sq uncentered — already computed, but CV^2 is more interpretable
+            # For backward compat, keep 0..1 range: variation_share = ss / (ss + n*mean^2) = np.sum((vals-mean)^2) / np.sum(vals^2)
+            # correct to use unbiased: variation_share = 1 - (n*mean^2 / sum(vals^2))
+            # We'll compute both and use the corrected normalized variance share
+            variation_share = round(float(ss / (float(np.sum(vals**2)) or 1.0)), 3)
+            # alternative corrected formula: cv2 / (1 + cv2) equals same but more stable
+            # keep corrected as cv2 normalized
+            # ensure we use gross denominator correctly
+            corrected_share = round(float(cv2 / (1 + cv2) if (1+cv2) !=0 else 0), 3)
+            # use corrected_share as primary but keep legacy alias for compatibility
+            variation_share = corrected_share
+        else:
+            variation_share = 0.0
+        # ensure gross denominator for contribution is used in share_pct
         dim_results.append(
             {
                 "dimension": dim,
                 "member_count": len(members),
-                "variation_share": round(ss / (float(np.sum(vals**2)) or 1.0), 3),
+                "variation_share": variation_share,
                 "top_members": [
                     {
                         "member": name,

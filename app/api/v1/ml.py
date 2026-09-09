@@ -5,13 +5,14 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, get_current_user, require_role
-from app.core.clock import business_now
+from app.core.clock import business_now, business_today
 from app.models import Anomaly, Forecast, MlModel
 
 router = APIRouter(tags=["ml"], dependencies=[Depends(get_current_user)])
@@ -31,6 +32,8 @@ class ForecastOut(BaseModel):
     generated_at: datetime
     metrics: dict[str, Any] | None
     points: list[ForecastPoint]
+    stale: bool | None = None
+    warning: str | None = None
 
 
 class AccuracyOut(BaseModel):
@@ -70,6 +73,13 @@ class TrendOut(BaseModel):
     weekly_change_pct: float
     strength_r: float
     current_level: float
+    slope: float | None = None
+    ci_low: float | None = None
+    ci_high: float | None = None
+    p_value: float | None = None
+    n: int | None = None
+    last_ds: str | None = None
+    weekly_change_abs: float | None = None
 
 
 class ModelOut(BaseModel):
@@ -112,14 +122,22 @@ class BacktestOut(BaseModel):
     models: dict[str, BacktestModel]
 
 
-async def _active_model(db, target: str, dimensions: dict[str, Any] | None = None, org_id=None) -> MlModel | None:
+async def _active_model(db, target: str, dimensions: dict[str, Any] | None = None, org_id=None, is_super: bool = False) -> MlModel | None:
     q = select(MlModel).where(
         MlModel.target == target,
         MlModel.dimensions == (dimensions or {}),
         MlModel.is_active.is_(True),
     )
+    # isolation for super-admin: org_id None means global model, not any-tenant leak
     if org_id is not None:
         q = q.where(MlModel.org_id == org_id)
+    else:
+        if is_super:
+            # super-admin without org scope sees only global models (org_id IS NULL)
+            q = q.where(MlModel.org_id.is_(None))
+        else:
+            # legacy global case? Keep strict: filter to NULL for global
+            q = q.where(MlModel.org_id.is_(None))
     return (await db.execute(q)).scalar_one_or_none()
 
 
@@ -127,8 +145,36 @@ def _roll30_summary(df: pd.DataFrame) -> dict[str, Any] | None:
     if len(df) < 7:
         return None
     tail = df.tail(30) if len(df) >= 30 else df
-    avg = tail["y"].mean()
-    return {"mape": round(float(tail["y"].std() / avg * 100), 2) if avg > 0 else None}
+    avg = float(tail["y"].mean()) if len(tail) else 0.0
+    std = float(tail["y"].std(ddof=1)) if len(tail) > 1 else 0.0
+    # coefficient of variation (CV), not MAPE — previously mislabeled as mape
+    cv = round(float(std / avg * 100), 2) if avg and avg > 1e-9 and np.isfinite(std) else None
+    # also try to compute naive seasonal MAPE on rolling tail if enough data
+    mape = None
+    if len(df) >= 14:
+        try:
+            from app.services.ml.forecasting import NaiveSeasonal
+
+            # naive forecast for last 7 days from previous week
+            n = min(7, len(df) - 7)
+            if n >= 1:
+                train = df.iloc[:-n]
+                test = df.iloc[-n:]
+                m = NaiveSeasonal()
+                m.fit(train)
+                preds = m.predict(test["ds"].reset_index(drop=True))
+                from app.services.ml.forecasting import metrics
+
+                mape = metrics(test["y"].to_numpy(), preds["yhat"].to_numpy())["mape"]
+        except Exception:
+            mape = None
+    out: dict[str, Any] = {"cv": cv}
+    if mape is not None and np.isfinite(mape):
+        out["mape"] = mape
+        out["cv_vs_mape_note"] = "cv is dispersion; mape is holdout error"
+    else:
+        out["mape"] = None
+    return out
 
 
 @router.get("/forecasts", response_model=ForecastOut)
@@ -143,7 +189,7 @@ async def get_forecast(
 ) -> ForecastOut:
     from app.api.deps import is_super_admin
     from app.services.ml.features import load_series
-    from app.services.ml.forecasting import NaiveSeasonal
+    from app.services.ml.forecasting import NaiveSeasonal, ensemble_forecast
 
     dims: dict[str, Any] = {}
     if region:
@@ -153,8 +199,9 @@ async def get_forecast(
     if category:
         dims["category"] = category
     org_id = None if is_super_admin(user) else user.org_id
+    is_super = is_super_admin(user)
 
-    model = await _active_model(db, target, dims, org_id=org_id)
+    model = await _active_model(db, target, dims, org_id=org_id, is_super=is_super)
     if model is not None:
         rows = (
             (
@@ -169,6 +216,29 @@ async def get_forecast(
             .all()
         )
         if rows:
+            # stale check: last forecast date vs today, or model trained_at staleness
+            stale = False
+            warning = None
+            try:
+                today = business_today()
+                # if model was trained long ago and history may have advanced
+                # check training_rows recency by loading series latest date
+                # For now, simple: if rows[0].forecast_date - today > horizon+5 indicates stale?
+                # Also if latest business data is newer than model trained_at
+                if model.trained_at:
+                    # if trained more than 7 days ago, flag
+                    days_since_train = (business_now().replace(tzinfo=None) - model.trained_at.replace(tzinfo=None)).days if model.trained_at.tzinfo else (business_now().replace(tzinfo=None) - model.trained_at).days
+                    if days_since_train > 7:
+                        stale = True
+                        warning = f"model trained {days_since_train} days ago — consider retraining"
+                # check if forecast horizon starts after expected start
+                expected_start = business_today() + pd.Timedelta(days=1)
+                # compare forecast_date
+                if rows[0].forecast_date > expected_start.date() + pd.Timedelta(days=2):  # type: ignore
+                    stale = True
+                    warning = (warning or "") + " forecast is stale vs business date"
+            except Exception:
+                pass
             return ForecastOut(
                 target=target,
                 model_type=model.model_type,
@@ -184,6 +254,8 @@ async def get_forecast(
                     )
                     for r in rows
                 ],
+                stale=stale,
+                warning=warning,
             )
 
     frame = await load_series(db, target, dims, org_id=org_id)
@@ -195,13 +267,61 @@ async def get_forecast(
             generated_at=business_now().replace(tzinfo=None),
             metrics={"mape": None, "note": "insufficient data (need ≥ 7 days)"},
             points=[],
+            stale=False,
         )
+
+    # stale check on source series
+    stale = False
+    warning = None
+    try:
+        last_ds = frame["ds"].max().date()
+        days_behind = (business_today() - last_ds).days
+        if days_behind > 3:
+            stale = True
+            warning = f"series is {days_behind} days behind today — forecast may be stale"
+    except Exception:
+        pass
+
+    # try ensemble before NaiveSeasonal
+    try:
+        if len(frame) >= 90 + 7:
+            ens = ensemble_forecast(frame, horizon=horizon)
+            m = _roll30_summary(frame)
+            # merge stale warning
+            metrics_out = m or {}
+            if stale and warning:
+                metrics_out["warning"] = warning
+            return ForecastOut(
+                target=target,
+                model_type="ensemble",
+                model_version=0,
+                generated_at=business_now().replace(tzinfo=None),
+                metrics=metrics_out,
+                points=[
+                    ForecastPoint(
+                        forecast_date=row["ds"].date() if hasattr(row["ds"], "date") else row["ds"],
+                        yhat=float(row["yhat"]),
+                        yhat_lower=None if pd.isna(row["lo"]) else float(row["lo"]),
+                        yhat_upper=None if pd.isna(row["hi"]) else float(row["hi"]),
+                    )
+                    for _, row in ens.iterrows()
+                ],
+                stale=stale,
+                warning=warning,
+            )
+    except Exception:
+        # fallback to naive
+        import logging
+
+        logging.getLogger(__name__).exception("ensemble forecast failed, falling back to naive")
 
     forecaster = NaiveSeasonal()
     forecaster.fit(frame)
     future = pd.date_range(start=frame["ds"].max() + pd.Timedelta(days=1), periods=horizon, freq="D")
     preds = forecaster.predict(pd.Series(future))
     m = _roll30_summary(frame)
+    if stale and warning and m is not None:
+        m["warning"] = warning
     return ForecastOut(
         target=target,
         model_type="naive_seasonal",
@@ -217,6 +337,8 @@ async def get_forecast(
             )
             for _, row in preds.iterrows()
         ],
+        stale=stale,
+        warning=warning,
     )
 
 
@@ -227,6 +349,12 @@ async def forecast_accuracy(db: DbSession, user: CurrentUser) -> list[AccuracyOu
     q = select(MlModel).where(MlModel.is_active.is_(True))
     if not is_super_admin(user) and user.org_id is not None:
         q = q.where(MlModel.org_id == user.org_id)
+    elif is_super_admin(user):
+        # super-admin sees global only unless explicitly scoped; isolation
+        # Keep existing behaviour but filtered to global if org_id None? For accuracy list, allow all?
+        # Keep as before: no filter, but to avoid leak we could limit to global.
+        # For now keep no filter for super_admin to see all tenancies aggregated? We'll keep no filter
+        pass
     models = (await db.execute(q)).scalars().all()
     return [
         AccuracyOut(

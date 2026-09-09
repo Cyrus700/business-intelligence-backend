@@ -127,6 +127,26 @@ def _cache_set(key: str, val: dict[str, Any]) -> None:
     _compare_cache[key] = (time.time() + CACHE_TTL_S, val)
 
 
+async def clear_compare_cache(org_id: Any | None = None) -> None:
+    """Invalidate compare cache — per-org via key scan or global."""
+    if org_id is None:
+        _compare_cache.clear()
+        return
+    # Keys are sha256 of json containing org; cannot reverse without payload.
+    # We store keys only, so per-org clear requires clearing all (small cache).
+    # To preserve isolation without global storm, we still clear all because
+    # stale compare for that org is correctness bug, and cache is only 128 entries, 60s TTL.
+    # Future: store payload mapping like QueryCache for precise per-org eviction.
+    _compare_cache.clear()
+
+
+def clear_compare_cache_sync(org_id: Any | None = None) -> None:
+    if org_id is None:
+        _compare_cache.clear()
+    else:
+        _compare_cache.clear()
+
+
 def month_bounds(year: int, month: int) -> tuple[date, date]:
     last = calendar.monthrange(year, month)[1]
     return date(year, month, 1), date(year, month, last)

@@ -181,11 +181,12 @@ def _resolve_day(day_n: int, month: int, year_s: str | None, today: date) -> Par
     try:
         resolved = date(year, month, day_n)
     except ValueError:
-        return None
+        # fix silent date fallback to error: propagate invalid date as explicit error instead of silent None that falls back to 30d
+        raise ValueError(f"Invalid calendar date: {day_n:02d}-{month:02d}-{year}")
     # An unqualified date in the future means last year's, not a prediction.
     if not year_s and resolved > today:
         try:
             resolved = date(year - 1, month, day_n)
         except ValueError:
-            return None
+            raise ValueError(f"Invalid calendar date: {day_n:02d}-{month:02d}-{year-1}")
     return _day(resolved)

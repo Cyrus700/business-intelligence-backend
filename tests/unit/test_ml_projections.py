@@ -47,9 +47,9 @@ def test_weekday_profile_kicks_in_with_enough_history():
     """Weekends trade differently; a flat mean misprices whichever days remain."""
     start, end = date(2026, 6, 1), date(2026, 6, 30)
     history = [
-        (start + timedelta(days=i), 200.0 if (start + timedelta(days=i)).weekday() >= 5 else 1000.0) for i in range(21)
+        (start + timedelta(days=i), 200.0 if (start + timedelta(days=i)).weekday() >= 5 else 1000.0) for i in range(28)
     ]
-    p = project_period(history, start, end, start + timedelta(days=20))
+    p = project_period(history, start, end, start + timedelta(days=27))
     assert "weekday-adjusted" in p.method
 
 

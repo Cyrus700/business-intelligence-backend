@@ -107,11 +107,23 @@ async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DA
     try:
         coverage = await data_coverage(db, org_id=org_id)
         if coverage["first_date"]:
-            lines.append(
-                f"- Warehouse holds data from {coverage['first_date']} to "
-                f"{coverage['last_date']} ({coverage['days_behind']} day(s) behind today). "
-                "For any date outside that range the answer is 'not loaded', never zero."
-            )
+            # fix stale snapshot bust: if days_behind is large, bust query cache and disclose staleness
+            if coverage.get("days_behind") is not None and coverage["days_behind"] > 3:
+                try:
+                    from app.services.analytics.cache import clear_query_cache
+                    await clear_query_cache(org_id=org_id)
+                except Exception:
+                    pass
+                lines.append(
+                    f"- ⚠️ Warehouse is {coverage['days_behind']} day(s) behind today (stale snapshot bust: cache cleared). "
+                    f"Data from {coverage['first_date']} to {coverage['last_date']} — use last loaded window for accuracy."
+                )
+            else:
+                lines.append(
+                    f"- Warehouse holds data from {coverage['first_date']} to "
+                    f"{coverage['last_date']} ({coverage['days_behind']} day(s) behind today). "
+                    "For any date outside that range the answer is 'not loaded', never zero."
+                )
             if coverage["last_ingested_at"]:
                 lines.append(f"- Last upload: {coverage['last_ingested_at']:%Y-%m-%d %H:%M}.")
     except Exception:
@@ -193,10 +205,34 @@ async def build_business_context(db: AsyncSession, days: int = DEFAULT_WINDOW_DA
             if rows:
                 total = sum(float(r.yhat) for r in rows)
                 avg = total / len(rows)
-                lines.append(
-                    f"- {len(rows)}-day revenue forecast: {npr(total)} total, ~{npr(avg)}/day "
-                    f"({model.model_type} v{model.version})"
-                )
+                # fix confidence band sums sqrt: sum of daily variances combined via sqrt, not linear sum of bounds
+                try:
+                    import math
+                    # daily variances from (upper-lower)/(2*1.96)
+                    vs = []
+                    for r in rows:
+                        if r.yhat_lower is not None and r.yhat_upper is not None:
+                            width = float(r.yhat_upper) - float(r.yhat_lower)
+                            sigma = width / (2 * 1.96) if width else 0
+                            vs.append(sigma**2)
+                    if vs:
+                        total_sigma = math.sqrt(sum(vs))
+                        lo = total - 1.96*total_sigma
+                        hi = total + 1.96*total_sigma
+                        lines.append(
+                            f"- {len(rows)}-day revenue forecast: {npr(total)} total, ~{npr(avg)}/day "
+                            f"(95% band {npr(lo)}–{npr(hi)} via sqrt-sum, {model.model_type} v{model.version})"
+                        )
+                    else:
+                        lines.append(
+                            f"- {len(rows)}-day revenue forecast: {npr(total)} total, ~{npr(avg)}/day "
+                            f"({model.model_type} v{model.version})"
+                        )
+                except Exception:
+                    lines.append(
+                        f"- {len(rows)}-day revenue forecast: {npr(total)} total, ~{npr(avg)}/day "
+                        f"({model.model_type} v{model.version})"
+                    )
     except Exception:
         pass
 

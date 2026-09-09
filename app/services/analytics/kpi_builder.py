@@ -39,7 +39,7 @@ FROM sales_transactions WHERE txn_date BETWEEN :d1 AND :d2 AND org_id = :org_id 
 INSERT INTO kpi_snapshots (snapshot_date, metric, dimensions, value, org_id)
 SELECT txn_date, 'gross_margin', '{}'::jsonb,
        SUM(s.total_amount - COALESCE(p.unit_cost, 0) * s.quantity), :org_id
-FROM sales_transactions s LEFT JOIN products p ON p.id = s.product_id
+FROM sales_transactions s LEFT JOIN products p ON p.id = s.product_id AND p.org_id = :org_id
 WHERE txn_date BETWEEN :d1 AND :d2 AND s.org_id = :org_id GROUP BY txn_date;
 
 INSERT INTO kpi_snapshots (snapshot_date, metric, dimensions, value, org_id)
@@ -59,20 +59,28 @@ FROM inventory_levels WHERE snapshot_date BETWEEN :d1 AND :d2 AND org_id = :org_
 
 async def rebuild_kpi_snapshots(db: AsyncSession, start: date, end: date, org_id=None) -> None:
     if org_id is None:
-        # No org context (e.g. super_admin global view or legacy call) — skip per-org rebuild
-        # Fallback: rebuild without org filter for backwards compat if no org_id provided
-        # But per-tenant mode requires org_id; log warning and run legacy SQL without org
-        for statement in _REBUILD_SQL.split(";"):
-            if statement.strip():
-                # For legacy path, strip org_id condition (not ideal, but keeps old behavior)
-                legacy_stmt = (
-                    statement.replace(" AND org_id = :org_id", "").replace(", org_id", "").replace(", :org_id", "")
-                )
-                # Need to handle DELETE without org
-                if "DELETE" in legacy_stmt:
-                    legacy_stmt = legacy_stmt.replace(" AND org_id = :org_id", "")
-                await db.execute(text(legacy_stmt), {"d1": start, "d2": end})
-        return
+        raise ValueError("org_id is required for rebuild_kpi_snapshots — per-tenant isolation")
+    # DELETE + INSERT must be atomic per org; flush ensures visibility before cache clear
     for statement in _REBUILD_SQL.split(";"):
         if statement.strip():
             await db.execute(text(statement), {"d1": start, "d2": end, "org_id": str(org_id)})
+    await db.flush()
+    # Invalidate query caches for this org (and compare cache) so next read sees rebuilt snapshots
+    try:
+        from app.services.analytics.cache import clear_query_cache
+
+        await clear_query_cache(org_id=org_id)
+    except Exception:
+        pass
+    try:
+        from app.services.analytics.compare import clear_compare_cache
+
+        await clear_compare_cache(org_id=org_id)
+    except Exception:
+        # compare cache may not have clear helper yet — fall back to direct clear
+        try:
+            from app.services.analytics.compare import _compare_cache
+
+            _compare_cache.clear()
+        except Exception:
+            pass

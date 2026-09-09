@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from uuid import UUID
 
-from sqlalchemy import Date, and_, case, cast, func, or_, select
+from sqlalchemy import Date, and_, case, cast, func, or_, select, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import BUSINESS_TZ_NAME, business_today
@@ -78,6 +79,9 @@ def _org_filter(col, org_id: UUID | None) -> list:
 
 @cached_query(ttl_seconds=60)
 async def _sales_kpis(db: AsyncSession, f: Filters, date_from: date, date_to: date) -> dict[str, float]:
+    _join_cond = Product.id == SalesTransaction.product_id
+    if f.org_id is not None:
+        _join_cond = (Product.id == SalesTransaction.product_id) & (Product.org_id == f.org_id)
     stmt = (
         select(
             func.coalesce(func.sum(SalesTransaction.total_amount), 0).label("revenue"),
@@ -90,7 +94,7 @@ async def _sales_kpis(db: AsyncSession, f: Filters, date_from: date, date_to: da
                 0,
             ).label("gross_margin"),
         )
-        .select_from(SalesTransaction.__table__.outerjoin(Product.__table__, Product.id == SalesTransaction.product_id))
+        .select_from(SalesTransaction.__table__.outerjoin(Product.__table__, _join_cond))
         .where(and_(*_sales_conditions(f, date_from, date_to)))
     )
     row = (await db.execute(stmt)).one()
@@ -105,24 +109,34 @@ async def _sales_kpis(db: AsyncSession, f: Filters, date_from: date, date_to: da
 async def _kpi_snapshot_sums(
     db: AsyncSession, org_id: UUID | None, date_from: date, date_to: date, metrics: list[str]
 ) -> dict[str, float] | None:
-    """Fast path: try kpi_snapshots before hitting fact tables (30 rows vs 30k)."""
+    """Fast path: try kpi_snapshots before hitting fact tables (30 rows vs 30k).
+
+    Only global snapshots (dimensions == '{}') are summed; dimensioned snapshots
+    (region/channel/category) are excluded to avoid double-counting.
+    Coverage requires count distinct snapshot_date == expected days, else fallback to fact.
+    """
     from app.models import KpiSnapshot
 
-    # snapshots are daily, per-org, per-metric; check we have full coverage
+    expected_days = (date_to - date_from).days + 1
     conds = [
         KpiSnapshot.snapshot_date.between(date_from, date_to),
         KpiSnapshot.metric.in_(metrics),
+        KpiSnapshot.dimensions == cast("{}", JSONB),
     ]
     if org_id is not None:
         conds.append(KpiSnapshot.org_id == org_id)
-    # super-admin: sum across all orgs, no org filter
-    # quick existence check — if no rows, fall back to fact
-    cnt = (await db.execute(select(func.count()).select_from(KpiSnapshot).where(and_(*conds)))).scalar_one()
-    if cnt == 0:
+    # coverage check: need a row per day per metric (distinct dates == expected)
+    distinct_cnt = (
+        await db.execute(
+            select(func.count(func.distinct(KpiSnapshot.snapshot_date)))
+            .select_from(KpiSnapshot)
+            .where(and_(*conds))
+        )
+    ).scalar_one()
+    if distinct_cnt == 0:
         return None
-    # If we have at least (days * metrics) rows we consider coverage sufficient
-    # For super-admin (org_id None) snapshots are per-org, so count will be huge — treat as hit
-    # For tenant, expect ~ days * len(metrics) rows
+    if distinct_cnt != expected_days:
+        return None
     rows = (
         await db.execute(
             select(KpiSnapshot.metric, func.coalesce(func.sum(KpiSnapshot.value), 0))
@@ -234,41 +248,54 @@ async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity:
             KpiSnapshot.metric == metric
             if metric != "avg_order_value"
             else KpiSnapshot.metric.in_(["revenue", "orders"]),
+            KpiSnapshot.dimensions == cast("{}", JSONB),
         ]
         if f.org_id is not None:
             conds.append(KpiSnapshot.org_id == f.org_id)
-        # super-admin: no org filter
-        # For avg_order_value, compute from revenue/orders snapshots per day in Python
-        if metric == "avg_order_value":
-            rows = (
-                await db.execute(
-                    select(KpiSnapshot.snapshot_date, KpiSnapshot.metric, KpiSnapshot.value)
+        expected_days = (f.date_to - f.date_from).days + 1
+        # coverage check: distinct snapshot_date must equal expected days else fallback to fact
+        distinct_cnt = (
+            await db.execute(
+                select(func.count(func.distinct(KpiSnapshot.snapshot_date)))
+                .select_from(KpiSnapshot)
+                .where(and_(*conds))
+            )
+        ).scalar_one()
+        if distinct_cnt == expected_days and distinct_cnt != 0:
+            # super-admin: no org filter
+            # For avg_order_value, compute from revenue/orders snapshots per day in Python
+            if metric == "avg_order_value":
+                rows = (
+                    await db.execute(
+                        select(KpiSnapshot.snapshot_date, KpiSnapshot.metric, KpiSnapshot.value)
+                        .where(and_(*conds))
+                        .order_by(KpiSnapshot.snapshot_date)
+                    )
+                ).all()
+                if rows:
+                    from collections import defaultdict
+
+                    by_day: dict[date, dict[str, float]] = defaultdict(dict)
+                    for r in rows:
+                        by_day[r.snapshot_date][r.metric] = float(r.value)
+                    # require full coverage per metric (both revenue and orders per day)
+                    if len(by_day) == expected_days:
+                        out = []
+                        for d in sorted(by_day):
+                            rev = by_day[d].get("revenue", 0.0)
+                            ords = by_day[d].get("orders", 0.0)
+                            out.append({"period": d, "value": round(rev / ords if ords else 0.0, 2)})
+                        if out:
+                            return out
+            else:
+                stmt = (
+                    select(KpiSnapshot.snapshot_date.label("period"), KpiSnapshot.value.label("value"))
                     .where(and_(*conds))
                     .order_by(KpiSnapshot.snapshot_date)
                 )
-            ).all()
-            if rows:
-                from collections import defaultdict
-
-                by_day: dict[date, dict[str, float]] = defaultdict(dict)
-                for r in rows:
-                    by_day[r.snapshot_date][r.metric] = float(r.value)
-                out = []
-                for d in sorted(by_day):
-                    rev = by_day[d].get("revenue", 0.0)
-                    ords = by_day[d].get("orders", 0.0)
-                    out.append({"period": d, "value": round(rev / ords if ords else 0.0, 2)})
-                if out:
-                    return out
-        else:
-            stmt = (
-                select(KpiSnapshot.snapshot_date.label("period"), KpiSnapshot.value.label("value"))
-                .where(and_(*conds))
-                .order_by(KpiSnapshot.snapshot_date)
-            )
-            rows = (await db.execute(stmt)).all()
-            if rows:
-                return [{"period": r.period, "value": round(float(r.value), 2)} for r in rows]
+                rows = (await db.execute(stmt)).all()
+                if rows and len(rows) == expected_days:
+                    return [{"period": r.period, "value": round(float(r.value), 2)} for r in rows]
 
     if metric == "expense_total":
         bucket = cast(func.date_trunc(granularity, cast(Expense.expense_date, Date)), Date)
@@ -282,18 +309,36 @@ async def kpi_timeseries(db: AsyncSession, f: Filters, metric: str, granularity:
             .order_by(bucket)
         )
     else:
-        value_expr = {
-            "revenue": func.sum(SalesTransaction.total_amount),
-            "orders": func.count(SalesTransaction.id),
-            "avg_order_value": func.avg(SalesTransaction.total_amount),
-        }[metric]
-        bucket = cast(func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date)
-        stmt = (
-            select(bucket.label("period"), value_expr.label("value"))
-            .where(and_(*_sales_conditions(f, f.date_from, f.date_to)))
-            .group_by(bucket)
-            .order_by(bucket)
-        )
+        if metric == "gross_margin":
+            # gross_margin needs product join with org scoping
+            join_cond = Product.id == SalesTransaction.product_id
+            if f.org_id is not None:
+                join_cond = (Product.id == SalesTransaction.product_id) & (Product.org_id == f.org_id)
+            stmt_from = SalesTransaction.__table__.outerjoin(Product.__table__, join_cond)
+            value_expr = func.sum(
+                SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
+            )
+            bucket = cast(func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date)
+            stmt = (
+                select(bucket.label("period"), value_expr.label("value"))
+                .select_from(stmt_from)
+                .where(and_(*_sales_conditions(f, f.date_from, f.date_to)))
+                .group_by(bucket)
+                .order_by(bucket)
+            )
+        else:
+            value_expr = {
+                "revenue": func.sum(SalesTransaction.total_amount),
+                "orders": func.count(SalesTransaction.id),
+                "avg_order_value": func.avg(SalesTransaction.total_amount),
+            }[metric]
+            bucket = cast(func.date_trunc(granularity, cast(SalesTransaction.txn_date, Date)), Date)
+            stmt = (
+                select(bucket.label("period"), value_expr.label("value"))
+                .where(and_(*_sales_conditions(f, f.date_from, f.date_to)))
+                .group_by(bucket)
+                .order_by(bucket)
+            )
     rows = (await db.execute(stmt)).all()
     return [{"period": r.period, "value": round(float(r.value), 2)} for r in rows]
 
@@ -363,9 +408,25 @@ async def sales_transactions(
     conditions = _sales_conditions(f, f.date_from, f.date_to)
     if sku:
         conditions.append(Product.sku == sku)
+        if f.org_id is not None:
+            conditions.append(Product.org_id == f.org_id)
     if search:
         q = f"%{search}%"
         conditions.append(or_(Product.name.ilike(q), Customer.name.ilike(q), SalesTransaction.channel.ilike(q)))
+    # Tenant-scoped outer joins: product and customer must be same org to avoid cross-tenant leakage
+    _prod_join = Product.id == SalesTransaction.product_id
+    _cust_join = Customer.id == SalesTransaction.customer_id
+    if f.org_id is not None:
+        # Product already has org_id; Customer may not yet have org_id column before migration - guard via hasattr
+        try:
+            _prod_join = (Product.id == SalesTransaction.product_id) & (Product.org_id == f.org_id)
+        except Exception:
+            _prod_join = Product.id == SalesTransaction.product_id
+        try:
+            if hasattr(Customer, "org_id") and hasattr(Customer.__table__.c, "org_id"):
+                _cust_join = (Customer.id == SalesTransaction.customer_id) & (Customer.org_id == f.org_id)
+        except Exception:
+            pass
     base = (
         select(
             SalesTransaction.id,
@@ -384,9 +445,9 @@ async def sales_transactions(
             SalesTransaction.source_id,
         )
         .select_from(
-            SalesTransaction.__table__.outerjoin(
-                Product.__table__, Product.id == SalesTransaction.product_id
-            ).outerjoin(Customer.__table__, Customer.id == SalesTransaction.customer_id)
+            SalesTransaction.__table__.outerjoin(Product.__table__, _prod_join).outerjoin(
+                Customer.__table__, _cust_join
+            )
         )
         .where(and_(*conditions))
     )
@@ -468,6 +529,9 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
     sales_conds = [SalesTransaction.txn_date.between(f.date_from, f.date_to)]
     if f.org_id is not None:
         sales_conds.append(SalesTransaction.org_id == f.org_id)
+    _pnl_join_cond = Product.id == SalesTransaction.product_id
+    if f.org_id is not None:
+        _pnl_join_cond = (Product.id == SalesTransaction.product_id) & (Product.org_id == f.org_id)
     revenue_q = (
         select(
             sales_month.label("month"),
@@ -476,7 +540,7 @@ async def monthly_pnl(db: AsyncSession, f: Filters) -> list[dict]:
                 SalesTransaction.total_amount - func.coalesce(Product.unit_cost, 0) * SalesTransaction.quantity
             ).label("gross_margin"),
         )
-        .select_from(SalesTransaction.__table__.outerjoin(Product.__table__, Product.id == SalesTransaction.product_id))
+        .select_from(SalesTransaction.__table__.outerjoin(Product.__table__, _pnl_join_cond))
         .where(and_(*sales_conds))
         .group_by(sales_month)
         .subquery()

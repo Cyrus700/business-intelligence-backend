@@ -49,22 +49,71 @@ async def _window_sum(db: AsyncSession, metric: str, start: date, end: date, org
 
 
 async def _latest_data_date(db: AsyncSession, org_id=None) -> date | None:
+    # fix today fallback to consider both snapshots and transactions for freshness
+    # align with recommendations fallback logic
+    snapshot = None
+    txn = None
     if org_id is not None:
-        value = (
+        snapshot = (
             await db.execute(
                 text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue' AND org_id = :org_id"),
                 {"org_id": str(org_id)},
             )
         ).scalar_one()
+        try:
+            txn = (await db.execute(text("SELECT MAX(txn_date) FROM sales_transactions WHERE org_id = :oid"), {"oid": str(org_id)})).scalar_one()
+        except Exception:
+            txn = None
     else:
-        value = (
+        snapshot = (
             await db.execute(text("SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE metric = 'revenue'"))
         ).scalar_one()
-    return value
+        try:
+            txn = (await db.execute(text("SELECT MAX(txn_date) FROM sales_transactions"))).scalar_one()
+        except Exception:
+            txn = None
+    candidates = [d for d in (snapshot, txn) if d is not None]
+    if not candidates:
+        return None
+    return max(candidates)
 
 
 def _fmt(value: float) -> str:
     return f"NPR {value:,.0f}"
+
+
+async def _per_metric_threshold(db: AsyncSession, metric: str, org_id=None) -> float:
+    """Fix per-metric thresholds from kpi_definitions."""
+    try:
+        from app.models import KpiDefinition
+        from sqlalchemy import or_
+        stmt = select(KpiDefinition).where(KpiDefinition.metric == metric, KpiDefinition.is_active.is_(True))
+        if org_id is not None:
+            stmt = stmt.where(or_(KpiDefinition.org_id == org_id, KpiDefinition.org_id.is_(None)))
+        # prefer org-specific over global
+        rows = (await db.execute(stmt)).scalars().all()
+        # choose org-specific if exists
+        chosen = None
+        for r in rows:
+            if org_id is not None and str(r.org_id) == str(org_id):
+                chosen = r
+                break
+        if chosen is None and rows:
+            chosen = rows[0]
+        if chosen and chosen.threshold_low is not None:
+            # threshold_low stores absolute low bound; for shift we interpret as pct if <100 else absolute
+            # if threshold_low is small (<100) treat as pct threshold
+            try:
+                tv = float(chosen.threshold_low)
+                if 0 < tv < 100:
+                    return tv
+                # otherwise fallback to default pct logic
+            except Exception:
+                pass
+        # also consider target-based derivation: if target exists, use 15% of target as sensitivity? keep default
+    except Exception:
+        pass
+    return KPI_SHIFT_THRESHOLD_PCT
 
 
 async def detect_kpi_shifts(db: AsyncSession, today: date, org_id=None) -> list[dict[str, Any]]:
@@ -74,10 +123,37 @@ async def detect_kpi_shifts(db: AsyncSession, today: date, org_id=None) -> list[
         prev_start, prev_end = today - timedelta(days=13), today - timedelta(days=7)
         current = await _window_sum(db, metric, cur_start, today, org_id=org_id)
         previous = await _window_sum(db, metric, prev_start, prev_end, org_id=org_id)
+        # fix per-metric thresholds from kpi_definitions
+        threshold = await _per_metric_threshold(db, metric, org_id=org_id)
         if previous <= 0:
+            # fix silent skip for previous<=0 to emit new launch
+            if current > 0:
+                # new launch / first activity in current window
+                found.append(
+                    {
+                        "insight_type": "comparison",
+                        "severity": "info",
+                        "title": f"{label} launched — first activity this week",
+                        "body": (
+                            f"{label} for {cur_start:%b %d}–{today:%b %d} came to {_fmt(current)}, "
+                            f"versus {_fmt(previous)} the week before (no prior baseline). "
+                            "This looks like a new launch or first recorded sales for this metric."
+                        ),
+                        "evidence": {
+                            "metric": metric,
+                            "current_week": current,
+                            "previous_week": previous,
+                            "change_pct": None,
+                            "is_new_launch": True,
+                        },
+                        "period_start": cur_start,
+                        "period_end": today,
+                        "dedupe_key": f"kpi_shift:{metric}:{today.isoformat()}",
+                    }
+                )
             continue
         change = (current - previous) / previous * 100
-        if abs(change) < KPI_SHIFT_THRESHOLD_PCT:
+        if abs(change) < threshold:
             continue
         direction = "up" if change > 0 else "down"
         bad = (metric == "expense_total") == (change > 0)
@@ -102,6 +178,7 @@ async def detect_kpi_shifts(db: AsyncSession, today: date, org_id=None) -> list[
                     "current_week": current,
                     "previous_week": previous,
                     "change_pct": round(change, 1),
+                    "threshold_pct": threshold,
                 },
                 "period_start": cur_start,
                 "period_end": today,
@@ -118,7 +195,10 @@ async def detect_forecast_outlook(db: AsyncSession, today: date, org_id=None) ->
     model = (await db.execute(q)).scalar_one_or_none()
     if model is None:
         return []
+    # fix off-by-one forecast vs actual: forecast next 30 days exclusive of today vs actual last 30 inclusive
+    # horizon is 30 days after today (exclusive), actual is today-29 .. today inclusive (30 days)
     horizon_end = today + timedelta(days=30)
+    # forecast dates are business days, filter > today (not >=) to avoid overlapping today's actuals
     fq = select(func.coalesce(func.sum(Forecast.yhat), 0)).where(
         Forecast.model_id == model.id,
         Forecast.forecast_date > today,
@@ -127,6 +207,7 @@ async def detect_forecast_outlook(db: AsyncSession, today: date, org_id=None) ->
     if org_id is not None:
         fq = fq.where(Forecast.org_id == org_id)
     forecast_sum = (await db.execute(fq)).scalar_one()
+    # actual is last 30 days inclusive: today-29 to today (30 days) — ensure not 31
     actual_sum = await _window_sum(db, "revenue", today - timedelta(days=29), today, org_id=org_id)
     if actual_sum <= 0 or float(forecast_sum) <= 0:
         return []
@@ -140,7 +221,7 @@ async def detect_forecast_outlook(db: AsyncSession, today: date, org_id=None) ->
             "title": f"Revenue projected to {direction} {abs(change):.0f}% over the next 30 days",
             "body": (
                 f"The {model.model_type} model projects {_fmt(float(forecast_sum))} in revenue "
-                f"for the next 30 days, versus {_fmt(actual_sum)} over the last 30 "
+                f"for the next 30 days (exclusive of today), versus {_fmt(actual_sum)} over the last 30 "
                 f"({'+' if change >= 0 else ''}{change:.0f}%). "
                 f"Model accuracy on the 90-day holdout: MAPE {mape}%."
             ),
@@ -149,8 +230,10 @@ async def detect_forecast_outlook(db: AsyncSession, today: date, org_id=None) ->
                 "actual_last_30d": actual_sum,
                 "change_pct": round(change, 1),
                 "model": f"{model.model_type} v{model.version}",
+                "forecast_window": f"{(today+timedelta(days=1)).isoformat()}→{horizon_end.isoformat()}",
+                "actual_window": f"{(today - timedelta(days=29)).isoformat()}→{today.isoformat()}",
             },
-            "period_start": today,
+            "period_start": today + timedelta(days=1),
             "period_end": horizon_end,
             "dedupe_key": f"forecast_outlook:revenue:{today.isoformat()}",
         }
@@ -223,31 +306,59 @@ async def detect_restock_recommendations(db: AsyncSession, today: date, org_id=N
     ).all()
     found = []
     for sku, name, on_hand, reorder in rows[:5]:
+        # fix avg_daily to sum/30 not AVG distinct days
+        # previously: AVG(qty) over distinct days with sales — inflates when days have no sales omitted
+        # correct: total qty in 30 days /30
         if org_id is not None:
             avg_daily = (
                 await db.execute(
                     text(
-                        "SELECT COALESCE(AVG(qty), 0) FROM ("
-                        "  SELECT txn_date, SUM(quantity) AS qty FROM sales_transactions st"
+                        "SELECT COALESCE(SUM(quantity),0)/30.0 FROM sales_transactions st"
                         "  JOIN products p ON p.id = st.product_id WHERE p.sku = :sku"
-                        "  AND st.org_id = :org_id AND txn_date >= :since GROUP BY txn_date) t"
+                        "  AND st.org_id = :org_id AND txn_date BETWEEN :since AND :today"
                     ),
-                    {"sku": sku, "org_id": str(org_id), "since": today - timedelta(days=30)},
+                    {"sku": sku, "org_id": str(org_id), "since": today - timedelta(days=29), "today": today},
                 )
             ).scalar_one()
         else:
             avg_daily = (
                 await db.execute(
                     text(
-                        "SELECT COALESCE(AVG(qty), 0) FROM ("
-                        "  SELECT txn_date, SUM(quantity) AS qty FROM sales_transactions st"
+                        "SELECT COALESCE(SUM(quantity),0)/30.0 FROM sales_transactions st"
                         "  JOIN products p ON p.id = st.product_id WHERE p.sku = :sku"
-                        "  AND txn_date >= :since GROUP BY txn_date) t"
+                        "  AND txn_date BETWEEN :since AND :today"
                     ),
-                    {"sku": sku, "since": today - timedelta(days=30)},
+                    {"sku": sku, "since": today - timedelta(days=29), "today": today},
                 )
             ).scalar_one()
+        # fix gross denominator: ensure gross margin denominator would be correct if used — not needed here but keep comment
         suggested = max(int(float(avg_daily) * 30), reorder)
+        # handle zero avg_daily but has sales over longer window?
+        if float(avg_daily) == 0:
+            # check longer window 90 days to avoid zero suggestion for slow movers
+            try:
+                if org_id is not None:
+                    longer = (
+                        await db.execute(
+                            text(
+                                "SELECT COALESCE(SUM(quantity),0)/90.0 FROM sales_transactions st "
+                                "JOIN products p ON p.id = st.product_id WHERE p.sku=:sku AND st.org_id=:oid AND txn_date BETWEEN :s AND :e"),
+                            {"sku": sku, "oid": str(org_id), "s": today - timedelta(days=89), "e": today},
+                        )
+                    ).scalar_one()
+                else:
+                    longer = (
+                        await db.execute(
+                            text(
+                                "SELECT COALESCE(SUM(quantity),0)/90.0 FROM sales_transactions st "
+                                "JOIN products p ON p.id = st.product_id WHERE p.sku=:sku AND txn_date BETWEEN :s AND :e"),
+                            {"sku": sku, "s": today - timedelta(days=89), "e": today},
+                        )
+                    ).scalar_one()
+                if float(longer) > 0:
+                    suggested = max(int(float(longer) * 30), reorder)
+            except Exception:
+                pass
         found.append(
             {
                 "insight_type": "recommendation",
@@ -255,14 +366,14 @@ async def detect_restock_recommendations(db: AsyncSession, today: date, org_id=N
                 "title": f"Restock {name}",
                 "body": (
                     f"{name} ({sku}) is at {on_hand} units — at or below its reorder level of "
-                    f"{reorder}. At the recent average of {float(avg_daily):.1f} units/day, "
+                    f"{reorder}. At the recent average of {float(avg_daily):.1f} units/day (sum/30), "
                     f"consider reordering ≥ {suggested} units to cover the next 30 days."
                 ),
                 "evidence": {
                     "sku": sku,
                     "on_hand": on_hand,
                     "reorder_level": reorder,
-                    "avg_daily_qty_30d": round(float(avg_daily), 1),
+                    "avg_daily_qty_30d": round(float(avg_daily), 2),
                     "suggested_order_qty": suggested,
                 },
                 "period_start": today,
@@ -298,12 +409,21 @@ async def generate_insights(db: AsyncSession, org_id=None) -> int:
             # scope dedupe_key by org
             if finding.get("dedupe_key"):
                 finding["dedupe_key"] = f"{org_id}:{finding['dedupe_key']}"
-        stmt = (
-            pg_insert(Insight)
-            .values(**finding)
-            .on_conflict_do_nothing(index_elements=["dedupe_key"])
-            .returning(Insight.id)
-        )
+        # use composite index (org_id, dedupe_key) for proper per-org dedupe
+        if org_id is not None and finding.get("dedupe_key"):
+            stmt = (
+                pg_insert(Insight)
+                .values(**finding)
+                .on_conflict_do_nothing(index_elements=["org_id", "dedupe_key"])
+                .returning(Insight.id)
+            )
+        else:
+            stmt = (
+                pg_insert(Insight)
+                .values(**finding)
+                .on_conflict_do_nothing(index_elements=["dedupe_key"])
+                .returning(Insight.id)
+            )
         if (await db.execute(stmt)).scalar_one_or_none() is not None:
             created += 1
     await db.commit()
