@@ -33,16 +33,16 @@ RUN groupadd -r api --gid 1001 && useradd -r -g api --uid 1001 api \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /app/var/uploads && chown -R api:api /app
 
-# Copy venv + app from builder
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/app /app/app
-COPY --from=builder /app/alembic /app/alembic
-COPY --from=builder /app/alembic.ini /app/alembic.ini
+# Copy venv + app from builder — --chown avoids fat chown layer that triggers overlayfs Lchown bug (Image 1: 48af1c8989f2)
+COPY --chown=api:api --from=builder /app/.venv /app/.venv
+COPY --chown=api:api --from=builder /app/app /app/app
+COPY --chown=api:api --from=builder /app/alembic /app/alembic
+COPY --chown=api:api --from=builder /app/alembic.ini /app/alembic.ini
 # Free-tier: prune venv tests/caches to shrink image ~300MB → ~180MB (scipy/pandas tests are 150MB+)
 RUN find /app/.venv -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true \
  && find /app/.venv -type d -name "tests" -prune -exec rm -rf {} + 2>/dev/null || true \
  && rm -rf /app/.venv/lib/python*/site-packages/pip /app/.venv/lib/python*/site-packages/setuptools 2>/dev/null || true \
- && chown -R api:api /app/.venv /app/app /app/alembic /app/alembic.ini
+ && chown -R api:api /app/var/uploads 2>/dev/null || true
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

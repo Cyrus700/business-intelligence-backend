@@ -152,28 +152,81 @@ jobs:
           # Pull GHCR (public) — no build on 1GB
           export TAG=$TAG
           export OWNER_LC=$OWNER_LC
-          # --- free-tier disk guard: EC2 is 30GB, image layers ~2GB each, so prune BEFORE pull ---
-          echo "→ pre-pull disk free (30GB guard)"
-          df -h || true
-          docker system df || true
-          # keep only the running images, drop everything else
-          docker image prune -af 2>&1 | tail -20 || true
-          docker builder prune -af 2>&1 | tail -20 || true
-          docker container prune -f 2>&1 | tail -5 || true
-          sudo journalctl --vacuum-size=100M 2>&1 | tail -5 || sudo journalctl --vacuum-time=1d 2>&1 | tail -5 || true
-          sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
-          sudo apt-get clean 2>/dev/null || true
-          # containerd overlayfs snapshot leftovers (the exact path from the error)
-          sudo rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/new-* 2>/dev/null || true
-          df -h || true
-          # Update compose image tag (lowercase)
-          sed -i "s|image: .*bi-backend:.*|image: ghcr.io/$OWNER_LC/bi-backend:$TAG|" \$COMPOSE || true
-          if grep -q "ghcr.io" \$COMPOSE; then
-            if [ -f ~/ghcr.token ]; then cat ~/ghcr.token | docker login ghcr.io -u $OWNER_LC --password-stdin || true; fi
-            docker compose -f \$COMPOSE pull api 2>&1 | tail -100 || docker pull ghcr.io/$OWNER_LC/bi-backend:$TAG 2>&1 | tail -100
-          else
-            docker compose -f \$COMPOSE build api
-          fi
+           # --- free-tier disk guard: EC2 is 30GB, image layers ~2GB each, so prune BEFORE pull ---
+           echo "→ pre-pull disk free (30GB guard)"
+           df -h || true
+           docker system df || true
+           # keep only the running images, drop everything else
+           docker image prune -af 2>&1 | tail -20 || true
+           docker builder prune -af 2>&1 | tail -20 || true
+           docker container prune -f 2>&1 | tail -5 || true
+           docker system prune -af --volumes 2>&1 | tail -10 || true
+           sudo journalctl --vacuum-size=100M 2>&1 | tail -5 || sudo journalctl --vacuum-time=1d 2>&1 | tail -5 || true
+           sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+           sudo apt-get clean 2>/dev/null || true
+           # containerd overlayfs snapshot leftovers — fix Lchown/UtimesNanoAt "no such file or directory"
+           # Image 1: failed to extract layer sha256:48af1c8989f2 to overlayfs snapshot 812/816 - stale snapshots
+           sudo rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/new-* 2>/dev/null || true
+           # full snapshot prune + daemon restart if overlayfs is corrupted (retry will handle it)
+           # keep docker running for now; aggressive clean will run on retry if first pull fails
+           df -h || true
+           # Update compose image tag (lowercase) — harden regex and ensure pull_policy
+           sed -i "s|image:.*bi-backend:.*|image: ghcr.io/$OWNER_LC/bi-backend:$TAG|" \$COMPOSE || true
+           # ensure pull_policy: always so "must be built from source" warning disappears
+           if ! grep -q "pull_policy" \$COMPOSE; then
+             sed -i "/image: ghcr.io/a\    pull_policy: always" \$COMPOSE || true
+           fi
+           echo "→ compose image:"
+           grep -A2 "image:" \$COMPOSE | head -20 || true
+           # Pull with retry + snapshot reset on Lchown/Utimes failure (overlayfs corruption on 1GB)
+           GHCR_IMAGE="ghcr.io/$OWNER_LC/bi-backend:$TAG"
+           echo "→ pulling \$GHCR_IMAGE (retry 3x with snapshot reset)"
+           if [ -f ~/ghcr.token ]; then cat ~/ghcr.token | docker login ghcr.io -u $OWNER_LC --password-stdin || true; fi
+           PULL_OK=0
+           for ATTEMPT in 1 2 3; do
+             echo "  attempt \$ATTEMPT/3: docker pull \$GHCR_IMAGE"
+             if docker pull \$GHCR_IMAGE 2>&1 | tee /tmp/pull.log | tail -100; then
+               # also try compose pull to keep compose cache consistent (ignore warning)
+               docker compose -f \$COMPOSE pull api 2>&1 | tail -20 || true
+               PULL_OK=1
+               break
+             fi
+             echo "  pull attempt \$ATTEMPT failed — inspecting"
+             cat /tmp/pull.log | tail -50 || true
+              if grep -q "failed to extract layer\|Lchown\|UtimesNanoAt\|no such file or directory\|overlayfs" /tmp/pull.log; then
+                echo "  → overlayfs extraction failure detected — resetting containerd snapshots"
+                docker system prune -af --volumes 2>&1 | tail -10 || true
+                sudo systemctl stop docker 2>&1 | tail -10 || true
+                sudo systemctl stop containerd 2>&1 | tail -10 || true
+                sleep 2
+                sudo rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/* 2>/dev/null || true
+                sudo rm -rf /var/lib/docker/tmp/* 2>/dev/null || true
+                sudo rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/new-* 2>/dev/null || true
+                sudo systemctl start containerd 2>&1 | tail -20 || true
+                sleep 3
+                sudo systemctl start docker 2>&1 | tail -20 || true
+                sleep 5
+                df -h || true
+                docker system df || true
+             else
+               echo "  → non-overlay error, prune and retry"
+               docker system prune -af 2>&1 | tail -10 || true
+               sleep 5
+             fi
+           done
+           if [ \$PULL_OK -eq 0 ]; then
+             echo "ERROR: docker pull failed after 3 attempts — disk and snapshot state:"
+             df -h || true
+             docker system df || true
+             ls -la /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/ 2>&1 | head -30 || true
+             exit 1
+           fi
+           # tag as latest for any compose that still references :latest
+           docker tag \$GHCR_IMAGE ghcr.io/$OWNER_LC/bi-backend:latest 2>&1 | tail -5 || true
+           if ! grep -q "ghcr.io" \$COMPOSE; then
+             echo "WARN: compose still not referencing ghcr.io — building as fallback (should not happen on 1GB)"
+             docker compose -f \$COMPOSE build api
+           fi
           echo "→ migrate"
           docker compose -f \$COMPOSE run --rm api alembic upgrade heads 2>&1 | tail -50 || docker compose -f \$COMPOSE run --rm api python -m alembic upgrade heads 2>&1 | tail -50
           echo "→ up -d"
