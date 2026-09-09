@@ -585,3 +585,118 @@ async def get_trend(
     if summary is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not enough history for a trend")
     return TrendOut(**summary)
+
+
+class PeriodProjectionOut(BaseModel):
+    metric: str
+    period: str
+    period_key: str
+    period_start: date
+    period_end: date
+    days_elapsed: int
+    days_remaining: int
+    actual_to_date: float
+    projected_remainder: float
+    projected_total: float
+    lower_bound: float
+    upper_bound: float
+    daily_run_rate: float
+    method: str
+    confidence: float
+    band_method: str
+    daily_band: float
+    coverage: bool
+    is_stale: bool
+    daily_cone: list[dict[str, Any]]
+
+
+class ScenarioOut(BaseModel):
+    assumptions: dict[str, Any]
+    baseline: dict[str, Any]
+    scenario: dict[str, Any]
+    delta: dict[str, Any]
+
+
+class ScenarioRequest(BaseModel):
+    metric: str = "revenue"
+    period: str = "month"
+    orders_change_pct: float = 0.0
+    aov_change_pct: float = 0.0
+    expense_change_pct: float = 0.0
+    variable_pct: float = 0.0
+
+
+@router.get("/projections/current", response_model=PeriodProjectionOut)
+async def get_current_projection(
+    db: DbSession,
+    user: CurrentUser,
+    metric: str = Query("revenue", description="revenue|orders|expenses"),
+    period: str = Query("month", description="month|quarter"),
+):
+    from app.api.deps import is_super_admin
+    from app.services.ml.projections import project_current_period
+
+    if metric not in ("revenue", "orders", "expenses", "expense_total", "gross_margin"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"invalid metric '{metric}'")
+    if period not in ("month", "quarter"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"invalid period '{period}'")
+    org_id = None if is_super_admin(user) else user.org_id
+    proj = await project_current_period(db, metric=metric, period=period, org_id=org_id)
+    return PeriodProjectionOut(**proj.as_dict())
+
+
+@router.post("/scenario/simulate", response_model=ScenarioOut)
+async def simulate_scenario(
+    body: ScenarioRequest,
+    db: DbSession,
+    user: CurrentUser,
+):
+    from app.api.deps import is_super_admin
+    from app.services.ml.projections import project_current_period, simulate
+
+    if body.metric not in ("revenue", "orders", "expenses", "expense_total"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"invalid metric '{body.metric}'")
+    org_id = None if is_super_admin(user) else user.org_id
+    # Use current period's actuals as baseline for isolated simulation
+    period = body.period if body.period in ("month", "quarter") else "month"
+    # Try to get period projection to derive baseline actuals; fallback to pnl
+    try:
+        proj = await project_current_period(db, metric="revenue", period=period, org_id=org_id)
+        # baseline from projection's actual + remainder vs just actual
+        # For scenario we use live kpi_summary for baseline
+        from app.services.analytics.queries import Filters, kpi_summary
+
+        # period bounds
+        start, end = proj.period_start, proj.period_end
+        cards = {c["metric"]: c for c in await kpi_summary(db, Filters(date_from=start, date_to=end, org_id=org_id))}
+        revenue = float(cards.get("revenue", {}).get("value") or proj.actual_to_date or 0.0)
+        orders = float(cards.get("orders", {}).get("value") or 0.0)
+        expenses = float(cards.get("expense_total", {}).get("value") or 0.0)
+    except Exception:
+        revenue = expenses = orders = 0.0
+    # historical median AOV for orders==0 handling
+    hist_median = None
+    if orders == 0:
+        try:
+            from app.services.ml.features import load_series
+
+            fr = await load_series(db, "revenue_daily", org_id=org_id)
+            fo = await load_series(db, "orders_daily", org_id=org_id)
+            if not fr.empty and not fo.empty:
+                m = fr[["ds", "y"]].merge(fo[["ds", "y"]], on="ds", suffixes=("_rev", "_ord"))
+                m = m[m["y_ord"] > 0]
+                if not m.empty:
+                    hist_median = float((m["y_rev"] / m["y_ord"]).median())
+        except Exception:
+            hist_median = None
+    sc = simulate(
+        revenue=revenue,
+        orders=orders,
+        expenses=expenses,
+        orders_change_pct=body.orders_change_pct,
+        aov_change_pct=body.aov_change_pct,
+        expense_change_pct=body.expense_change_pct,
+        variable_pct=body.variable_pct,
+        historical_median_aov=hist_median,
+    )
+    return ScenarioOut(**sc.as_dict())
