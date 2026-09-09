@@ -1,15 +1,19 @@
-"""Multi-agent upload system: inspect, validate, chunk, and load.
+"""Multi-agent upload system — business-simple, pipeline-robust.
 
-Each agent is a focused specialist. The orchestrator routes small vs large files
-to the optimal path and surfaces a unified result.
+Each agent is a focused specialist. The orchestrator runs them in order so
+a business user only does: drop file → confirm business area → done.
 
-Agents:
-- FileInspectorAgent  — detects file kind, encoding, columns, and best domain
-- ValidationAgent      — spot-checks preview rows without loading the warehouse
-- ChunkManagerAgent   — assembles chunked uploads from the browser
-- PipelineAgent        — runs transform+load and records ETL jobs
+Agents (6):
+- FileInspectorAgent       — detects file kind, encoding, columns, row count, sheet
+- DomainIntelligenceAgent  — scores sales/finance/inventory, explains in business terms
+- ValidationAgent          — preview validation + quick data-quality scan
+- QualityScoutAgent        — extra quality hints (missing cells, date sanity) for UI
+- ChunkManagerAgent        — reliable chunked assembly for 5–50 MB files
+- PipelineAgent            — transform+load with idempotent warehouse writes
 
-This module is pure logic; HTTP wiring lives in app.api.v1.uploads.
+Business ease: every response carries plain-English explanations so the UI
+can say "Your Sales data (120 rows) looks ready for Revenue trends" instead
+of raw column lists.
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ from app.services.etl.domains import COLUMN_ALIASES, DOMAIN_SPECS
 from app.services.etl.extractors import TabularExtract, extract_tabular
 
 # ---------------------------------------------------------------------------
-# Shared config
+# Shared config + business meta (easy for non-technical users)
 # ---------------------------------------------------------------------------
 
 # Files <= this size use the fast single-request path (no chunking).
@@ -38,6 +42,35 @@ DEFAULT_CHUNK_SIZE = 1 * 1024 * 1024  # 1 MB
 # Temp directory for chunked assembly
 CHUNK_DIR = Path("var/uploads/chunks")
 CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+
+# Business-friendly domain explanations — shown in UI so a manager knows
+# what "finance vs inventory" actually means for their dashboards.
+DOMAIN_BUSINESS_META: dict[str, dict[str, str]] = {
+    "sales": {
+        "label": "Sales",
+        "business_label": "Sales & Orders",
+        "plain": "Customer purchases and revenue — what you sold, when, at what price",
+        "powers": "Revenue trends, best sellers, forecasts, profit & loss",
+        "example": "date, product, quantity, price → Revenue dashboard",
+        "icon": "trend",
+    },
+    "finance": {
+        "label": "Finance",
+        "business_label": "Expenses & Finance",
+        "plain": "Money going out — rent, salaries, marketing, logistics",
+        "powers": "Profit & loss, cash flow, cost breakdowns",
+        "example": "date, category, amount → Expenses & P&L",
+        "icon": "chart",
+    },
+    "inventory": {
+        "label": "Inventory",
+        "business_label": "Stock & Inventory",
+        "plain": "Stock on hand today — what’s available in your warehouse",
+        "powers": "Low-stock alerts, reorder levels, inventory health",
+        "example": "date, product, quantity on hand → Stock levels",
+        "icon": "grid",
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Domain detection (file-type + column intelligence)
@@ -142,7 +175,7 @@ def detect_domain(headers: list[str], sample_rows: list[dict[str, Any]] | None =
 
 @dataclass
 class InspectionResult:
-    """Output of FileInspectorAgent."""
+    """Output of FileInspectorAgent — now enriched for business ease."""
 
     file_name: str
     kind: str  # csv | excel
@@ -156,6 +189,10 @@ class InspectionResult:
     detected: dict[str, Any]
     row_estimate: int | None = None
     sheet_name: str | None = None
+    # Business ease extras
+    business_summary: str | None = None
+    business_meta: dict[str, Any] | None = None
+    quality_hints: list[str] = field(default_factory=list)
 
 
 class FileInspectorAgent:
@@ -171,7 +208,7 @@ class FileInspectorAgent:
         canonical = [_ALIAS_LOOKUP.get(_normalize_name(c), _normalize_name(c)) for c in extract.columns]
         detected = detect_domain(extract.columns)
 
-        # Row estimate without loading: for CSV count newlines, for Excel use frame length
+        # Row estimate
         row_estimate = len(extract.frame)
 
         # sheet detection for Excel
@@ -182,6 +219,30 @@ class FileInspectorAgent:
                 sheet_name = xls.sheet_names[0] if xls.sheet_names else None
             except Exception:
                 pass
+
+        # Business ease: plain-English summary + quality hints
+        suggested = detected.get("suggested")
+        business_summary = None
+        business_meta = DOMAIN_BUSINESS_META.get(suggested) if suggested else None
+        if suggested and business_meta:
+            conf = detected.get("confidence", 0)
+            business_summary = (
+                f"Looks like {business_meta['business_label']} — {business_meta['plain']} • "
+                f"{row_estimate} rows detected • {int(conf*100)}% match"
+            )
+        elif detected.get("confidence", 0) == 0:
+            business_summary = f"File has {row_estimate} rows and {len(extract.columns)} columns — pick the business area it belongs to (Sales, Expenses, or Stock)."
+
+        # Quick quality hints (missing cells in preview)
+        quality_hints: list[str] = []
+        if extract.frame.isnull().values.any():
+            null_cols = [c for c in extract.columns if extract.frame[c].isnull().any()]
+            quality_hints.append(f"Some rows have empty cells in: {', '.join(null_cols[:3])} — they’ll be flagged during validation")
+        # Date sanity hint
+        if "date" in canonical and extract.preview:
+            sample_date = extract.preview[0].get("date") or extract.preview[0].get("Date") or ""
+            if sample_date and not re.match(r"^\d{4}-\d{2}-\d{2}", str(sample_date)):
+                quality_hints.append("Dates should be YYYY-MM-DD (e.g., 2026-06-10) — other formats are auto-parsed but may be rejected")
 
         return InspectionResult(
             file_name=file_name,
@@ -196,7 +257,49 @@ class FileInspectorAgent:
             detected=detected,
             row_estimate=row_estimate,
             sheet_name=sheet_name,
+            business_summary=business_summary,
+            business_meta=business_meta,
+            quality_hints=quality_hints,
         )
+
+
+class DomainIntelligenceAgent:
+    """Explains the detected domain in business terms — the 'translator' agent."""
+
+    def explain(self, detected: dict[str, Any]) -> dict[str, Any]:
+        suggested = detected.get("suggested")
+        if not suggested:
+            return {
+                "headline": "Pick the business area for this file",
+                "body": "Your file’s columns don’t clearly match Sales, Expenses, or Stock — choose below. Need help? Download a sample.",
+                "suggested": None,
+            }
+        meta = DOMAIN_BUSINESS_META[suggested]
+        conf = detected.get("confidence", 0)
+        if conf >= 0.9:
+            headline = f"Great — this is {meta['business_label']}"
+            body = f"{meta['plain']}. It will power: {meta['powers']}. Confidence {int(conf*100)}%."
+        elif conf >= 0.6:
+            headline = f"Looks like {meta['business_label']} ({int(conf*100)}% match)"
+            body = f"{meta['plain']}. If that’s right, confirm below; if not, switch business area."
+        else:
+            headline = f"Possible match: {meta['business_label']}"
+            body = f"Only {int(conf*100)}% of required columns matched. Check the column list — missing fields are shown in amber."
+        return {"headline": headline, "body": body, "suggested": suggested, "meta": meta}
+
+
+class QualityScoutAgent:
+    """Lightweight quality scout — gives instant hints before the warehouse load."""
+
+    def scout(self, frame: pd.DataFrame) -> list[str]:
+        hints: list[str] = []
+        if frame.empty:
+            hints.append("File has no data rows — add at least one row under the header.")
+        # Check for many empty cells
+        empty_ratio = frame.isnull().mean().mean() if not frame.empty else 0
+        if empty_ratio > 0.15:
+            hints.append(f"{int(empty_ratio*100)}% of cells are empty — fill missing values or they’ll be skipped")
+        return hints
 
 
 @dataclass
@@ -337,6 +440,8 @@ class UploadOrchestrator:
     def __init__(self):
         self.inspector = FileInspectorAgent()
         self.validator = ValidationAgent()
+        self.domain_intel = DomainIntelligenceAgent()
+        self.quality_scout = QualityScoutAgent()
         self.chunk_manager = ChunkManagerAgent()
         self.pipeline = PipelineAgent()
 

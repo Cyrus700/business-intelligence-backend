@@ -12,7 +12,7 @@ from app.api.deps import CurrentUser, DbSession, require_role
 from app.core.database import get_session_factory
 from app.models import RawUpload
 from app.schemas.integration import PaginatedUploads, TargetDomain, UploadOut
-from app.services.etl.agents import orchestrator
+from app.services.etl.agents import DOMAIN_BUSINESS_META, orchestrator
 from app.services.etl.extractors import (
     MAX_UPLOAD_BYTES,
     extract_tabular,
@@ -278,6 +278,8 @@ async def inspect_file(
         except Exception:
             validation_hints[d] = {"ready": False, "missing": [], "confidence": 0}
 
+    # Business ease: let DomainIntelligence explain in plain English
+    intel = orchestrator.domain_intel.explain(inspection.detected)
     return {
         "file_name": file_name,
         "kind": inspection.kind,
@@ -292,6 +294,11 @@ async def inspect_file(
         "validation": validation_hints,
         "row_estimate": inspection.row_estimate,
         "sheet_name": inspection.sheet_name,
+        "business_summary": inspection.business_summary,
+        "business_meta": inspection.business_meta,
+        "quality_hints": inspection.quality_hints,
+        "intel": intel,
+        "all_domain_meta": DOMAIN_BUSINESS_META,
     }
 
 
