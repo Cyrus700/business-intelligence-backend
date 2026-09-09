@@ -105,6 +105,13 @@ class AlertRuleIn(BaseModel):
     channels: dict[str, Any] = {"in_app": True}
     roles_notified: list[Literal["admin", "manager", "analyst"]] = ["admin", "manager"]
 
+    def validate_with_agent(self) -> None:
+        from app.services.alerts.agents import rule_manager_agent
+
+        res = rule_manager_agent.validate(self.model_dump())
+        if not res.ok:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(res.errors))
+
 
 class AlertRuleUpdate(BaseModel):
     name: str | None = None
@@ -143,13 +150,35 @@ async def list_rules(db: DbSession, user: CurrentUser) -> list[AlertRuleOut]:
 
 @manager_router.post("", response_model=AlertRuleOut, status_code=status.HTTP_201_CREATED)
 async def create_rule(body: AlertRuleIn, db: DbSession, user: CurrentUser) -> AlertRuleOut:
-    if body.condition != "anomaly_detected" and body.threshold is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "threshold is required for this condition")
+    body.validate_with_agent()
     rule = AlertRule(**body.model_dump(), created_by=user.id, org_id=user.org_id)
     db.add(rule)
     await db.commit()
     await db.refresh(rule)
     return AlertRuleOut.model_validate(rule)
+
+
+@manager_router.post("/{rule_id}/test", response_model=dict)
+async def test_rule(rule_id: UUID, db: DbSession, user: CurrentUser) -> dict:
+    """Dry-run a rule — professional preview without creating notifications or hitting cooldown."""
+    from app.api.deps import is_super_admin
+    from app.services.alerts.agents import evaluation_agent
+
+    rule = await db.get(AlertRule, rule_id)
+    if rule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rule not found")
+    if not is_super_admin(user) and rule.org_id != user.org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rule not found")
+    result = await evaluation_agent.dry_run(db, rule, org_id=user.org_id)
+    return {
+        "would_fire": result.would_fire,
+        "message": result.message,
+        "window_start": result.window_start.isoformat(),
+        "window_end": result.window_end.isoformat(),
+        "current_value": result.current_value,
+        "previous_value": result.previous_value,
+        "threshold": result.threshold,
+    }
 
 
 @manager_router.patch("/{rule_id}", response_model=AlertRuleOut)

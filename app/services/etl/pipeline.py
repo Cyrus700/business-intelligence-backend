@@ -99,7 +99,7 @@ async def run_frame_pipeline(
     if result.records:
         date_field = _DATE_FIELDS[domain]
         dates = [r[date_field] for r in result.records]
-        refresh = await refresh_derived(db, min(dates), max(dates))
+        refresh = await refresh_derived(db, min(dates), max(dates), org_id=org_id)
         # Re-attach job instance after expiry to update log safely
         try:
             await db.refresh(job)

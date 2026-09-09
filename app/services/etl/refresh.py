@@ -58,7 +58,7 @@ def _lookback_days(start: date, end: date) -> int:
     return max(1, min(span, MAX_RESCAN_DAYS))
 
 
-async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshResult:
+async def refresh_derived(db: AsyncSession, start: date, end: date, org_id=None) -> RefreshResult:
     """Bring anomalies, alerts, insights, recommendations and the AI index
     forward over [start, end].
 
@@ -74,7 +74,7 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
     try:
         from app.services.ml.anomaly import scan_all
 
-        result.anomalies_found = await scan_all(db, lookback_days=lookback)
+        result.anomalies_found = await scan_all(db, lookback_days=lookback, org_id=org_id)
         await db.commit()
     except Exception:
         logger.exception("post-load anomaly scan failed")
@@ -84,7 +84,7 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
     try:
         from app.services.alerts.engine import evaluate_alerts
 
-        result.alerts_evaluated = await evaluate_alerts(db)
+        result.alerts_evaluated = await evaluate_alerts(db, org_id=org_id)
         await db.commit()
     except Exception:
         logger.exception("post-load alert evaluation failed")
@@ -94,7 +94,7 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
     try:
         from app.services.insights.engine import generate_insights
 
-        result.insights_created = await generate_insights(db)
+        result.insights_created = await generate_insights(db, org_id=org_id)
         await db.commit()
     except Exception:
         logger.exception("post-load insight generation failed")
@@ -104,7 +104,7 @@ async def refresh_derived(db: AsyncSession, start: date, end: date) -> RefreshRe
     try:
         from app.services.ml.recommendations import persist_recommendations
 
-        recs = await persist_recommendations(db)
+        recs = await persist_recommendations(db, org_id=org_id)
         result.recommendations_created = recs.get("new", 0)
         await db.commit()
     except Exception:
